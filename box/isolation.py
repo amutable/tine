@@ -824,9 +824,9 @@ class _Mount:
         with Close(_mount_point(root, self.target, directory=directory)) as point:
             _move_mount(self.fd, point, flags=MOVE_MOUNT_T_EMPTY_PATH, target=self.target)
 
-    def mount(self) -> None:
-        """Attach the mount at `target`, and unmount it when the context exits."""
-        self.attach()
+    def mount(self, root: int = AT_FDCWD) -> None:
+        """Attach the mount at `target` in the directory `root`, and unmount it when the context exits."""
+        self.attach(root)
         # statmount() returns the mount point with every symlink resolved. The path stays correct when the
         # working directory or a symlink in `target` changes before the context exits.
         try:
