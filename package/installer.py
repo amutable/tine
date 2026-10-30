@@ -176,7 +176,7 @@ def run(
         fail(f"{prog}: one of target and installroot is required")
 
     # Bind sources must exist.
-    target = Path(spec["target"]).absolute()
+    target = Path(spec["target"])
     target.mkdir(parents=True, exist_ok=True)
 
     if layered:
@@ -186,7 +186,7 @@ def run(
             BUILDROOT,
             lowers=spec["lower"],
             upperdir=target,
-            workdir=Path(spec["work"]).absolute(),
+            workdir=spec["work"],
             apivfs=True,
         )
     else:

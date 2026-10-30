@@ -351,7 +351,8 @@ def rootfs(
     target = Path(target)
     with ExitStack() as stack:
         if lowers is not None:
-            # Resolve Buck-relative paths before entering a possible chroot.
+            # _in_lower() treats a symlink as a missing directory. Without resolve(), capture() would find
+            # no entry in a layer that the caller passes as a symlink.
             resolved = [Path(lo).resolve() for lo in lowers]
             scratch = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="rootfs.")))
             components = _reconstruct(resolved, scratch)

@@ -111,11 +111,11 @@ Buck hands drivers project-relative paths and runs them at the project root, whi
 at `/tine/project`. Keep them relative; making one absolute is a decision that needs a reason.
 
 - **`.absolute()`** only when something downstream changes the frame of reference: a chroot, a subprocess
-  given its own `cwd=`, a mount option the kernel resolves itself, a path written into a spec another
-  process consumes, or a library documented as needing it (libdnf5). Say which in a comment.
+  given its own `cwd=`, a path written into a spec another process consumes, or a library documented as
+  needing it (libdnf5). Say which in a comment.
 - **`.resolve()`** follows symlinks on top of that, so reach for it only when following them is the
-  point: `rootfs.py` resolves overlay lowers before entering a chroot, `sandbox.py` walks the tools tree
-  to recreate its usr-merge links rather than bind through them.
+  point: `source_overlay()` in `rootfs.py` resolves the source tree to compare it with the mount points
+  that statmount() returns, which have their symlinks resolved.
 
 ## Commits
 

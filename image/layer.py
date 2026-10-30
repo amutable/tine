@@ -228,9 +228,7 @@ def _apply(value: object, target: Path) -> None:
 def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "image", argv)
 
-    # Mount options name the upper and work directories; the kernel does not read them relative to
-    # this process.
-    out = Path(spec["out"]).absolute()
+    out = Path(spec["out"])
     out.mkdir(parents=True, exist_ok=True)
     operations = [_operation(operation) for operation in spec["operations"]]
     for operation in operations:
@@ -250,7 +248,7 @@ def main(argv: list[str] | None = None) -> None:
             "/buildroot",
             lowers=lower,
             upperdir=out,
-            workdir=Path(spec["work"]).absolute(),
+            workdir=spec["work"],
             apivfs=True,
             binds=binds,
         )
