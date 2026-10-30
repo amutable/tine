@@ -570,8 +570,9 @@ out under. A checkout is then free to live anywhere, including under a directory
 itself such as `/var/lib`, and an absolute path that leaks into a build output is the same for every
 checkout. The sandbox clones the project's mount tree before it creates its user namespace, so the kernel
 doesn't lock a mount below the project, such as a `tine mount`, and overlayfs accepts the project as a lower
-directory. A chrooted operation is a second frame and mounts the project again, under the target root's
-`/run`, which apivfs covers with a tmpfs so the mount point is not captured into the image.
+directory. Each chrooted `run` or `copy` mounts the project read-only under the target root's `/run` for
+the duration of that operation. Package scripts and remove globs cannot reach the project through that
+mount. apivfs covers `/run` with a tmpfs so the mount point is not captured into the image.
 
 The sandbox only creates the execution environment. Drivers own their target-root layout through
 `rootfs.rootfs()`:
@@ -1190,8 +1191,10 @@ against the result of an earlier install is a second layer, which is where a clo
 result becomes available. `copy` introduces a declared Buck artifact at an absolute image path, preserving
 its position relative to the other operations. `run` executes the image's own tools in a chroot by default;
 `chroot = False` instead executes box tooling with the image available at `/buildroot`. Its `env` argument
-overlays variables on the box or image environment for that command. Package installation and copying
-always run outside the chroot. The `image.layer()` declaration macro recursively flattens operation lists,
+overlays variables on the box or image environment for that command. Package installation runs outside the
+chroot. `copy`, `merge_os_release`, `mkdir`, `symlink`, `write_file` and `remove` run inside it, so ordinary
+absolute symlinks resolve relative to the image. The `image.layer()` declaration macro recursively flattens
+operation lists,
 allowing reusable helpers to return ordered groups of operations. Every rule that accepts operations is
 wrapped in a declaration macro that flattens them the same way, so a helper returning an ordered group
 works identically in `image.layer()` and in a composition; the underlying attribute stays a flat, typed

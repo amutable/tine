@@ -267,9 +267,10 @@ def run(cmd: list[SelectableArtifact] | Select, env: dict[str, Selectable] = {},
     """Run `cmd` against the image, either with the box's tooling or the image's own.
 
     By default the box supplies the userspace and the image is mounted at /buildroot. With
-    `chroot`, the command runs inside the image instead, and the project is bind-mounted at a
+    `chroot`, the command runs inside the image instead, and the project is bind-mounted read-only at a
     fixed path which becomes the working directory, so an artifact argument resolves the same
-    either way and a script the repository owns can simply be run.
+    either way and a script the repository owns can simply be run. A chrooted command writes its outputs
+    to paths in the image because its project working directory is read-only.
 
     An argument names a build artifact by being one, or by spelling `$(location //target)` in a
     BUCK file. Buck's macro parser claims `$(...)`, so a shell substitution has to be written

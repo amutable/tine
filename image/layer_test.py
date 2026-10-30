@@ -6,12 +6,100 @@
 buck test tine//image:test
 """
 
+import errno
 import os
 import tempfile
 import unittest
+from contextlib import chdir
 from pathlib import Path
+from typing import override
+from unittest import mock
+
+import specs
 
 import layer
+import rootfs
+
+
+class TestImageWrites(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.scratch = Path(
+            self.enterContext(tempfile.TemporaryDirectory(prefix="layer-test.", dir="/var/tmp"))
+        )
+        self.project = self.scratch / "project"
+        self.project.mkdir()
+        self.out = self.scratch / "out"
+        self.out.mkdir()
+        (self.project / "source").write_text("copied", encoding="utf-8")
+
+    def _build(self, operations: list[object], lower: Path | None = None) -> None:
+        spec = specs.write(
+            self.scratch / "spec.json",
+            {
+                "out": str(self.out),
+                "lower": [str(lower)] if lower is not None else [],
+                "work": str(self.scratch / "work") if lower is not None else None,
+                "install": None,
+                "operations": operations,
+            },
+        )
+        with chdir(self.project):
+            layer.main(["--spec", str(spec)])
+
+    def test_absolute_symlinks_resolve_inside_the_image(self) -> None:
+        outside = self.scratch / "outside"
+        outside.mkdir()
+        inside = self.out / outside.relative_to("/")
+        inside.mkdir(parents=True)
+        (self.out / "alias").symlink_to(outside)
+        (self.out / "usr").mkdir()
+        (self.out / "usr/lib").symlink_to(outside)
+
+        with (
+            chdir(self.project),
+            rootfs.rootfs(self.scratch / "target", bind=self.out, capture_bind=True) as target,
+        ):
+            layer._apply(["copy", "source", "/alias/file"], target)
+            layer._apply(["os_release", {"ID": "test"}], target)
+
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual((inside / "file").read_text(encoding="utf-8"), "copied")
+        self.assertEqual((inside / "os-release").read_text(encoding="utf-8"), 'ID="test"\n')
+
+    def test_a_copy_source_must_stay_relative_to_the_project(self) -> None:
+        for source in ("/absolute", "../outside", "source/../../outside"):
+            with self.subTest(source=source), self.assertRaisesRegex(SystemExit, "relative project path"):
+                layer._apply(["copy", source, "/destination"], self.out)
+
+    def test_a_derived_layer_exposes_a_readonly_project_only_to_copy_and_run(self) -> None:
+        lower = self.scratch / "lower"
+        lower.mkdir()
+        (lower / "cache.pyc").write_text("image cache", encoding="utf-8")
+        (self.project / "cache.pyc").write_text("cache", encoding="utf-8")
+
+        def run(tag: str, cmd: object, env: object, cwd: str | None = None) -> None:
+            self.assertEqual(cwd, layer.PROJECT)
+            source = Path(layer.PROJECT) / "source"
+            self.assertEqual(source.read_text(encoding="utf-8"), "copied")
+            with self.assertRaises(OSError) as raised:
+                source.write_text("changed", encoding="utf-8")
+            self.assertEqual(raised.exception.errno, errno.EROFS)
+
+        with mock.patch.object(layer, "_run", side_effect=run) as command:
+            self._build(
+                [
+                    ["copy", "source", "/copied"],
+                    ["run", ["command"], {}, True],
+                    ["remove", "/**/*.pyc"],
+                ],
+                lower,
+            )
+
+        command.assert_called_once()
+        self.assertEqual((self.out / "copied").read_text(encoding="utf-8"), "copied")
+        self.assertTrue((self.out / ".wh.cache.pyc").is_file())
+        self.assertTrue((self.project / "cache.pyc").exists())
 
 
 class TestRemove(unittest.TestCase):
