@@ -14,9 +14,10 @@ import tempfile
 import unittest
 import unittest.mock
 from collections.abc import Generator
-from contextlib import contextmanager, redirect_stdout, suppress
+from contextlib import contextmanager, redirect_stderr, redirect_stdout, suppress
 from pathlib import Path
 
+import isolation
 import sandbox
 from isolation import AT_FDCWD, Bind, Close, Devices, File, Filesystem, Symlink, Tmpfs, open_layers
 from sandbox import _PROJECT
@@ -57,7 +58,7 @@ def _project() -> Generator[tuple[Path, Path]]:
 def _launch(*args: str) -> sandbox.Launch:
     options = sandbox._parse(list(args))
     with Close(open_layers(tuple(reversed(options.tools)))) as tools:
-        return sandbox._launch(options, tools)
+        return sandbox._launch(options, tools, None)
 
 
 def _unshare(*args: str) -> unittest.mock.MagicMock:
@@ -571,6 +572,175 @@ class TestLayers(unittest.TestCase):
         self.assertIn(f":x:{os.getuid()}:{os.getgid()}::", passwd[1])
 
 
+# _USER_NAMESPACE creates a user namespace in which the caller is not root. The mount namespace stays the
+# caller's, so the code after it can't mount until it creates a mount namespace of its own.
+_USER_NAMESPACE = """\
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import isolation, sandbox
+parent = os.getpid()
+read, write = os.pipe()
+if (helper := os.fork()) == 0:
+    os.read(read, 1)
+    for name, line in (("setgroups", "deny"), ("gid_map", "1000 0 1"), ("uid_map", "1000 0 1")):
+        with open(f"/proc/{parent}/{name}", "w") as handle:
+            handle.write(line)
+    os._exit(0)
+os.unshare(os.CLONE_NEWUSER)
+os.write(write, b"1")
+assert os.waitstatus_to_exitcode(os.waitpid(helper, 0)[1]) == 0
+"""
+
+# _TINE_NAMESPACE creates the namespaces that `tine buck` creates: _USER_NAMESPACE and a mount namespace. It
+# mounts ../mounted over the project's sub directory and then starts the sandbox.
+_TINE_NAMESPACE = (
+    _USER_NAMESPACE
+    + """\
+os.unshare(os.CLONE_NEWNS)
+with isolation.Bind("../mounted", "sub") as bind:
+    bind.attach()
+sandbox.main(sys.argv[2:])
+"""
+)
+
+# _OVERLAY_PROJECT mounts an overlay of the project and an overlay of the mount at its sub directory.
+_OVERLAY_PROJECT = """\
+import os, sys
+sys.path.insert(0, "/run/lib")
+from isolation import Overlay
+layers = (
+    ("root", "/tine/project", "/var/tmp/merged"),
+    ("sub", "/tine/project/sub", "/var/tmp/merged/sub"),
+)
+for name, lower, merged in layers:
+    upper, work = f"/var/tmp/{name}.upper", f"/var/tmp/{name}.work"
+    os.mkdir(upper)
+    os.mkdir(work)
+    with Overlay((lower,), upper, work, merged, lazy_unmount=True) as overlay:
+        overlay.attach()
+with open("/var/tmp/merged/sub/file") as handle:
+    print(handle.read())
+with open("/var/tmp/merged/sub/file", "w") as handle:
+    handle.write("changed")
+"""
+
+
+# _SHARED_PROJECT runs the sandbox on a project whose mount is shared with the caller's mount namespace, and
+# prints whether the mount that the command makes in the sandbox shows up in that namespace.
+_SHARED_PROJECT = """\
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import isolation, sandbox
+os.unshare(os.CLONE_NEWNS)
+isolation._set_propagation("/", isolation.MS_SLAVE)
+with isolation.Tmpfs("shared") as tmpfs:
+    tmpfs.attach()
+MS_SHARED = 1 << 20
+isolation._set_propagation("shared", MS_SHARED)
+os.makedirs("shared/project/sub")
+os.chdir("shared/project")
+if (pid := os.fork()) == 0:
+    try:
+        sandbox.main(sys.argv[2:])
+    finally:
+        os._exit(127)
+assert os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]) == 0
+print("leaked" if os.path.ismount("sub") else "contained")
+"""
+
+
+class TestProjectMounts(unittest.TestCase):
+    def test_an_old_kernel_is_named_before_the_project_mount_tree_is_cloned(self) -> None:
+        # No kernel implements system call number 1023, so open_tree_attr() fails like on an old kernel.
+        with (
+            _project() as (_, tools),
+            unittest.mock.patch.object(isolation, "_NR_OPEN_TREE_ATTR", 1023),
+            redirect_stderr(io.StringIO()) as stderr,
+            self.assertRaises(isolation.SandboxOSError) as raised,
+        ):
+            sandbox.main(["--tools", str(tools), "--bind-cwd", "--", "true"])
+
+        self.assertEqual(stderr.getvalue(), f"{raised.exception.message}\n")
+
+    def test_a_caller_that_cannot_mount_binds_the_project_after_unsharing(self) -> None:
+        # An unprivileged user without `tine mount`s runs every action this way.
+        with _project() as (project, _):
+            (project / "file").write_text("project")
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-c",
+                    _USER_NAMESPACE + "sandbox.main(sys.argv[2:])\n",
+                    str(Path(sandbox.__file__).parent),
+                    *("--tools", "/", "--bind-cwd", "--", "cat", "file"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(process.stdout, "project")
+
+    def test_a_mount_made_outside_the_sandbox_can_be_overlaid(self) -> None:
+        with _project() as (project, _):
+            mounted = project.parent / "mounted"
+            mounted.mkdir()
+            (mounted / "file").write_text("mounted")
+            (project / "sub").mkdir()
+            (project / "sub/file").write_text("covered")
+            # The sandbox uses the root of the test's box as its tools tree. The command needs python3 from
+            # it, and the sandbox loads libseccomp from it.
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-c",
+                    _TINE_NAMESPACE,
+                    str(Path(sandbox.__file__).parent),
+                    *("--tools", "/", "--bind-cwd"),
+                    *("--ro-bind", f"{Path(sandbox.__file__).parent}:/run/lib"),
+                    *("--", "python3", "-I", "-B", "-c", _OVERLAY_PROJECT),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(process.stdout, "mounted\n")
+            self.assertEqual((mounted / "file").read_text(), "mounted")
+
+    def test_a_mount_in_the_sandbox_stays_out_of_a_shared_project_mount(self) -> None:
+        # The test runs as uid 0 with CAP_SYS_ADMIN, so the sandbox creates no user namespace, and the copy
+        # of the project comes from the caller's mount namespace.
+        with _project() as (project, _):
+            tree = Path(sandbox.__file__).parent
+            command = (
+                "import sys; sys.path.insert(0, '/run/lib'); "
+                "from isolation import Tmpfs\nwith Tmpfs('sub') as tmpfs: tmpfs.attach()"
+            )
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-c",
+                    _SHARED_PROJECT,
+                    str(tree),
+                    *("--tools", "/", "--bind-cwd", "--ro-bind", f"{tree}:/run/lib"),
+                    *("--", "python3", "-I", "-B", "-c", command),
+                ],
+                cwd=project,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(process.stdout, "contained\n")
+
+
 class TestBoxEnvironment(unittest.TestCase):
     def test_nested_box_depth(self) -> None:
         for previous, depth in (
@@ -651,7 +821,7 @@ class TestStartup(unittest.TestCase):
                     "-c",
                     "import sys; sys.path.insert(0, sys.argv[1]); import sandbox; "
                     "sandbox._launch(sandbox._parse(['--tools', sys.argv[2], '--', 'true']), "
-                    "sandbox.open_layers((sys.argv[2],))); "
+                    "sandbox.open_layers((sys.argv[2],)), None); "
                     "print('\\n'.join(sys.modules))",
                     str(Path(sandbox.__file__).parent),
                     str(tools),

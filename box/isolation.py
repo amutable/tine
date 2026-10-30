@@ -467,7 +467,9 @@ def _syscall(call: str, number: int, *arguments: object, path: StrPath | None = 
 
 def _clone(dirfd: int, path: StrPath, flags: int = 0, attributes: int = 0) -> int:
     """Return a detached copy of the mount at `path`, relative to `dirfd`, with MOUNT_ATTR_* `attributes`."""
-    mount_attributes = _MountAttributes(attr_set=attributes)
+    # A clone of a shared mount is a peer of the mount. A mount below the clone would then show up below
+    # the source mount, outside of the sandbox. A slave only receives mounts from its source.
+    mount_attributes = _MountAttributes(attr_set=attributes, propagation=MS_SLAVE)
     return _syscall(
         "open_tree_attr",
         _NR_OPEN_TREE_ATTR,
@@ -1058,7 +1060,6 @@ def unshare_sandbox(
     A mount that the caller makes between this call and `enter_sandbox()` is only visible inside the
     sandbox's mount namespace.
     """
-    check_kernel()
     user_namespace = _acquire_privileges(
         become_root=become_root,
         network=isolate_network,

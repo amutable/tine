@@ -11,6 +11,7 @@ captured back to the storage form after unmounting.
 tool that writes into its sources, such as rpmbuild, a view of them that discards the writes.
 """
 
+import errno
 import os
 import shutil
 import stat
@@ -242,7 +243,17 @@ def source_overlay(source: Path, target: Path) -> Generator[Path]:
             os.utime(upper, ns=(attributes.st_atime_ns, attributes.st_mtime_ns))
             # A child process can keep a file descriptor open in the mount, and a normal unmount then
             # fails with EBUSY.
-            stack.enter_context(Overlay((lower,), upper, work, merged, lazy_unmount=True)).mount()
+            try:
+                stack.enter_context(Overlay((lower,), upper, work, merged, lazy_unmount=True)).mount()
+            except OSError as error:
+                if error.errno == errno.EINVAL:
+                    error.add_note(
+                        "Locked mounts below the source can cause EINVAL. A caller must be allowed to clone "
+                        "the project's mount tree before the sandbox creates its user namespace to avoid "
+                        "locking inherited mounts. `tine buck` prepares that namespace when the project "
+                        "has mounts declared with `tine mount`."
+                    )
+                raise
         yield target
 
 
