@@ -10,12 +10,13 @@ minimum to minimize startup time.
 import ctypes
 import errno
 import os
+import stat
 import sys
 
 TYPE_CHECKING = False
 
 # The host-side launcher also imports this module on Python 3.12/3.13, which evaluate annotations eagerly.
-if TYPE_CHECKING or sys.version_info < (3, 14):  # noqa: UP036
+if TYPE_CHECKING or sys.version_info < (3, 14):
     from typing import Self, override
 else:
 
@@ -59,11 +60,17 @@ MOUNT_ATTR_RDONLY = 0x00000001
 MOUNT_ATTR_NOSUID = 0x00000002
 MOUNT_ATTR_NODEV = 0x00000004
 MOUNT_ATTR_SIZE_VER0 = 32
+MNT_ID_REQ_SIZE_VER0 = 24
+FSCONFIG_SET_FLAG = 0
+FSCONFIG_SET_STRING = 1
+FSCONFIG_SET_FD = 5
+FSCONFIG_CMD_CREATE = 6
+FSMOUNT_CLOEXEC = 1
+FSOPEN_CLOEXEC = 1
 MOVE_MOUNT_F_EMPTY_PATH = 0x00000004
-MS_BIND = 4096
-MS_MOVE = 8192
-MS_REC = 16384
+MOVE_MOUNT_T_EMPTY_PATH = 0x00000040
 MS_SLAVE = 1 << 19
+OPEN_TREE_CLOEXEC = os.O_CLOEXEC
 OPEN_TREE_CLONE = 1
 PR_CAP_AMBIENT = 47
 PR_CAP_AMBIENT_IS_SET = 1
@@ -86,11 +93,30 @@ SCMP_ARCH_S390X = 0x80000016
 SCMP_FLTATR_ACT_BADARCH = 2
 SCMP_FLTATR_API_SYSRAWRC = 9
 
-_NR_OPEN_TREE = 428
+RESOLVE_IN_ROOT = 0x10
+STATMOUNT_MNT_POINT = 0x00000010
+STATX_MNT_ID_UNIQUE = 0x00004000
+
+# glibc 2.17 has no statx() wrapper. aarch64 and riscv64 use the generic syscall table.
+_NR_STATX = 332 if os.uname().machine == "x86_64" else 291
+
+# Linux uses the same numbers for the system calls below on every architecture that tine supports.
 _NR_MOVE_MOUNT = 429
+_NR_FSOPEN = 430
+_NR_FSCONFIG = 431
+_NR_FSMOUNT = 432
+_NR_OPENAT2 = 437
 _NR_MOUNT_SETATTR = 442
-_OPEN_TREE_CLOEXEC = os.O_CLOEXEC
+_NR_STATMOUNT = 457
+_NR_OPEN_TREE_ATTR = 467
+
+# _STATX_MNT_ID is the offset of stx_mnt_id in struct statx. _STATMOUNT_MNT_POINT and _STATMOUNT_STRINGS are
+# the offsets of mnt_point and of the strings in struct statmount.
+_STATX_MNT_ID = 144
+_STATMOUNT_MNT_POINT = 108
+_STATMOUNT_STRINGS = 512
 _ROOT = "/"
+_TMPFS_DEFAULT_MODE = "0755"
 _COMPAT_ARCHITECTURES = {
     SCMP_ARCH_X86_64: (SCMP_ARCH_X86, SCMP_ARCH_X32),
     SCMP_ARCH_AARCH64: (SCMP_ARCH_ARM,),
@@ -145,6 +171,15 @@ class _CapabilityData(ctypes.Structure):
     ]
 
 
+class _MountIdRequest(ctypes.Structure):
+    _fields_ = [
+        ("size", ctypes.c_uint32),
+        ("spare", ctypes.c_uint32),
+        ("mnt_id", ctypes.c_uint64),
+        ("param", ctypes.c_uint64),
+    ]
+
+
 class _MountAttributes(ctypes.Structure):
     _fields_ = [
         ("attr_set", ctypes.c_uint64),
@@ -154,16 +189,17 @@ class _MountAttributes(ctypes.Structure):
     ]
 
 
+class _OpenHow(ctypes.Structure):
+    _fields_ = [
+        ("flags", ctypes.c_uint64),
+        ("mode", ctypes.c_uint64),
+        ("resolve", ctypes.c_uint64),
+    ]
+
+
 _LIBC = ctypes.CDLL(None, use_errno=True)
 _LIBC.capget.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
 _LIBC.capset.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
-_LIBC.mount.argtypes = (
-    ctypes.c_char_p,
-    ctypes.c_char_p,
-    ctypes.c_char_p,
-    ctypes.c_ulong,
-    ctypes.c_char_p,
-)
 _LIBC.pivot_root.argtypes = (ctypes.c_char_p, ctypes.c_char_p)
 _LIBC.prctl.argtypes = (
     ctypes.c_int,
@@ -187,26 +223,6 @@ def _error(call: str, path: StrPath | None = None, number: int = 0) -> None:
     number = number or ctypes.get_errno()
 
     raise OSError(number, f"{call}: {os.strerror(number)}", path)
-
-
-def mount(
-    source: StrPath | None,
-    target: StrPath,
-    filesystem: str | None = None,
-    flags: int = 0,
-    options: str | None = None,
-) -> None:
-    if (
-        _LIBC.mount(
-            None if source is None else os.fsencode(source),
-            os.fsencode(target),
-            None if filesystem is None else os.fsencode(filesystem),
-            flags,
-            None if options is None else os.fsencode(options),
-        )
-        < 0
-    ):
-        _error("mount", target)
 
 
 def umount2(path: StrPath, flags: int = 0) -> None:
@@ -441,90 +457,233 @@ def _suppress_syscalls(*, chown: bool, sync: bool) -> None:
         library.seccomp_release(context)
 
 
-def _open_tree(path: StrPath, *, recursive: bool) -> int:
-    flags = AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW | OPEN_TREE_CLONE | _OPEN_TREE_CLOEXEC
-    if recursive:
-        flags |= AT_RECURSIVE
-
-    try:
-        function = _LIBC.open_tree
-        function.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
-        result = int(function(AT_FDCWD, os.fsencode(path), flags))
-    except AttributeError:
-        result = int(
-            _LIBC.syscall(
-                ctypes.c_long(_NR_OPEN_TREE),
-                ctypes.c_int(AT_FDCWD),
-                ctypes.c_char_p(os.fsencode(path)),
-                ctypes.c_uint(flags),
-            ),
-        )
-
+def _syscall(call: str, number: int, *arguments: object, path: StrPath | None = None) -> int:
+    result = int(_LIBC.syscall(ctypes.c_long(number), *arguments))
     if result < 0:
-        _error("open_tree", path)
-
+        _error(call, path)
     return result
 
 
-def _mount_setattr(
-    fd: int, *, readonly: bool, recursive: bool, nosuid: bool = False, nodev: bool = False
+def _clone(dirfd: int, path: StrPath, flags: int = 0, attributes: int = 0) -> int:
+    """Return a detached copy of the mount at `path`, relative to `dirfd`, with MOUNT_ATTR_* `attributes`."""
+    mount_attributes = _MountAttributes(attr_set=attributes)
+    return _syscall(
+        "open_tree_attr",
+        _NR_OPEN_TREE_ATTR,
+        ctypes.c_int(dirfd),
+        ctypes.c_char_p(os.fsencode(path)),
+        ctypes.c_uint(flags | OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC),
+        ctypes.c_void_p(ctypes.addressof(mount_attributes)),
+        ctypes.c_size_t(MOUNT_ATTR_SIZE_VER0),
+        path=path,
+    )
+
+
+def _move_mount(
+    fd: int, dirfd: int, path: StrPath = "", flags: int = 0, target: StrPath | None = None
 ) -> None:
-    flags = AT_EMPTY_PATH | (AT_RECURSIVE if recursive else 0)
-    attr_set = MOUNT_ATTR_RDONLY if readonly else 0
-    attr_set |= MOUNT_ATTR_NOSUID if nosuid else 0
-    attr_set |= MOUNT_ATTR_NODEV if nodev else 0
-    attributes = _MountAttributes(attr_set=attr_set)
+    """Attach the detached mount `fd` at `path`, relative to the directory `dirfd`.
 
+    An error names `target` instead of `path`, for a caller that resolved `target` to `dirfd` itself.
+    """
+    _syscall(
+        "move_mount",
+        _NR_MOVE_MOUNT,
+        ctypes.c_int(fd),
+        ctypes.c_char_p(b""),
+        ctypes.c_int(dirfd),
+        ctypes.c_char_p(os.fsencode(path)),
+        ctypes.c_uint(MOVE_MOUNT_F_EMPTY_PATH | flags),
+        path=path if target is None else target,
+    )
+
+
+def _set_propagation(path: StrPath, propagation: int) -> None:
+    """Give the mount at `path` and every mount below it the MS_* `propagation` type."""
+    attributes = _MountAttributes(propagation=propagation)
+    _syscall(
+        "mount_setattr",
+        _NR_MOUNT_SETATTR,
+        ctypes.c_int(AT_FDCWD),
+        ctypes.c_char_p(os.fsencode(path)),
+        ctypes.c_uint(AT_RECURSIVE),
+        ctypes.c_void_p(ctypes.addressof(attributes)),
+        ctypes.c_size_t(MOUNT_ATTR_SIZE_VER0),
+        path=path,
+    )
+
+
+def _fsopen(filesystem: str) -> int:
+    return _syscall(
+        "fsopen", _NR_FSOPEN, ctypes.c_char_p(filesystem.encode()), ctypes.c_uint(FSOPEN_CLOEXEC)
+    )
+
+
+def _fsconfig(fd: int, command: int, key: str | None = None, value: str | None = None, aux: int = 0) -> None:
+    result = _LIBC.syscall(
+        ctypes.c_long(_NR_FSCONFIG),
+        ctypes.c_int(fd),
+        ctypes.c_uint(command),
+        ctypes.c_char_p(None if key is None else key.encode()),
+        ctypes.c_char_p(None if value is None else value.encode()),
+        ctypes.c_int(aux),
+    )
+    if result >= 0:
+        return
+    number = ctypes.get_errno()
+    # errno only says that the filesystem rejected the configuration. The filesystem writes the reason
+    # into the log of the filesystem context, which a read() of `fd` returns one message at a time.
+    messages = []
+    while True:
+        try:
+            messages.append(os.read(fd, 4096).decode(errors="replace").strip())
+        except OSError:
+            break
+    reason = "; ".join(messages) or os.strerror(number)
+    # FSCONFIG_CMD_CREATE is the only command without a key.
+    raise OSError(number, f"fsconfig {key or 'create'}: {reason}")
+
+
+def _fsmount(fd: int, attributes: int = 0) -> int:
+    return _syscall(
+        "fsmount", _NR_FSMOUNT, ctypes.c_int(fd), ctypes.c_uint(FSMOUNT_CLOEXEC), ctypes.c_uint(attributes)
+    )
+
+
+def _tmpfs(mode: str = _TMPFS_DEFAULT_MODE) -> int:
+    with Close(_fsopen("tmpfs")) as fs:
+        _fsconfig(fs, FSCONFIG_SET_STRING, "source", "tmpfs")
+        _fsconfig(fs, FSCONFIG_SET_STRING, "mode", mode)
+        _fsconfig(fs, FSCONFIG_CMD_CREATE)
+        return _fsmount(fs)
+
+
+def _overlay(lowers: tuple[str, ...], upper: str | None, work: str | None, attributes: int = 0) -> int:
+    """Return a detached overlay. Without `upper` and `work`, the kernel makes it read-only."""
+    layers = [("lowerdir+", lower) for lower in lowers]
+    layers += [(key, path) for key, path in (("upperdir", upper), ("workdir", work)) if path is not None]
+    with Close(_fsopen("overlay")) as fs:
+        _fsconfig(fs, FSCONFIG_SET_STRING, "source", "overlayfs")
+        for key, path in layers:
+            with Close(_lookup(AT_FDCWD, path, os.O_DIRECTORY)) as layer:
+                _fsconfig(fs, FSCONFIG_SET_FD, key, aux=layer)
+        _fsconfig(fs, FSCONFIG_SET_FLAG, "userxattr")
+        _fsconfig(fs, FSCONFIG_SET_STRING, "index", "off")
+        _fsconfig(fs, FSCONFIG_SET_STRING, "metacopy", "off")
+        _fsconfig(fs, FSCONFIG_CMD_CREATE)
+        return _fsmount(fs, attributes)
+
+
+def _lookup(root: int, path: StrPath, flags: int = 0) -> int:
+    """Open `path` with O_PATH.
+
+    If `root` is a directory, `path` resolves inside it, and neither `..` nor a symlink leaves it.
+    """
+    how = _OpenHow(
+        flags=flags | os.O_PATH | os.O_CLOEXEC,
+        resolve=0 if root == AT_FDCWD else RESOLVE_IN_ROOT,
+    )
+    # A lookup inside `root` fails with EAGAIN when a mount or a rename anywhere on the host happens while
+    # it resolves a `..` component. openat2(2) asks the caller to retry.
+    attempts = 100
+    while True:
+        try:
+            return _syscall(
+                "openat2",
+                _NR_OPENAT2,
+                ctypes.c_int(root),
+                ctypes.c_char_p(os.fsencode(path)),
+                ctypes.c_void_p(ctypes.addressof(how)),
+                ctypes.c_size_t(ctypes.sizeof(how)),
+                path=path,
+            )
+        except BlockingIOError:
+            attempts -= 1
+            if attempts == 0:
+                raise
+
+
+def _split(path: str) -> tuple[str, str]:
+    parent, name = os.path.split(path.rstrip("/") or "/")
+    return parent or ".", name
+
+
+def _directory(root: int, path: str) -> int:
+    """Open the directory `path` in `root` with O_PATH, and create it and its missing parents first."""
     try:
-        function = _LIBC.mount_setattr
-        function.argtypes = (
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-            ctypes.c_void_p,
-            ctypes.c_size_t,
-        )
-        result = function(fd, b"", flags, ctypes.addressof(attributes), MOUNT_ATTR_SIZE_VER0)
-    except AttributeError:
-        result = _LIBC.syscall(
-            ctypes.c_long(_NR_MOUNT_SETATTR),
-            ctypes.c_int(fd),
-            ctypes.c_char_p(b""),
-            ctypes.c_uint(flags),
-            ctypes.c_void_p(ctypes.addressof(attributes)),
-            ctypes.c_size_t(MOUNT_ATTR_SIZE_VER0),
-        )
-
-    if result < 0:
-        _error("mount_setattr")
+        return _lookup(root, path, os.O_DIRECTORY)
+    except FileNotFoundError:
+        pass
+    parent, name = _split(path)
+    with Close(_directory(root, parent)) as fd:
+        try:
+            os.mkdir(name, 0o755, dir_fd=fd)
+        except FileExistsError:
+            pass
+    return _lookup(root, path, os.O_DIRECTORY)
 
 
-def _move_mount(fd: int, target: StrPath) -> None:
+def _touch(dirfd: int, name: str, mode: int = 0o666) -> None:
+    os.close(os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, mode, dir_fd=dirfd))
+
+
+def _mount_point(root: int, path: str, *, directory: bool) -> int:
+    """Open the mount point for a mount at `path` in `root` with O_PATH, and create it if it's missing.
+
+    A mount of a file or a symlink covers a symlink at `path` itself rather than its target.
+    """
+    if directory:
+        return _directory(root, path)
     try:
-        function = _LIBC.move_mount
-        function.argtypes = (
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        )
-        result = function(fd, b"", AT_FDCWD, os.fsencode(target), MOVE_MOUNT_F_EMPTY_PATH)
-    except AttributeError:
+        return _lookup(root, path, os.O_NOFOLLOW)
+    except FileNotFoundError:
+        pass
+    parent, name = _split(path)
+    with Close(_directory(root, parent)) as fd:
+        _touch(fd, name, 0o644)
+    return _lookup(root, path, os.O_NOFOLLOW)
+
+
+def _mount_id(dirfd: int, path: str = "") -> int:
+    """Return the unique ID of the mount that a lookup of `path` in `dirfd` ends on."""
+    buffer = (ctypes.c_char * 256)()
+    _syscall(
+        "statx",
+        _NR_STATX,
+        ctypes.c_int(dirfd),
+        ctypes.c_char_p(os.fsencode(path)),
+        ctypes.c_int(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH),
+        ctypes.c_uint(STATX_MNT_ID_UNIQUE),
+        buffer,
+        path=path or None,
+    )
+    return ctypes.c_uint64.from_buffer(buffer, _STATX_MNT_ID).value
+
+
+def _statmount_point(mount_id: int) -> str:
+    """Return the mount point of the mount `mount_id`, relative to the process root."""
+    request = _MountIdRequest(size=MNT_ID_REQ_SIZE_VER0, mnt_id=mount_id, param=STATMOUNT_MNT_POINT)
+    size = 4096
+    while True:
+        buffer = (ctypes.c_char * size)()
         result = _LIBC.syscall(
-            ctypes.c_long(_NR_MOVE_MOUNT),
-            ctypes.c_int(fd),
-            ctypes.c_char_p(b""),
-            ctypes.c_int(AT_FDCWD),
-            ctypes.c_char_p(os.fsencode(target)),
-            ctypes.c_uint(MOVE_MOUNT_F_EMPTY_PATH),
+            ctypes.c_long(_NR_STATMOUNT),
+            ctypes.c_void_p(ctypes.addressof(request)),
+            ctypes.c_void_p(ctypes.addressof(buffer)),
+            ctypes.c_size_t(size),
+            ctypes.c_uint(0),
         )
+        if result >= 0:
+            break
+        # statmount() fails with EOVERFLOW when the strings don't fit into the buffer.
+        if ctypes.get_errno() != errno.EOVERFLOW:
+            _error("statmount")
+        size *= 2
+    offset = ctypes.c_uint32.from_buffer(buffer, _STATMOUNT_MNT_POINT).value
+    return os.fsdecode(ctypes.string_at(ctypes.addressof(buffer) + _STATMOUNT_STRINGS + offset))
 
-    if result < 0:
-        _error("move_mount", target)
 
-
-class _Close:
+class Close:
     def __init__(self, fd: int) -> None:
         self.fd = fd
 
@@ -533,17 +692,6 @@ class _Close:
 
     def __exit__(self, *exc: object) -> None:
         os.close(self.fd)
-
-
-def _touch(path: str, mode: int = 0o666) -> None:
-    with _Close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)):
-        pass
-
-
-def _bind_mount(source: str, target: str, *, readonly: bool, recursive: bool = True) -> None:
-    with _Close(_open_tree(source, recursive=recursive)) as fd:
-        _mount_setattr(fd, readonly=readonly, recursive=recursive)
-        _move_mount(fd, target)
 
 
 class chroot:
@@ -578,83 +726,89 @@ class chroot:
             self.root_fd = -1
 
 
-def _under(root: StrPath, path: StrPath) -> str:
-    root, path = os.fspath(root), os.fspath(path)
-    if root == _ROOT:
-        return path
-
-    path = path.lstrip("/")
-    return os.path.join(root, path) if path else root
-
-
-def _resolve(root: StrPath, path: StrPath, *, nofollow: bool = False) -> str:
-    root, path = os.fspath(root), os.fspath(path)
-    path = path.rstrip("/") or ("/" if os.path.isabs(path) else ".")
-
-    if root != _ROOT and not os.path.isabs(path):
-        raise ValueError(f"sandbox path must be absolute: {path}")
-
-    parent, name = os.path.split(path) if nofollow else (path, "")
-    # Traversal components must be resolved inside the chroot, not appended after leaving it.
-    if name in (".", ".."):
-        parent, name = path, ""
-
-    if root == _ROOT:
-        resolved = os.path.realpath(parent)
-    else:
-        with chroot(root):
-            resolved = os.path.realpath(parent)
-
-    resolved = _under(root, resolved)
-    return os.path.join(resolved, name) if name else resolved
-
-
 class _Mount:
+    """A filesystem that the context builds as a detached mount, for `attach()` or `mount()` at `target`.
+
+    The context exit closes the file descriptor of the mount. It also unmounts the mount if `mount()`
+    attached it.
+    """
+
     _unmount_flags: int = 0
 
     def __init__(self, target: StrPath) -> None:
         self.target = os.fspath(target)
-        self._mounted_target: str | None = None
+        self.fd = -1
+        self._mounted: str | None = None
 
-    def mount(self, root: StrPath = _ROOT) -> str:
-        """Mount permanently and return the actual mount point."""
+    def _open(self) -> int:
+        """Build the detached mount and return its file descriptor."""
         raise NotImplementedError
 
     def __enter__(self) -> Self:
-        if self._mounted_target is not None:
-            raise RuntimeError("mount context is already entered")
-        self._mounted_target = self.mount()
+        self.fd = self._open()
         return self
 
     def __exit__(self, *exc: object) -> None:
-        assert self._mounted_target is not None
-        # Do not resolve the user's path again: cwd or a symlink may have changed in the body.
-        umount2(self._mounted_target, self._unmount_flags | UMOUNT_NOFOLLOW)
-        self._mounted_target = None
+        # A strict unmount fails with EBUSY while a file descriptor refers to the mount.
+        os.close(self.fd)
+        self.fd = -1
+        if self._mounted is not None:
+            mounted, self._mounted = self._mounted, None
+            umount2(mounted, self._unmount_flags | UMOUNT_NOFOLLOW)
+
+    def attach(self, root: int = AT_FDCWD) -> None:
+        """Attach the mount at `target`, resolved inside the directory `root`, and keep it attached."""
+        directory = stat.S_ISDIR(os.fstat(self.fd).st_mode)
+        with Close(_mount_point(root, self.target, directory=directory)) as point:
+            _move_mount(self.fd, point, flags=MOVE_MOUNT_T_EMPTY_PATH, target=self.target)
+
+    def mount(self) -> None:
+        """Attach the mount at `target`, and unmount it when the context exits."""
+        self.attach()
+        # statmount() returns the mount point with every symlink resolved. The path stays correct when the
+        # working directory or a symlink in `target` changes before the context exits.
+        try:
+            self._mounted = _statmount_point(_mount_id(self.fd))
+        except BaseException:
+            umount2(f"/proc/self/fd/{self.fd}", MNT_DETACH)
+            raise
 
 
-class Stage:
-    """A directory tree that filesystems take their sources from.
+def open_layers(layers: tuple[str, ...]) -> int:
+    """Return a detached read-only mount of the directory in `layers`, or an overlay of several.
 
-    enter_sandbox() creates a directory in its scratch directory, mounts `filesystem` with its target
-    resolved under that directory, and sets `root` to the directory. No bind of the project or of a
-    host directory covers the scratch directory, so the tree only appears where a filesystem takes a
-    source from it.
+    `layers` lists the directories top first, the order of overlayfs lower directories.
     """
+    # A copy keeps the flags of the mount it comes from, for example nosuid and nodev. An overlay is a new
+    # mount and has neither flag. The tools tree gets MOUNT_ATTR_NOSUID and MOUNT_ATTR_NODEV either way, so
+    # that its flags don't depend on the number of layers.
+    attributes = MOUNT_ATTR_RDONLY | MOUNT_ATTR_NOSUID | MOUNT_ATTR_NODEV
+    if len(layers) == 1:
+        return _clone(AT_FDCWD, layers[0], AT_RECURSIVE, attributes)
+    return _overlay(layers, None, None, attributes)
 
-    def __init__(self, filesystem: _Mount | None = None) -> None:
-        self.filesystem = filesystem
-        self.root = _ROOT
 
+class ExitStack:
+    """Exit the contexts that `enter_context()` entered, in reverse order."""
 
-# HOST is the stage of the host's root directory. It has no filesystem. enter_sandbox() moves the
-# host's root to /oldroot and updates `HOST.root`.
-HOST = Stage()
+    def __init__(self) -> None:
+        self._contexts: list[_Mount | Close] = []
 
-# FILES is the stage that File writes its content into. It has no filesystem either: enter_sandbox()
-# creates a directory in its scratch directory, which no process outside the sandbox can reach, and
-# updates `FILES.root`.
-FILES = Stage()
+    def enter_context(self, context: _Mount | Close) -> None:
+        context.__enter__()
+        self._contexts.append(context)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if not self._contexts:
+            return
+        try:
+            self._contexts.pop().__exit__(None, None, None)
+        finally:
+            # The remaining contexts exit even when `__exit__()` of this context raises.
+            self.__exit__()
 
 
 class Bind(_Mount):
@@ -668,47 +822,29 @@ class Bind(_Mount):
         target: StrPath,
         readonly: bool = False,
         nofollow: bool = False,
-        stage: Stage = HOST,
+        root: int = AT_FDCWD,
     ) -> None:
+        """Bind `source`, a path in the directory `root`, at `target`.
+
+        If `root` is a directory, `source` resolves inside it, and neither `..` nor a symlink leaves it.
+        With `nofollow`, a symlink at `source` is bound itself instead of its target.
+        """
         super().__init__(target)
         self.source = os.fspath(source)
         self.readonly = readonly
         self.nofollow = nofollow
-        self.stage = stage
+        self.root = root
 
     @override
-    def mount(self, root: StrPath = _ROOT) -> str:
-        source = _resolve(self.stage.root, self.source, nofollow=self.nofollow)
-        source_is_link = self.nofollow and os.path.islink(source)
-        source_is_directory = os.path.isdir(source) and not source_is_link
-        unresolved_target = _resolve(root, self.target, nofollow=True)
-
-        if not source_is_directory and os.path.islink(unresolved_target):
-            _bind_mount(source, unresolved_target, readonly=self.readonly)
-            return unresolved_target
-
-        target = _resolve(root, self.target)
-        if not os.path.exists(target):
-            os.makedirs(os.path.dirname(target), mode=0o755, exist_ok=True)
-            if source_is_link or os.path.isfile(source):
-                _touch(target, mode=0o644)
-            else:
-                os.mkdir(target, mode=0o755)
-
-        _bind_mount(source, target, readonly=self.readonly)
-        return target
-
-
-class _UnmountOnError:
-    def __init__(self, target: str) -> None:
-        self.target = target
-
-    def __enter__(self) -> None:
-        pass
-
-    def __exit__(self, exc_type: type[BaseException] | None, *exc: object) -> None:
-        if exc_type is not None:
-            umount2(self.target, MNT_DETACH)
+    def _open(self) -> int:
+        flags = AT_RECURSIVE | AT_NO_AUTOMOUNT
+        if self.nofollow:
+            flags |= AT_SYMLINK_NOFOLLOW
+        attributes = MOUNT_ATTR_RDONLY if self.readonly else 0
+        if self.root == AT_FDCWD:
+            return _clone(AT_FDCWD, self.source, flags, attributes)
+        with Close(_lookup(self.root, self.source, os.O_NOFOLLOW if self.nofollow else 0)) as source:
+            return _clone(source, "", flags | AT_EMPTY_PATH, attributes)
 
 
 class Devices(_Mount):
@@ -719,73 +855,65 @@ class Devices(_Mount):
         self.tty = None if tty is None else os.fspath(tty)
 
     @override
-    def mount(self, root: StrPath = _ROOT) -> str:
-        target = _resolve(root, self.target)
-        os.makedirs(target, mode=0o755, exist_ok=True)
-        mount("tmpfs", target, "tmpfs", options="mode=0755")
+    def _open(self) -> int:
+        with Close(_tmpfs()) as fd:
+            nodes = [("/dev/" + name, name) for name in ("null", "zero", "full", "random", "urandom", "tty")]
+            if os.path.exists("/dev/fuse"):
+                nodes.append(("/dev/fuse", "fuse"))
+            if self.tty is not None:
+                nodes.append((self.tty, "console"))
+            for source, name in nodes:
+                _touch(fd, name)
+                with Close(_clone(AT_FDCWD, source)) as node:
+                    _move_mount(node, fd, name)
 
-        with _UnmountOnError(target):
-            # A later device bind can fail after the parent tmpfs is already mounted.
-            self._populate(target)
-        return target
-
-    def _populate(self, target: str) -> None:
-        for name in ("null", "zero", "full", "random", "urandom", "tty", "fuse"):
-            source = _under(HOST.root, "/dev/" + name)
-            if name == "fuse" and not os.path.exists(source):
-                continue
-
-            destination = os.path.join(target, name)
-            _touch(destination)
-            mount(source, destination, flags=MS_BIND)
-
-        for descriptor, name in enumerate(("stdin", "stdout", "stderr")):
-            os.symlink(f"/proc/self/fd/{descriptor}", os.path.join(target, name))
-
-        os.symlink("/proc/self/fd", os.path.join(target, "fd"))
-        os.symlink("/proc/kcore", os.path.join(target, "core"))
-        os.mkdir(os.path.join(target, "shm"), mode=0o1777)
-        os.mkdir(os.path.join(target, "pts"), mode=0o755)
-        mount("devpts", os.path.join(target, "pts"), "devpts", options="newinstance,ptmxmode=0666,mode=620")
-        os.symlink("pts/ptmx", os.path.join(target, "ptmx"))
-
-        if self.tty is not None:
-            destination = os.path.join(target, "console")
-            _touch(destination)
-            mount(_under(HOST.root, self.tty), destination, flags=MS_BIND)
+            for descriptor, name in enumerate(("stdin", "stdout", "stderr")):
+                os.symlink(f"/proc/self/fd/{descriptor}", name, dir_fd=fd)
+            os.symlink("/proc/self/fd", "fd", dir_fd=fd)
+            os.symlink("/proc/kcore", "core", dir_fd=fd)
+            os.mkdir("shm", mode=0o1777, dir_fd=fd)
+            os.mkdir("pts", mode=0o755, dir_fd=fd)
+            with Close(_fsopen("devpts")) as fs:
+                _fsconfig(fs, FSCONFIG_SET_STRING, "source", "devpts")
+                _fsconfig(fs, FSCONFIG_SET_FLAG, "newinstance")
+                _fsconfig(fs, FSCONFIG_SET_STRING, "ptmxmode", "0666")
+                _fsconfig(fs, FSCONFIG_SET_STRING, "mode", "620")
+                _fsconfig(fs, FSCONFIG_CMD_CREATE)
+                with Close(_fsmount(fs)) as pts:
+                    _move_mount(pts, fd, "pts")
+            os.symlink("pts/ptmx", "ptmx", dir_fd=fd)
+            return os.dup(fd)
 
 
-class File(Bind):
-    """A read-only file with `content` that only this sandbox sees."""
+class File(_Mount):
+    """A read-only file with `content` that only this mount shows."""
+
+    _unmount_flags = MNT_DETACH
 
     def __init__(self, content: str, target: StrPath) -> None:
-        super().__init__(target, target, readonly=True, stage=FILES)
+        super().__init__(target)
         self.content = content
 
     @override
-    def mount(self, root: StrPath = _ROOT) -> str:
-        if FILES.root == _ROOT:
-            # Programming error: this would write to the host's own copy of the target.
-            raise RuntimeError("internal error: File is only mounted by enter_sandbox()")
-        path = _under(FILES.root, self.source)
-        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(self.content)
-        return super().mount(root)
+    def _open(self) -> int:
+        # The file is the only file of a detached tmpfs, which no other process can reach.
+        with Close(_tmpfs()) as files:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+            with open(os.open("file", flags, 0o644, dir_fd=files), "w", encoding="utf-8") as handle:
+                handle.write(self.content)
+            return _clone(files, "file", attributes=MOUNT_ATTR_RDONLY)
 
 
 class Tmpfs(_Mount):
     _unmount_flags = MNT_DETACH
 
-    @override
-    def mount(self, root: StrPath = _ROOT) -> str:
-        target = _resolve(root, self.target)
-        os.makedirs(target, mode=0o755, exist_ok=True)
+    def __init__(self, target: StrPath, mode: str = _TMPFS_DEFAULT_MODE) -> None:
+        super().__init__(target)
+        self.mode = mode
 
-        options = None if os.path.basename(target) == "tmp" else "mode=0755"
-        mount("tmpfs", target, "tmpfs", options=options)
-        return target
+    @override
+    def _open(self) -> int:
+        return _tmpfs(self.mode)
 
 
 class Symlink:
@@ -793,15 +921,17 @@ class Symlink:
         self.source = os.fspath(source)
         self.target = os.fspath(target)
 
-    def mount(self, root: StrPath = _ROOT) -> None:
-        target = _resolve(root, self.target, nofollow=True)
-        os.makedirs(os.path.dirname(target) or ".", mode=0o755, exist_ok=True)
-
-        try:
-            os.symlink(self.source, target)
-        except FileExistsError:
-            if not os.path.islink(target) or os.readlink(target) != self.source:
-                raise
+    def attach(self, root: int = AT_FDCWD) -> None:
+        """Create the symlink at `target`, resolved inside the directory `root`."""
+        parent, name = _split(self.target)
+        with Close(_directory(root, parent)) as fd:
+            try:
+                os.symlink(self.source, name, dir_fd=fd)
+            except FileExistsError:
+                if not stat.S_ISLNK(os.lstat(name, dir_fd=fd).st_mode):
+                    raise
+                if os.readlink(name, dir_fd=fd) != self.source:
+                    raise
 
 
 class Overlay(_Mount):
@@ -827,31 +957,8 @@ class Overlay(_Mount):
         self._unmount_flags = MNT_DETACH if lazy_unmount else 0
 
     @override
-    def mount(self, root: StrPath = _ROOT) -> str:
-        lowers = tuple(_resolve(HOST.root, path) for path in self.lowerdirs)
-        upper_and_work = (self.upperdir, self.workdir)
-        writable = tuple(_resolve(HOST.root, path) for path in upper_and_work if path is not None)
-        target = _resolve(root, self.target)
-
-        for path in (*lowers, *writable):
-            if not os.path.exists(path):
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
-
-        os.makedirs(os.path.dirname(target), mode=0o755, exist_ok=True)
-        os.makedirs(target, mode=0o755, exist_ok=True)
-
-        # Overlay's option parser treats unescaped commas and colons as separators.
-        def escape(path: str) -> str:
-            return path.replace("\\", "\\\\").replace(",", "\\,").replace(":", "\\:")
-
-        options = [f"lowerdir={':'.join(escape(path) for path in lowers)}"]
-        if writable:
-            upper, work = writable
-            options += [f"upperdir={escape(upper)}", f"workdir={escape(work)}"]
-        options += ["userxattr", "index=off", "metacopy=off"]
-
-        mount("overlayfs", target, "overlay", options=",".join(options))
-        return target
+    def _open(self) -> int:
+        return _overlay(self.lowerdirs, self.upperdir, self.workdir)
 
 
 Filesystem = Bind | File | Devices | Tmpfs | Symlink | Overlay
@@ -875,6 +982,28 @@ def _loopback_up() -> None:
         fcntl.ioctl(probe, SIOCSIFFLAGS, struct.pack("16sH22x", b"lo", flags | IFF_UP))
 
 
+def check_kernel() -> None:
+    """Fail with a message that names the kernel version when the kernel is too old for tine's mounts."""
+    # Linux 6.15 adds open_tree_attr() together with cloning a mount out of a detached mount, which
+    # tine needs to build its mounts. The call below passes an empty path, so it fails on every kernel and
+    # needs no privileges. A kernel with open_tree_attr() fails it with ENOENT, and an older kernel fails
+    # it with ENOSYS.
+    result = _LIBC.syscall(
+        ctypes.c_long(_NR_OPEN_TREE_ATTR),
+        ctypes.c_int(AT_FDCWD),
+        ctypes.c_char_p(b""),
+        ctypes.c_uint(0),
+        ctypes.c_void_p(None),
+        ctypes.c_size_t(0),
+    )
+    if result < 0 and ctypes.get_errno() == errno.ENOSYS:
+        raise SandboxOSError(
+            errno.ENOSYS,
+            "tine needs open_tree_attr() (Linux 6.15 or newer); it is unavailable on "
+            f"Linux {os.uname().release}. A seccomp filter can also block this system call.",
+        )
+
+
 def unshare_sandbox(
     *,
     become_root: bool = False,
@@ -885,6 +1014,7 @@ def unshare_sandbox(
     A mount that the caller makes between this call and `enter_sandbox()` is only visible inside the
     sandbox's mount namespace.
     """
+    check_kernel()
     user_namespace = _acquire_privileges(
         become_root=become_root,
         network=isolate_network,
@@ -907,7 +1037,27 @@ def unshare_sandbox(
         _loopback_up()
 
     if not user_namespace:
-        mount(None, _ROOT, flags=MS_SLAVE | MS_REC)
+        _set_propagation(_ROOT, MS_SLAVE)
+
+
+def _switch_root(root: int) -> None:
+    """Make the directory `root` the root of the process."""
+    # pivot_root() only accepts a new root that is attached in the mount namespace. Attach the new root on
+    # top of the old root first.
+    _move_mount(root, AT_FDCWD, _ROOT)
+    os.fchdir(root)
+    if _LIBC.pivot_root(b".", b".") < 0:
+        if ctypes.get_errno() == errno.EINVAL:
+            raise SandboxOSError(
+                errno.EINVAL,
+                "tine cannot switch to the sandbox root: pivot_root returned EINVAL. "
+                "Inspect the host root with `findmnt -o FSTYPE,PROPAGATION /`; "
+                "an initramfs root may require booting from a mounted filesystem.",
+            )
+        _error("pivot_root")
+    # pivot_root(".", ".") puts the old root on top of the new root.
+    umount2(".", MNT_DETACH)
+    os.chdir(_ROOT)
 
 
 def enter_sandbox(
@@ -917,7 +1067,7 @@ def enter_sandbox(
     suppress_chown: bool = False,
     suppress_sync: bool = False,
 ) -> None:
-    """Replace the root with `filesystems`. Call `unshare_sandbox()` first.
+    """Replace the root with `filesystems`. Call `unshare_sandbox()` and enter every mount first.
 
     `suppress_chown` makes chown calls succeed without effect, and `suppress_sync` does the same for sync
     calls. The seccomp filter uses the libseccomp of the new root.
@@ -931,45 +1081,10 @@ def enter_sandbox(
     # map before the root changes, because the new root may not contain /proc.
     chown = suppress_chown and _single_user_namespace()
 
-    mount("tmpfs", "/tmp", "tmpfs")
-    os.chdir("/tmp")
-
-    os.mkdir("newroot", mode=0o755)
-    os.mkdir("oldroot", mode=0o755)
-    mount("newroot", "newroot", flags=MS_BIND | MS_REC)
-
-    if _LIBC.pivot_root(b".", b"oldroot") < 0:
-        mount(_ROOT, "oldroot", flags=MS_BIND | MS_REC)
-        mount(".", _ROOT, flags=MS_MOVE)
-        os.chroot(".")
-        os.chdir(".")
-        umount2("oldroot/tmp", MNT_DETACH)
-
-    HOST.root = "/oldroot"
-    FILES.root = "/files"
-    os.mkdir(FILES.root, mode=0o755)
-    stages = dict.fromkeys(
-        fs.stage for fs in filesystems if isinstance(fs, Bind) and fs.stage not in (HOST, FILES)
-    )
-    for index, stage in enumerate(stages):
-        assert stage.filesystem is not None
-        stage.root = f"/stage{index}"
-        os.mkdir(stage.root, mode=0o755)
-        target = stage.filesystem.mount(stage.root)
-        # A bind copies the flags of the host mount it comes from, for example nosuid and nodev. An
-        # overlay is a new mount and has neither flag. Set both on every stage, so that a tree gets
-        # the same flags whether it is a bind or an overlay.
-        with _Close(os.open(target, os.O_PATH | os.O_CLOEXEC | os.O_DIRECTORY)) as fd:
-            _mount_setattr(fd, readonly=True, recursive=True, nosuid=True, nodev=True)
-
-    for filesystem in sorted(filesystems, key=_filesystem_key):
-        filesystem.mount("/newroot")
-
-    os.chdir("newroot")
-    if _LIBC.pivot_root(b".", b".") < 0:
-        _error("pivot_root")
-
-    umount2(".", MNT_DETACH)
+    with Close(_tmpfs()) as root:
+        for filesystem in sorted(filesystems, key=_filesystem_key):
+            filesystem.attach(root)
+        _switch_root(root)
 
     _suppress_syscalls(chown=chown, sync=suppress_sync)
 

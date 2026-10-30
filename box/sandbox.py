@@ -12,27 +12,29 @@ Target-root setup belongs to rootfs.py rather than this launcher.
 """
 
 import os
+import stat
 import sys
 import warnings  # noqa: F401 (os.execvpe imports it after the host Python is no longer reachable)
 
 from isolation import (
     Bind,
+    Close,
     Devices,
+    ExitStack,
     File,
     Filesystem,
-    Overlay,
     SandboxOSError,
-    Stage,
     Symlink,
     Tmpfs,
     enter_sandbox,
+    open_layers,
     unshare_sandbox,
 )
 
 TYPE_CHECKING = False
 
 # Older host interpreters evaluate annotations when defining the functions.
-if TYPE_CHECKING or sys.version_info < (3, 14):  # noqa: UP036
+if TYPE_CHECKING or sys.version_info < (3, 14):
     from typing import NoReturn
 
 # Hermetic sandbox mount point of the project (host cwd). A path of tine's own rather than just keeping
@@ -119,11 +121,6 @@ class Options:
         self.cmd: list[str] = []
 
 
-def _abs(p: str) -> str:
-    # Bind sources are mounted after the sandbox has changed root, so they cannot stay relative.
-    return p if os.path.isabs(p) else os.path.join(os.getcwd(), p)
-
-
 def _relocate(value: str, cwd: str) -> str:
     """Point an absolute path into the project at where the sandbox mounts the project."""
     if value == cwd:
@@ -137,19 +134,26 @@ def _relaxed_path(path: str) -> str:
     return os.pathsep.join(directories + missing)
 
 
-def _relaxed(tools: str, stage: Stage) -> list[Filesystem]:
+def _mode(tools: int, path: str, *, follow_symlinks: bool = True) -> int:
+    """Return the mode of `path` in the tools tree, or 0 if it doesn't exist."""
+    try:
+        return os.stat(path, dir_fd=tools, follow_symlinks=follow_symlinks).st_mode
+    except FileNotFoundError:
+        return 0
+
+
+def _relaxed(tools: int) -> list[Filesystem]:
     """Mount pinned userspace over a host-integrated root."""
     out: list[Filesystem] = []
     for name in _TOOLS_DIRS:
-        entry = os.path.join(tools, name)
-        if os.path.isdir(entry):
-            out.append(Bind(entry, "/" + name, readonly=True, stage=stage))
+        if stat.S_ISDIR(_mode(tools, name)):
+            out.append(Bind(name, "/" + name, readonly=True, root=tools))
     for name in _TOOLS_LINKS:
-        entry = os.path.join(tools, name)
-        if os.path.islink(entry):
-            out.append(Symlink(os.readlink(entry), "/" + name))
-        elif os.path.isdir(entry):
-            out.append(Bind(entry, "/" + name, readonly=True, stage=stage))
+        mode = _mode(tools, name, follow_symlinks=False)
+        if stat.S_ISLNK(mode):
+            out.append(Symlink(os.readlink(name, dir_fd=tools), "/" + name))
+        elif stat.S_ISDIR(mode):
+            out.append(Bind(name, "/" + name, readonly=True, root=tools))
     for name in sorted(os.listdir("/")):
         if name in _HOST_SKIP:
             continue
@@ -158,16 +162,16 @@ def _relaxed(tools: str, stage: Stage) -> list[Filesystem]:
             out.append(Symlink(os.readlink(entry), entry))
         else:
             out.append(Bind(entry, entry))
-    if os.path.isdir(etc := os.path.join(tools, "etc")):
-        out.append(Bind(etc, "/etc", readonly=True, stage=stage))
+    if stat.S_ISDIR(_mode(tools, "etc")):
+        out.append(Bind("etc", "/etc", readonly=True, root=tools))
     for f in _HOST_ETC:
         host = os.path.join("/etc", f)
-        if os.path.exists(host) and os.path.exists(os.path.join(etc, f)):
+        if os.path.exists(host) and _mode(tools, f"etc/{f}"):
             out.append(Bind(host, host, readonly=True))
     return out + _identity(tools)
 
 
-def _identity(tools: str) -> list[Filesystem]:
+def _identity(tools: int) -> list[Filesystem]:
     """Make the invoking uid/gid resolvable inside the sandbox.
 
     Relaxed /etc comes from the tools tree, which lists only system users. On a host the caller's uid
@@ -189,10 +193,11 @@ def _identity(tools: str) -> list[Filesystem]:
     }
     out: list[Filesystem] = []
     for base, entry in tables.items():
-        source = os.path.join(tools, "etc", base)
         content = ""
-        if os.path.exists(source):
-            with open(source, encoding="utf-8") as handle:
+        if _mode(tools, f"etc/{base}"):
+            with open(
+                os.open(f"etc/{base}", os.O_RDONLY | os.O_CLOEXEC, dir_fd=tools), encoding="utf-8"
+            ) as handle:
                 content = handle.read()
         out.append(File(content + entry, "/etc/" + base))
     return out
@@ -322,31 +327,34 @@ def _interactive_shell(environment: dict[str, str]) -> str:
     _fail("no shell installed in box ($SHELL and bash were not found)")
 
 
-def _launch(args: Options, tools: str, stage: Stage) -> Launch:
+def _launch(args: Options, tools: int) -> Launch:
     """Translate the command-line request into the Python sandbox interface.
 
-    `tools` is the path of the tools tree that `_launch()` reads. The binds of the tools tree take
-    their sources from `stage`.
+    `tools` is a file descriptor of the tools tree, which the binds of the tools tree take their sources
+    from.
     """
     filesystems: list[Filesystem] = []
     cwd = os.getcwd() if args.bind_cwd else None
 
     # Recreate usr-merge symlinks instead of binding through them.
     if args.relaxed:
-        filesystems += _relaxed(tools, stage)
+        filesystems += _relaxed(tools)
     else:
-        for name in sorted(os.listdir(tools)):
+        # os.listdir() needs a file descriptor that is open for reading, and `tools` is an O_PATH file
+        # descriptor.
+        with Close(os.open(".", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=tools)) as directory:
+            names = sorted(os.listdir(directory))
+        for name in names:
             if name in _PROVIDED:
                 continue
-            entry = os.path.join(tools, name)
-            dest = "/" + name
-            if os.path.islink(entry):
-                filesystems.append(Symlink(os.readlink(entry), dest))
-            elif os.path.isdir(entry):
-                filesystems.append(Bind(entry, dest, readonly=True, stage=stage))
+            mode = _mode(tools, name, follow_symlinks=False)
+            if stat.S_ISLNK(mode):
+                filesystems.append(Symlink(os.readlink(name, dir_fd=tools), "/" + name))
+            elif stat.S_ISDIR(mode):
+                filesystems.append(Bind(name, "/" + name, readonly=True, root=tools))
 
     for src, dest in args.ro_bind:
-        filesystems.append(Bind(_abs(src), dest, readonly=True))
+        filesystems.append(Bind(src, dest, readonly=True))
 
     chdir: str | None = None
     command = tuple(args.cmd)
@@ -364,7 +372,7 @@ def _launch(args: Options, tools: str, stage: Stage) -> Launch:
     if not args.relaxed:
         filesystems.append(Devices("/dev", _tty()))
         filesystems.append(Tmpfs("/run"))
-        filesystems.append(Tmpfs("/tmp"))
+        filesystems.append(Tmpfs("/tmp", mode="1777"))
 
         # Everything large stages under /var/tmp, which TMPDIR points at: back it with Buck's
         # on-disk per-action scratch directory rather than a tmpfs, since staging trees run into
@@ -378,7 +386,7 @@ def _launch(args: Options, tools: str, stage: Stage) -> Launch:
         if cwd and "BUCK_SCRATCH_PATH" in os.environ:
             staging = os.path.join(cwd, os.environ["BUCK_SCRATCH_PATH"])
         if staging is None:
-            filesystems.append(Tmpfs("/var/tmp"))
+            filesystems.append(Tmpfs("/var/tmp", mode="1777"))
         else:
             backing = os.path.join(staging, "var-tmp")
             os.makedirs(backing, exist_ok=True)
@@ -429,27 +437,29 @@ def main(argv: list[str] | None = None) -> NoReturn:
     args = _parse(argv)
     # `layers` lists the layers of the tools tree top first, which is the order of overlayfs lower
     # directories.
-    layers = tuple(os.path.realpath(layer) for layer in reversed(args.tools))
-    tools = layers[0]
+    layers = tuple(reversed(args.tools))
     try:
         unshare_sandbox(
             become_root=not args.relaxed,
             isolate_network=not args.relaxed and not args.network,
         )
-        if len(layers) == 1:
-            launch = _launch(args, tools, Stage(Bind(tools, tools, readonly=True)))
-        else:
-            # _launch() reads the merged tools tree, so mount the overlay over the top layer while it
-            # runs. The top layer is also the first lower directory of the overlay. The kernel resolves
-            # every lower directory before it mounts the overlay, so the overlay can cover the top
-            # layer. The overlay needs the sandbox's mount namespace, so it is mounted after
-            # unshare_sandbox(). enter_sandbox() mounts the same overlay again in its scratch directory.
-            merged = Overlay(layers, None, None, tools, lazy_unmount=True)
-            with merged:
-                launch = _launch(args, tools, Stage(merged))
-        enter_sandbox(
-            launch.filesystems, launch.chdir, suppress_chown=not args.relaxed, suppress_sync=not args.relaxed
-        )
+        with ExitStack() as stack:
+            # The tools tree is opened after unshare_sandbox(), so that an overlay of its layers belongs to
+            # the sandbox's user namespace.
+            tools = open_layers(layers)
+            stack.enter_context(Close(tools))
+            launch = _launch(args, tools)
+            # The mounts take their sources from paths in the host's root, so they are entered before
+            # enter_sandbox() changes the root. _clone_project() already entered `project`.
+            for filesystem in launch.filesystems:
+                if not isinstance(filesystem, Symlink):
+                    stack.enter_context(filesystem)
+            enter_sandbox(
+                launch.filesystems,
+                launch.chdir,
+                suppress_chown=not args.relaxed,
+                suppress_sync=not args.relaxed,
+            )
     except SandboxOSError as error:
         print(error.message, file=sys.stderr)
         raise

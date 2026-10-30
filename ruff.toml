@@ -9,7 +9,7 @@ extend-exclude = ["buck-out"]
 # A command carries no suffix for the linters to recognize it by.
 extend-include = ["bin/tine"]
 # tine runs before anything is fetched, so pyupgrade must stay within the host-python floor.
-per-file-target-version = { "bin/tine" = "py312", "bin/tine.py" = "py312", "bin/cache_shim.py" = "py312", "bin/bump.py" = "py312" }
+per-file-target-version = { "bin/tine" = "py312", "bin/tine.py" = "py312", "bin/cache_shim.py" = "py312", "bin/bump.py" = "py312", "box/isolation.py" = "py312", "box/sandbox.py" = "py312" }
 src = [
     "archive",
     "cargo",

@@ -1685,6 +1685,27 @@ set would also get a separate `buck-out`. Keeping one isolation directory preser
 switching between checkouts; with every command running its own daemon, nothing else tells the mount
 sets apart, and the `TINE_MOUNTS` variable only names the one a nested invocation inherited.
 
+### Require Linux 6.15 for sandbox and project mounts
+
+The sandbox builds every filesystem as a detached mount, assembles its root as a detached tmpfs, and
+attaches the result once. It uses `open_tree_attr()`, mounting onto a detached mount, and cloning a mount
+out of a detached mount from the [Linux 6.15 mount API][mount-api-6.15]. The box's directory binds are
+clones out of the detached tools tree, and `File` clones its file out of a private tmpfs. Overlay layer
+file descriptors require [Linux 6.13 or newer][overlay-layer-fds].
+
+An older kernel floor would require attaching the root first and keeping staging mount points for the
+tools tree and `File`. Kernels without overlay layer file descriptors would also need escaped path
+strings. The 6.15 floor keeps one mount mechanism without staging directories. Hosts with older kernels
+need a newer kernel. `tine mount` uses the same mount operations and requires the same version.
+
+The host root must also support `pivot_root()`. Kernels that [cannot pivot their initramfs
+root][initramfs-pivot] require booting from another root filesystem.
+
+[mount-api-6.15]: https://github.com/torvalds/linux/blob/v6.15/fs/namespace.c
+[overlay-layer-fds]:
+  https://docs.kernel.org/filesystems/overlayfs.html#specifying-layers-via-file-descriptors
+[initramfs-pivot]: https://docs.kernel.org/6.15/filesystems/ramfs-rootfs-initramfs.html#what-is-initramfs
+
 ## Operating the current system
 
 Host requirements, the wrapper commands, and representative smoke builds are documented in

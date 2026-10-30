@@ -140,7 +140,8 @@ def build_cargo(spec: Spec) -> None:
         # repository, and their files would change the build. The parents of the bind mount are
         # directories of the sandbox. The bind is read-only, because it is a bind of a directory in the
         # read-only project.
-        with Bind(Path(spec["src"]), build):
+        with Bind(Path(spec["src"]), build) as bind:
+            bind.mount()
             workspace = build / spec["root"]
             _reject_local_config(build, workspace)
 
