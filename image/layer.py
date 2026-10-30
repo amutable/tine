@@ -14,6 +14,8 @@ import struct
 import subprocess
 import sys
 import tempfile
+from collections.abc import Generator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePosixPath
 from typing import TypedDict, cast
 
@@ -23,6 +25,7 @@ import util
 import finalize
 import installer
 import rootfs
+from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
 class LayerInstall(TypedDict):
@@ -43,14 +46,17 @@ class Spec(TypedDict):
     operations: list[object]
 
 
-# Where a chrooted command sees the project, and so every declared input. /run is one of the
-# tmpfs mounts apivfs puts over the mounted root, so the mount point never reaches the overlay
-# upper the layer captures, and the path does not depend on where the project is checked out.
+# apivfs covers /run with a tmpfs, so the project mount for copy and chrooted run is not captured.
 PROJECT = "/run/tine/project"
 
 
-def _chroots(operation: list[object]) -> bool:
-    return operation[0] == "run" and len(operation) == 4 and operation[3] is True
+@contextmanager
+def _project_chroot(target: Path) -> Generator[None]:
+    with ExitStack() as stack:
+        root = stack.enter_context(Close(open_directory(AT_FDCWD, str(target), create=False)))
+        stack.enter_context(Bind(".", PROJECT, readonly=True)).mount(root)
+        with rootfs.chroot(target):
+            yield
 
 
 def _operation(value: object) -> list[object]:
@@ -77,11 +83,11 @@ def _run(tag: str, raw_cmd: object, raw_env: object, cwd: str | None = None) -> 
         util.fail(f"image op `{tag} {cmd}` failed (rc={rc})")
 
 
-def _destination(tree: Path, value: str) -> Path:
+def _destination(value: str) -> Path:
     path = PurePosixPath(value)
     if not path.is_absolute() or ".." in path.parts:
         util.fail(f"image copy destination must be an absolute image path: {value!r}")
-    return tree.joinpath(*path.parts[1:])
+    return Path(path)
 
 
 def _copy(source: Path, destination: Path) -> None:
@@ -111,7 +117,7 @@ def _copy(source: Path, destination: Path) -> None:
         util.clone_file(source, destination)
 
 
-def _merge_os_release(tree: Path, raw_fields: object) -> None:
+def _merge_os_release(raw_fields: object) -> None:
     """Merge quoted KEY="value" assignments into /usr/lib/os-release, replacing existing keys."""
     fields = dict(_mapping("os_release", "fields", raw_fields))
     for key, value in fields.items():
@@ -120,7 +126,7 @@ def _merge_os_release(tree: Path, raw_fields: object) -> None:
         # Values are emitted double-quoted verbatim, so refuse anything needing escapes.
         if '"' in value or "\\" in value or "\n" in value:
             util.fail(f"image op 'os_release' value needs escaping: {value!r}")
-    path = tree / "usr/lib/os-release"
+    path = Path("/usr/lib/os-release")
     lines = []
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -266,19 +272,23 @@ def _install(install: LayerInstall, target: Path, scratch: Path) -> None:
 
 
 def _apply(value: object, target: Path) -> None:
-    """Apply one operation with its requested view of the mounted root."""
     operation = _operation(value)
     match operation:
         case ["run", raw_cmd, raw_env, bool(chroot)]:
             if not chroot:
                 _run("run", raw_cmd, raw_env)
             else:
-                with rootfs.chroot(target):
+                with _project_chroot(target):
                     _run("run", raw_cmd, raw_env, cwd=PROJECT)
         case ["copy", str(source), str(destination)]:
-            _copy(Path(source), _destination(target, destination))
+            path = PurePosixPath(source)
+            if path.is_absolute() or ".." in path.parts:
+                util.fail(f"image copy source must be a relative project path: {source!r}")
+            with _project_chroot(target):
+                _copy(Path(PROJECT) / source, _destination(destination))
         case ["os_release", raw_fields]:
-            _merge_os_release(target, raw_fields)
+            with rootfs.chroot(target):
+                _merge_os_release(raw_fields)
         case ["depmod"]:
             finalize.depmod(target)
         case ["hwdb", bool(usr), bool(strict)]:
@@ -298,14 +308,7 @@ def main(argv: list[str] | None = None) -> None:
     out = Path(spec["out"])
     out.mkdir(parents=True, exist_ok=True)
     operations = [_operation(operation) for operation in spec["operations"]]
-    for operation in operations:
-        if operation[0] == "copy" and len(operation) == 3 and isinstance(operation[1], str):
-            operation[1] = str(Path(operation[1]).absolute())
     install = spec["install"]
-
-    # A chrooted command names an artifact exactly as a box command does, so the project is
-    # mounted for the whole layer whenever one asks for it.
-    binds = [(os.getcwd(), PROJECT)] if any(_chroots(op) for op in operations) else []
 
     lower = spec["lower"]
     if lower:
@@ -317,7 +320,6 @@ def main(argv: list[str] | None = None) -> None:
             upperdir=out,
             workdir=spec["work"],
             apivfs=True,
-            binds=binds,
         )
     else:
         if spec["work"] is not None:
@@ -327,7 +329,6 @@ def main(argv: list[str] | None = None) -> None:
             bind=out,
             capture_bind=True,
             apivfs=True,
-            binds=binds,
         )
 
     with mounted as target, tempfile.TemporaryDirectory(prefix="layer.") as scratch:

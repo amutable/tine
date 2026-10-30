@@ -176,6 +176,9 @@ resolve upstream (details in [architecture.md](../design/architecture.md)).
 
 ## Images and operations
 
+Ordinary absolute symlinks in chrooted file operations resolve inside the image. Images and scripts must
+be trusted because procfs magic links can access paths outside the image.
+
 `image.layer` has two construction modes. An initial image takes `package_manager`, which defaults to the
 package manager of the distribution that the build chooses. A derived image takes `parent` and inherits the
 package manager of that image. A call with operations applies one ordered operation sequence in one action
@@ -190,7 +193,8 @@ and persists exactly one delta:
   own binaries instead. Either takes an `env` argument that overlays variables on that command's
   environment. An argument names a build artifact by being one, or by spelling `$(location //target)` in
   a BUCK file, and it resolves the same in both modes: a chrooted command gets the project bind-mounted
-  at a fixed path under `/run`, which is also its working directory. Running a script the repository
+  read-only at a fixed path under `/run`, which is also its working directory. Write generated files
+  to paths in the image rather than to the working directory. Running a script the repository
   owns is therefore just `image.ops.run(["/usr/bin/bash", "$(location :setup.sh)"], chroot = True)`. Buck's
   macro parser claims `$(...)`, so a shell substitution has to be written `\$(...)`; an unescaped one fails
   to parse rather than silently reaching the shell.
