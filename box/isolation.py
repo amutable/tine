@@ -108,6 +108,7 @@ _NR_FSMOUNT = 432
 _NR_OPENAT2 = 437
 _NR_MOUNT_SETATTR = 442
 _NR_STATMOUNT = 457
+_NR_LISTMOUNT = 458
 _NR_OPEN_TREE_ATTR = 467
 
 # _STATX_MNT_ID is the offset of stx_mnt_id in struct statx. _STATMOUNT_MNT_POINT and _STATMOUNT_STRINGS are
@@ -660,6 +661,27 @@ def _mount_id(dirfd: int, path: str = "") -> int:
     return ctypes.c_uint64.from_buffer(buffer, _STATX_MNT_ID).value
 
 
+def _listmount(mount_id: int) -> list[int]:
+    """Return the IDs of the mounts below the mount `mount_id`, including covered ones, oldest first."""
+    request = _MountIdRequest(size=MNT_ID_REQ_SIZE_VER0, mnt_id=mount_id)
+    batch = (ctypes.c_uint64 * 256)()
+    ids: list[int] = []
+    while True:
+        count = _syscall(
+            "listmount",
+            _NR_LISTMOUNT,
+            ctypes.c_void_p(ctypes.addressof(request)),
+            ctypes.c_void_p(ctypes.addressof(batch)),
+            ctypes.c_size_t(len(batch)),
+            ctypes.c_uint(0),
+        )
+        ids += batch[:count]
+        if count < len(batch):
+            return ids
+        # The next call continues after the ID in `param`.
+        request.param = ids[-1]
+
+
 def _statmount_point(mount_id: int) -> str:
     """Return the mount point of the mount `mount_id`, relative to the process root."""
     request = _MountIdRequest(size=MNT_ID_REQ_SIZE_VER0, mnt_id=mount_id, param=STATMOUNT_MNT_POINT)
@@ -681,6 +703,28 @@ def _statmount_point(mount_id: int) -> str:
         size *= 2
     offset = ctypes.c_uint32.from_buffer(buffer, _STATMOUNT_MNT_POINT).value
     return os.fsdecode(ctypes.string_at(ctypes.addressof(buffer) + _STATMOUNT_STRINGS + offset))
+
+
+def submounts(directory: str) -> list[str]:
+    """Return the mount points below the absolute path `directory` that a lookup reaches, parents first."""
+    prefix = directory if directory.endswith("/") else directory + "/"
+    points = []
+    for mount_id in _listmount(_mount_id(AT_FDCWD, directory)):
+        point = _statmount_point(mount_id)
+        if not point.startswith(prefix):
+            continue
+        # listmount() also returns the mounts that a later mount covers. A lookup of the mount point of a
+        # covered mount ends on the mount on top, or fails when the mount on top has no such path, a
+        # directory the caller can't search or a symlink loop.
+        try:
+            visible = _mount_id(AT_FDCWD, point) == mount_id
+        except OSError as error:
+            if error.errno not in (errno.ENOENT, errno.ENOTDIR, errno.EACCES, errno.ELOOP):
+                raise
+            visible = False
+        if visible:
+            points.append(point)
+    return sorted(points, key=lambda point: point.count("/"))
 
 
 class Close:

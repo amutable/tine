@@ -7,12 +7,13 @@ import errno
 import os
 import tempfile
 import unittest
-from contextlib import chdir, nullcontext
+from contextlib import ExitStack, chdir, nullcontext
 from pathlib import Path
 from typing import override
 from unittest import mock
 
 import rootfs
+from isolation import Bind
 
 
 class TestSourceOverlay(unittest.TestCase):
@@ -68,9 +69,44 @@ class TestSourceOverlay(unittest.TestCase):
             self.assertEqual((tree / "absolute-link").read_text(encoding="utf-8"), "outside")
             self.assertEqual((tree / "directory-link/file").read_text(encoding="utf-8"), "original")
             self.assertEqual((tree / "data/relative-link").read_text(encoding="utf-8"), "original")
-            upper = next(self.scratch.glob("source.*/upper"))
+            upper = next(self.scratch.glob("source.*/0/upper"))
             self.assertEqual(list(upper.iterdir()), [])
         self.assertEqual(list(self.scratch.glob("source.*")), [])
+
+    def test_shows_the_mounts_below_the_source_and_discards_writes_into_them(self) -> None:
+        # `tine mount` binds a checkout over a directory of the project, and rpmbuild builds the project
+        # in place.
+        mounted, nested = self.scratch / "mounted", self.scratch / "nested"
+        (mounted / "inner").mkdir(parents=True)
+        (mounted / "file").write_text("mounted", encoding="utf-8")
+        nested.mkdir()
+        (nested / "file").write_text("nested", encoding="utf-8")
+        (self.source / "data/covered").mkdir()
+        (self.source / "data/covered/file").write_text("covered", encoding="utf-8")
+        target = self.scratch / "target"
+        with ExitStack() as stack:
+            stack.enter_context(Bind(mounted, self.source / "data/covered")).mount()
+            stack.enter_context(Bind(nested, self.source / "data/covered/inner")).mount()
+            tree = stack.enter_context(rootfs.source_overlay(self.source, target))
+            self.assertEqual((tree / "data/covered/file").read_text(encoding="utf-8"), "mounted")
+            self.assertEqual((tree / "data/covered/inner/file").read_text(encoding="utf-8"), "nested")
+            (tree / "data/covered/file").write_text("changed", encoding="utf-8")
+            (tree / "data/covered/inner/file").unlink()
+            (tree / "data/covered/inner/generated").touch()
+        self.assertEqual((mounted / "file").read_text(encoding="utf-8"), "mounted")
+        self.assertEqual(sorted(path.name for path in nested.iterdir()), ["file"])
+        self.assertEqual((self.source / "data/covered/file").read_text(encoding="utf-8"), "covered")
+        self.assertEqual(list(target.iterdir()), [])
+        self.assertEqual(list(self.scratch.glob("source.*")), [])
+
+    def test_shows_the_file_that_a_file_mount_below_the_source_covers(self) -> None:
+        mounted = self.scratch / "mounted"
+        mounted.write_text("mounted", encoding="utf-8")
+        target = self.scratch / "target"
+        with ExitStack() as stack:
+            stack.enter_context(Bind(mounted, self.source / "data/file")).mount()
+            tree = stack.enter_context(rootfs.source_overlay(self.source, target))
+            self.assertEqual((tree / "data/file").read_text(encoding="utf-8"), "original")
 
     def test_renaming_a_source_directory_fails_like_a_container(self) -> None:
         # The docstring of `source_overlay()` states that rename(2) of a directory fails with EXDEV.
@@ -95,7 +131,7 @@ class TestSourceOverlay(unittest.TestCase):
                 upper = self.scratch
                 with raises:
                     with rootfs.source_overlay(self.source, target) as tree:
-                        upper = next(self.scratch.glob("source.*/upper"))
+                        upper = next(self.scratch.glob("source.*/0/upper"))
                         self.assertFalse((tree / "generated").exists())
                         (tree / "data/file").chmod(0o600)
                         (tree / "data/relative-link").write_text("changed", encoding="utf-8")
