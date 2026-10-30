@@ -25,6 +25,7 @@ from isolation import (
     Devices,
     Overlay,
     Tmpfs,
+    submounts,
 )
 from isolation import (
     chroot as _chroot,
@@ -220,19 +221,28 @@ def source_overlay(source: Path, target: Path) -> Generator[Path]:
     `rootfs()` decodes the `.wh.` and `.esc.` marker files of a stored image layer. This function
     does not, because a checkout is not an image layer and can contain such names.
     """
+    # An overlay shows the directory that a mount in its lower directory covers, not the mounted tree.
+    # A `tine mount` covers a directory of the project, so directory submounts need overlays of their own.
+    # statmount() returns mount points with their symlinks resolved, so `source` needs them resolved too.
+    resolved = source.resolve()
+    layers = [(source, target)]
+    # overlayfs only takes directories as layers, so `target` shows the file that a file mount covers.
+    points = [Path(point) for point in submounts(str(resolved)) if Path(point).is_dir()]
+    layers += [(point, target / point.relative_to(resolved)) for point in points]
     with ExitStack() as stack:
         scratch = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="source.")))
-        upper, work = scratch / "upper", scratch / "work"
-        upper.mkdir()
-        work.mkdir()
-        # Make sure the root directory has the source mode and times rather than the tmpdir
-        # mode and times.
-        source_attributes = source.stat()
-        upper.chmod(stat.S_IMODE(source_attributes.st_mode))
-        os.utime(upper, ns=(source_attributes.st_atime_ns, source_attributes.st_mtime_ns))
-        # A child process can keep a file descriptor open in the mount, and a normal unmount then
-        # fails with EBUSY.
-        stack.enter_context(Overlay((source,), upper, work, target, lazy_unmount=True)).mount()
+        for index, (lower, merged) in enumerate(layers):
+            upper, work = scratch / str(index) / "upper", scratch / str(index) / "work"
+            upper.mkdir(parents=True)
+            work.mkdir()
+            # Make sure the root directory has the mode and times of the lower directory rather than
+            # the tmpdir mode and times.
+            attributes = lower.stat()
+            upper.chmod(stat.S_IMODE(attributes.st_mode))
+            os.utime(upper, ns=(attributes.st_atime_ns, attributes.st_mtime_ns))
+            # A child process can keep a file descriptor open in the mount, and a normal unmount then
+            # fails with EBUSY.
+            stack.enter_context(Overlay((lower,), upper, work, merged, lazy_unmount=True)).mount()
         yield target
 
 

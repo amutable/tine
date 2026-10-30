@@ -707,10 +707,12 @@ An `rpm_package` action:
 1. obtains the shared base root from its `BuildrootInfo`;
 2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream;
 3. overlays the base and delta, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
-   or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. With
-   `in_place_packaging`, a separate action first fetches the dist-git commit that the tree pins, and the
-   build takes its spec and Source/Patch files from that commit. The project is read-only until the driver
-   exits;
+   or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
+   directory under a mount rather than the mounted tree, so each directory mount below the source tree,
+   such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
+   `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
+   first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
+   from that commit. The project is read-only until the driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;

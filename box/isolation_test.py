@@ -262,6 +262,37 @@ class TestExitStack(unittest.TestCase):
         )
 
 
+class TestSubmounts(unittest.TestCase):
+    def test_lists_the_visible_mounts_below_a_directory_parents_first(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as directory, ExitStack() as stack:
+            root = Path(directory)
+            tree, source = root / "tree", root / "source"
+            (source / "inner").mkdir(parents=True)
+            tree.mkdir()
+            # The binds below `tree` stay attached when their contexts exit. The unmount of the tmpfs at
+            # `tree` removes all of them.
+            stack.enter_context(isolation.Tmpfs(tree)).mount()
+            for name in ("with space", "covered/below"):
+                (tree / name).mkdir(parents=True)
+            # The name of `tree2` starts with the name of `tree`, but `tree2` is not below `tree`.
+            (root / "tree2").mkdir()
+            # The kernel gives a mount its ID when it creates the mount. `covering` gets a lower ID than the
+            # mount at covered/below, although `covering` covers that mount. `inner` gets a lower ID than the
+            # mount at "with space", although `inner` is below that mount.
+            covering = stack.enter_context(isolation.Bind(source, tree / "covered"))
+            inner = stack.enter_context(isolation.Bind(source, tree / "with space/inner"))
+            for target in ("with space", "covered/below"):
+                stack.enter_context(isolation.Bind(source, tree / target)).attach()
+            inner.attach()
+            covering.attach()
+            stack.enter_context(isolation.Bind(source, root / "tree2")).mount()
+
+            # The bind at covered hides the bind at covered/below. Mounts at the same depth come in the order
+            # that the kernel created them.
+            expected = [tree / "covered", tree / "with space", tree / "with space/inner"]
+            self.assertEqual(isolation.submounts(str(tree)), [str(path) for path in expected])
+
+
 class TestMountContexts(unittest.TestCase):
     def test_failed_mount_metadata_lookup_detaches_the_mount(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
