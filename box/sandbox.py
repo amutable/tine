@@ -11,6 +11,7 @@ pinned userspace but exposes host devices, services, environment, cwd, and netwo
 Target-root setup belongs to rootfs.py rather than this launcher.
 """
 
+import errno
 import os
 import stat
 import sys
@@ -26,6 +27,7 @@ from isolation import (
     SandboxOSError,
     Symlink,
     Tmpfs,
+    check_kernel,
     enter_sandbox,
     open_layers,
     unshare_sandbox,
@@ -327,14 +329,14 @@ def _interactive_shell(environment: dict[str, str]) -> str:
     _fail("no shell installed in box ($SHELL and bash were not found)")
 
 
-def _launch(args: Options, tools: int) -> Launch:
+def _launch(args: Options, tools: int, project: Bind | None) -> Launch:
     """Translate the command-line request into the Python sandbox interface.
 
     `tools` is a file descriptor of the tools tree, which the binds of the tools tree take their sources
-    from.
+    from. `project` is the bind of the project for `--bind-cwd`. With `None`, the plan constructs the bind
+    after unsharing if `--bind-cwd` is set.
     """
     filesystems: list[Filesystem] = []
-    cwd = os.getcwd() if args.bind_cwd else None
 
     # Recreate usr-merge symlinks instead of binding through them.
     if args.relaxed:
@@ -358,8 +360,11 @@ def _launch(args: Options, tools: int) -> Launch:
 
     chdir: str | None = None
     command = tuple(args.cmd)
-    if cwd:
-        filesystems.append(Bind(cwd, _PROJECT))
+    cwd: str | None = None
+    if args.bind_cwd:
+        project = project or Bind(os.getcwd(), _PROJECT)
+        cwd = project.source
+        filesystems.append(project)
         chdir = _PROJECT
 
         # A build action names its artifacts project-relative, but `buck run` calls the same command with
@@ -433,26 +438,41 @@ def _launch(args: Options, tools: int) -> Launch:
     return Launch(filesystems=tuple(filesystems), chdir=chdir, command=command, environment=environment)
 
 
+def _clone_project(stack: ExitStack) -> Bind | None:
+    # overlayfs rejects locked submounts, so clone the mount tree before entering the user namespace.
+    project = Bind(os.getcwd(), _PROJECT)
+    try:
+        stack.enter_context(project)
+    except OSError as error:
+        # An unprivileged caller can clone mounts only after unshare_sandbox() creates its mount namespace.
+        if error.errno != errno.EPERM:
+            raise
+        return None
+    return project
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     args = _parse(argv)
     # `layers` lists the layers of the tools tree top first, which is the order of overlayfs lower
     # directories.
     layers = tuple(reversed(args.tools))
     try:
-        unshare_sandbox(
-            become_root=not args.relaxed,
-            isolate_network=not args.relaxed and not args.network,
-        )
+        check_kernel()
         with ExitStack() as stack:
+            project = _clone_project(stack) if args.bind_cwd else None
+            unshare_sandbox(
+                become_root=not args.relaxed,
+                isolate_network=not args.relaxed and not args.network,
+            )
             # The tools tree is opened after unshare_sandbox(), so that an overlay of its layers belongs to
             # the sandbox's user namespace.
             tools = open_layers(layers)
             stack.enter_context(Close(tools))
-            launch = _launch(args, tools)
+            launch = _launch(args, tools, project)
             # The mounts take their sources from paths in the host's root, so they are entered before
             # enter_sandbox() changes the root. _clone_project() already entered `project`.
             for filesystem in launch.filesystems:
-                if not isinstance(filesystem, Symlink):
+                if not isinstance(filesystem, Symlink) and filesystem is not project:
                     stack.enter_context(filesystem)
             enter_sandbox(
                 launch.filesystems,

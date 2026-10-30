@@ -49,6 +49,16 @@ class TestSourceOverlay(unittest.TestCase):
         self.source.chmod(0o2750)
         os.utime(self.source, ns=(1234567890123456789, 1234567890123456789))
 
+    def test_an_invalid_overlay_has_a_possible_locked_mount_hint(self) -> None:
+        failure = OSError(errno.EINVAL, "fsconfig create: Invalid argument")
+        with (
+            mock.patch.object(rootfs.Overlay, "__enter__", side_effect=failure),
+            self.assertRaises(OSError) as raised,
+            rootfs.source_overlay(self.source, self.scratch / "target"),
+        ):
+            pass
+        self.assertIn("Locked mounts below the source can cause EINVAL", "".join(raised.exception.__notes__))
+
     def test_preserves_the_tree_without_decoding_image_markers(self) -> None:
         with chdir(self.project), rootfs.source_overlay(Path("input"), self.scratch / "build/src") as tree:
             original = {path.relative_to(self.source) for path in self.source.rglob("*")}

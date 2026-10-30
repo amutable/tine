@@ -568,7 +568,9 @@ without doing anything.
 The project is mounted at `/tine/project` and the action runs there, rather than at the path it is checked
 out under. A checkout is then free to live anywhere, including under a directory the box populates
 itself such as `/var/lib`, and an absolute path that leaks into a build output is the same for every
-checkout. A chrooted operation is a second frame and mounts the project again, under the target root's
+checkout. The sandbox clones the project's mount tree before it creates its user namespace, so the kernel
+doesn't lock a mount below the project, such as a `tine mount`, and overlayfs accepts the project as a lower
+directory. A chrooted operation is a second frame and mounts the project again, under the target root's
 `/run`, which apivfs covers with a tmpfs so the mount point is not captured into the image.
 
 The sandbox only creates the execution environment. Drivers own their target-root layout through
