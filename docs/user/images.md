@@ -21,6 +21,10 @@ writable directories such as `/etc` and `/var`.
 If you must have files with different permissions in your image, the escape hatch is the `tmpfiles`
 attribute of an image or composition.
 
+A layer that adds a program or shared library which would run on an executable stack fails to build: one
+whose `PT_GNU_STACK` program header is executable, or which has none on x86, where glibc then falls back
+to an executable stack.
+
 ## Concepts
 
 A **catalog** is the Buck cell named `catalog`, which declares which OS releases are available to build

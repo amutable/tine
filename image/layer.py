@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -161,6 +162,72 @@ def _normalize_modes(tree: Path) -> None:
         _normalize_mode(path)
 
 
+# The ELF fields the stack check reads; see elf(5). Per class: the header after e_ident up to
+# e_phnum, and the offset of p_flags in a program header. Per data encoding: the byte order.
+_ELF_CLASSES = {1: ("HHIIIIIHHH", 24), 2: ("HHIQQQIHHH", 4)}
+_ELF_ORDERS = {1: "<", 2: ">"}
+_ET_EXEC, _ET_DYN = 2, 3
+_PT_GNU_STACK = 0x6474E551
+_PF_X = 1
+
+# The machines on which an object without PT_GNU_STACK gets an executable stack: EM_386 and EM_X86_64.
+# glibc then applies DEFAULT_STACK_PROT_PERMS, which only the x86 stackinfo.h headers make executable;
+# the generic one, which aarch64 uses, is not. On ia32 the kernel even makes every readable mapping
+# executable (the table above elf_read_implies_exec).
+# https://sourceware.org/git/?p=glibc.git;a=blob;f=elf/dl-load.c
+# https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/x86_64/stackinfo.h
+# https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/i386/stackinfo.h
+# https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/generic/stackinfo.h
+# https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/elf.h
+_EXECUTABLE_BY_DEFAULT = {3, 62}
+
+
+def _stack(path: Path) -> str | None:
+    """Why the program or shared library at `path` would run on an executable stack, if it would.
+
+    A missing PT_GNU_STACK counts too, on the machines whose default stack is executable. Anything
+    that neither the kernel nor ld.so loads as a program has no stack of its own and passes: non-ELF
+    files, relocatable objects such as kernel modules, and ELF too truncated to read, which packages
+    ship as test data.
+    """
+    with path.open("rb") as file:
+        ident = file.read(16)
+        if (
+            len(ident) < 16
+            or ident[:4] != b"\x7fELF"
+            or ident[4] not in _ELF_CLASSES
+            or ident[5] not in _ELF_ORDERS
+        ):
+            return None
+        layout, flags_offset = _ELF_CLASSES[ident[4]]
+        order = _ELF_ORDERS[ident[5]]
+        header = struct.Struct(order + layout)
+        raw = file.read(header.size)
+        if len(raw) < header.size:
+            return None
+        e_type, e_machine, _, _, phoff, _, _, _, phentsize, phnum = header.unpack(raw)
+        if e_type not in (_ET_EXEC, _ET_DYN):
+            return None
+        file.seek(phoff)
+        table = file.read(phentsize * phnum)
+    if len(table) < phentsize * phnum or phentsize < flags_offset + 4:
+        return None
+    word = struct.Struct(order + "I")
+    for entry in range(0, len(table), phentsize):
+        if word.unpack_from(table, entry)[0] == _PT_GNU_STACK:
+            return "executable stack" if word.unpack_from(table, entry + flags_offset)[0] & _PF_X else None
+    return "no PT_GNU_STACK" if e_machine in _EXECUTABLE_BY_DEFAULT else None
+
+
+def _executable_stacks(tree: Path) -> list[str]:
+    """Each program or shared library in `tree` that would run on an executable stack, and why."""
+    return [
+        f"/{path.relative_to(tree)}: {problem}"
+        for path in sorted(tree.rglob("*"))
+        if stat.S_ISREG(path.lstat().st_mode) and (problem := _stack(path)) is not None
+    ]
+
+
 def _apply_filesystem(operation: list[object]) -> None:
     match operation:
         case ["mkdir", str(path)]:
@@ -272,6 +339,9 @@ def main(argv: list[str] | None = None) -> None:
         for operation in operations:
             _apply(operation, target)
     _normalize_modes(out)
+    stacks = _executable_stacks(out)
+    if stacks:
+        util.fail("image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks))
     print(f"image: applied {len(operations)} ops over {len(lower)} lower(s) -> {out}", file=sys.stderr)
 
 

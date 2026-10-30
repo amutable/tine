@@ -7,6 +7,7 @@ buck test tine//image:test
 """
 
 import os
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -97,3 +98,56 @@ class TestNormalization(unittest.TestCase):
             self.assertTrue((tree / "link").is_symlink())
             # not content: whatever it is, it is not ours to rewrite
             self.assertEqual((tree / "fifo").lstat().st_mode & 0o7777, 0o600)
+
+
+def _elf(
+    *, bits: int = 64, order: str = "<", e_type: int = 3, machine: int = 62, stack: int | None = 0o6
+) -> bytes:
+    """An ELF header and its program header table: a PT_LOAD, and a PT_GNU_STACK with `stack` flags."""
+    ident = b"\x7fELF" + bytes([bits // 32, 1 if order == "<" else 2, 1]) + bytes(9)
+    headers = [(1, 0o5)] + ([] if stack is None else [(0x6474E551, stack)])
+    if bits == 64:
+        ehdr = struct.Struct(order + "16sHHIQQQIHHHHHH")
+        phdr = struct.Struct(order + "IIQQQQQQ")
+        table = b"".join(phdr.pack(p_type, flags, 0, 0, 0, 0, 0, 0) for p_type, flags in headers)
+    else:
+        ehdr = struct.Struct(order + "16sHHIIIIIHHHHHH")
+        phdr = struct.Struct(order + "IIIIIIII")
+        table = b"".join(phdr.pack(p_type, 0, 0, 0, 0, 0, flags, 0) for p_type, flags in headers)
+    header = ehdr.pack(
+        ident, e_type, machine, 1, 0, ehdr.size, 0, 0, ehdr.size, phdr.size, len(headers), 0, 0, 0
+    )
+    return header + table
+
+
+class TestExecutableStacks(unittest.TestCase):
+    def test_reports_executable_and_missing_stacks(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="layer-test.", dir="/var/tmp") as scratch:
+            tree = Path(scratch)
+            (tree / "bin").mkdir()
+            (tree / "lib").mkdir()
+            (tree / "bin/rw").write_bytes(_elf())
+            (tree / "bin/rwe").write_bytes(_elf(stack=0o7))
+            (tree / "bin/missing").write_bytes(_elf(stack=None))
+            (tree / "bin/link").symlink_to("rwe")
+            (tree / "lib/i386-missing.so").write_bytes(_elf(bits=32, machine=3, stack=None))
+            # EM_AARCH64: glibc's default stack there is not executable, so no PT_GNU_STACK is fine
+            (tree / "lib/aarch64-missing.so").write_bytes(_elf(machine=183, stack=None))
+            # EM_PPC, for the byte order
+            (tree / "lib/be32-rw.so").write_bytes(_elf(bits=32, order=">", machine=20))
+            (tree / "lib/be32-rwe.so").write_bytes(_elf(bits=32, order=">", machine=20, stack=0o7))
+            # relocatable, as a kernel module or BPF object: no program headers, nothing to load
+            (tree / "lib/module.ko").write_bytes(_elf(e_type=1, stack=None))
+            (tree / "lib/truncated").write_bytes(_elf(stack=0o7)[:70])
+            (tree / "lib/text").write_text("\x7fELF but not really")
+            (tree / "lib/empty").write_bytes(b"")
+
+            self.assertEqual(
+                layer._executable_stacks(tree),
+                [
+                    "/bin/missing: no PT_GNU_STACK",
+                    "/bin/rwe: executable stack",
+                    "/lib/be32-rwe.so: executable stack",
+                    "/lib/i386-missing.so: no PT_GNU_STACK",
+                ],
+            )
