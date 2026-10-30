@@ -616,7 +616,7 @@ for name, lower, merged in layers:
     upper, work = f"/var/tmp/{name}.upper", f"/var/tmp/{name}.work"
     os.mkdir(upper)
     os.mkdir(work)
-    with Overlay((lower,), upper, work, merged, lazy_unmount=True) as overlay:
+    with Overlay((lower,), upper, work, merged) as overlay:
         overlay.attach()
 with open("/var/tmp/merged/sub/file") as handle:
     print(handle.read())

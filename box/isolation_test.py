@@ -329,7 +329,7 @@ class TestMountContexts(unittest.TestCase):
             (top / "shadowed").write_text("from the top")
             (bottom / "shadowed").write_text("from the bottom")
             target = root / "target"
-            with isolation.Overlay((top, bottom), upper, work, target, lazy_unmount=False) as mounted:
+            with isolation.Overlay((top, bottom), upper, work, target) as mounted:
                 mounted.mount()
                 self.assertEqual((target / "original").read_text(), "original")
                 self.assertEqual((target / "underneath").read_text(), "underneath")
@@ -347,7 +347,7 @@ class TestMountContexts(unittest.TestCase):
             (bottom / "shadowed").write_text("from the bottom")
             (bottom / "underneath").write_text("underneath")
             target = root / "target"
-            with isolation.Overlay((top, bottom), None, None, target, lazy_unmount=False) as mounted:
+            with isolation.Overlay((top, bottom), None, None, target) as mounted:
                 mounted.mount()
                 self.assertEqual((target / "shadowed").read_text(), "from the top")
                 self.assertEqual((target / "underneath").read_text(), "underneath")
@@ -358,7 +358,7 @@ class TestMountContexts(unittest.TestCase):
     def test_overlay_needs_a_workdir_with_its_upper_and_two_lowers_without(self) -> None:
         for lowers, upper, work in ((("lower",), "upper", None), (("lower",), None, None)):
             with self.subTest(lowers=lowers, upper=upper, work=work), self.assertRaises(ValueError):
-                isolation.Overlay(lowers, upper, work, "target", lazy_unmount=False)
+                isolation.Overlay(lowers, upper, work, "target")
 
     def test_overlay_parent_keeps_its_mode_with_a_permissive_umask(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
@@ -371,7 +371,7 @@ class TestMountContexts(unittest.TestCase):
             with ExitStack() as stack:
                 stack.callback(os.umask, os.umask(0))
                 stack.enter_context(mock.patch.object(isolation, "_move_mount"))
-                with isolation.Overlay((lower,), upper, work, target, lazy_unmount=True) as overlay:
+                with isolation.Overlay((lower,), upper, work, target) as overlay:
                     overlay.attach()
 
             self.assertEqual(target.parent.stat().st_mode & 0o777, 0o755)
@@ -462,7 +462,7 @@ class TestMountContexts(unittest.TestCase):
                 isolation.Tmpfs(target),
                 isolation.Devices(target),
                 # Strict, so that unwinding covers both unmount flavours.
-                isolation.Overlay((lower,), upper, work, target, lazy_unmount=False),
+                isolation.Overlay((lower,), upper, work, target, strict_unmount=True),
             ]
             for mount in mounts:
                 for fail in (False, True):
