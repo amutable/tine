@@ -868,6 +868,7 @@ def namespace_gitdirs(root: Path) -> dict[Path, str]:
 def create_mount_namespace(root: Path, mounts: dict[str, str]) -> str:
     """Build the declared mounts in a private namespace and encode their table."""
     try:
+        isolation.check_kernel()
         # Always create a user namespace, even with CAP_SYS_ADMIN, to scope mount authority to this
         # invocation. It must precede the mount namespace to grant a non-root caller mount permission.
         isolation.unprivileged_user_namespace(become_root=False)
@@ -886,7 +887,8 @@ def create_mount_namespace(root: Path, mounts: dict[str, str]) -> str:
         if (Path(source) / ".git").is_file():
             gitdirs[target] = _git("rev-parse", "--absolute-git-dir", directory=Path(source))
         try:
-            isolation.mount(Path(source), root / target, flags=isolation.MS_BIND | isolation.MS_REC)
+            with isolation.Bind(Path(source), root / target) as bind:
+                bind.attach()
         except OSError as error:
             fail(f"mount {target}: cannot build it from {source}: {error}")
 

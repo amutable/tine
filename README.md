@@ -16,9 +16,10 @@ disks in various formats, and also additional artifacts like
 
 The host needs only:
 
- * Linux ≥ 5.12 with unprivileged user namespaces. On Ubuntu you need to allow them with a
+ * Linux ≥ 6.15 with unprivileged user namespaces. On Ubuntu you need to allow them with a
  [sysctl](https://www.freedesktop.org/software/systemd/man/latest/sysctl.d.html):
-   `kernel.apparmor_restrict_unprivileged_userns=0`
+   `kernel.apparmor_restrict_unprivileged_userns=0`.
+ * A host root that supports `pivot_root()`; some kernels cannot pivot an initramfs root
  * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against
  * `/usr/bin/python3` ≥ 3.14, or ≥ 3.12 together with `zstd`
  * `git`

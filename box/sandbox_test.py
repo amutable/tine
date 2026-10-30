@@ -18,7 +18,7 @@ from contextlib import contextmanager, redirect_stdout, suppress
 from pathlib import Path
 
 import sandbox
-from isolation import Bind, Devices, File, Filesystem, Overlay, Stage, Symlink, Tmpfs
+from isolation import AT_FDCWD, Bind, Close, Devices, File, Filesystem, Symlink, Tmpfs, open_layers
 from sandbox import _PROJECT
 
 
@@ -56,8 +56,8 @@ def _project() -> Generator[tuple[Path, Path]]:
 
 def _launch(*args: str) -> sandbox.Launch:
     options = sandbox._parse(list(args))
-    tools = os.path.realpath(options.tools[-1])
-    return sandbox._launch(options, tools, Stage(Bind(tools, tools, readonly=True)))
+    with Close(open_layers(tuple(reversed(options.tools)))) as tools:
+        return sandbox._launch(options, tools)
 
 
 def _unshare(*args: str) -> unittest.mock.MagicMock:
@@ -263,23 +263,27 @@ class TestHermetic(unittest.TestCase):
             launch = _launch("--tools", str(tools), "--", "true")
 
             self.assertIn(("usr/bin", "/bin"), [(link.source, link.target) for link in _symlinks(launch)])
-            self.assertNotIn(tools / "bin", [Path(bind.source) for bind in _binds(launch)])
+            self.assertNotIn("bin", [bind.source for bind in _binds(launch) if bind.root != AT_FDCWD])
 
     def test_tools_directories_are_bound_read_only(self) -> None:
         with _project() as (_, tools):
             launch = _launch("--tools", str(tools), "--", "true")
 
-            bound = {Path(bind.source): Path(bind.target) for bind in _binds(launch) if bind.readonly}
-            self.assertEqual(bound[tools / "usr"], Path("/usr"))
-            self.assertEqual(bound[tools / "etc"], Path("/etc"))
-            self.assertEqual(bound[tools / "home"], Path("/home"))
+            bound = {
+                bind.source: bind.target
+                for bind in _binds(launch)
+                if bind.readonly and bind.root != AT_FDCWD
+            }
+            self.assertEqual(bound["usr"], "/usr")
+            self.assertEqual(bound["etc"], "/etc")
+            self.assertEqual(bound["home"], "/home")
 
     def test_the_sandbox_supplies_the_api_filesystems_itself(self) -> None:
         with _project() as (_, tools):
             launch = _launch("--tools", str(tools), "--", "true")
 
             for name in ("proc", "sys", "dev", "run", "tmp", "boot"):
-                self.assertNotIn(tools / name, [Path(bind.source) for bind in _binds(launch)])
+                self.assertNotIn(name, [bind.source for bind in _binds(launch) if bind.root != AT_FDCWD])
             self.assertIn((Path("/proc"), Path("/proc"), False, False), _bind_specs(launch))
             self.assertIn(
                 ("/dev", None),
@@ -303,7 +307,7 @@ class TestHermetic(unittest.TestCase):
 
             launch = _launch("--tools", str(tools), "--bind-cwd", "--", "true")
 
-            self.assertIn((occupied, Path("/") / occupied.name, True, False), _bind_specs(launch))
+            self.assertIn((Path(occupied.name), Path("/") / occupied.name, True, False), _bind_specs(launch))
 
     def test_absolute_project_paths_in_the_command_follow_the_mount(self) -> None:
         with _project() as (project, tools):
@@ -385,7 +389,7 @@ class TestRelaxed(unittest.TestCase):
             args = ("--tools", str(tools), "--relaxed", "--", "true")
             launch = _launch(*args)
 
-            self.assertIn((tools / "usr", Path("/usr"), True, False), _bind_specs(launch))
+            self.assertIn((Path("usr"), Path("/usr"), True, False), _bind_specs(launch))
             self.assertEqual(launch.chdir, str(project))
             namespaces = _unshare(*args).call_args.kwargs
             self.assertFalse(namespaces["isolate_network"])
@@ -468,28 +472,29 @@ class TestLayers(unittest.TestCase):
     def test_launch_reads_the_merged_tree(self) -> None:
         with _project() as (_, tools):
             layer = _layer(tools)
-            with Overlay((layer, tools), None, None, layer, lazy_unmount=False):
-                hermetic = _launch("--tools", str(layer), "--", "true")
-                relaxed = _launch("--tools", str(layer), "--relaxed", "--", "true")
+            hermetic = _launch("--tools", str(tools), "--tools", str(layer), "--", "true")
+            relaxed = _launch("--tools", str(tools), "--tools", str(layer), "--relaxed", "--", "true")
 
             self.assertIn(("usr/bin", "/bin"), [(link.source, link.target) for link in _symlinks(hermetic)])
-            self.assertIn((layer / "srv", Path("/srv"), True, False), _bind_specs(hermetic))
-            self.assertIn((layer / "home", Path("/home"), True, False), _bind_specs(hermetic))
+            self.assertIn((Path("srv"), Path("/srv"), True, False), _bind_specs(hermetic))
+            self.assertIn((Path("home"), Path("/home"), True, False), _bind_specs(hermetic))
             files = [filesystem for filesystem in relaxed.filesystems if isinstance(filesystem, File)]
             passwd = next(file for file in files if file.target == "/etc/passwd")
             self.assertTrue(passwd.content.startswith("layered:"))
 
-    def test_main_mounts_the_merged_tree_only_while_it_plans(self) -> None:
+    def test_main_opens_the_tools_layers_top_first(self) -> None:
         for layers in (["/top"], ["/base", "/top"]):
             with self.subTest(layers=layers):
                 calls = unittest.mock.MagicMock()
                 launch = sandbox.Launch(filesystems=(), chdir=None, command=("true",), environment={})
                 calls._launch.return_value = launch
+                tools = os.open("/", os.O_PATH)
+                calls.open_layers.return_value = tools
                 argv = [word for layer in layers for word in ("--tools", layer)] + ["--", "true"]
 
                 with (
                     unittest.mock.patch.object(sandbox, "unshare_sandbox", calls.unshare_sandbox),
-                    unittest.mock.patch.object(sandbox, "Overlay", calls.Overlay),
+                    unittest.mock.patch.object(sandbox, "open_layers", calls.open_layers),
                     unittest.mock.patch.object(sandbox, "_launch", calls._launch),
                     unittest.mock.patch.object(sandbox, "enter_sandbox", calls.enter_sandbox),
                     unittest.mock.patch.object(os, "execvpe"),
@@ -497,26 +502,20 @@ class TestLayers(unittest.TestCase):
                 ):
                     sandbox.main(argv)
 
-                stage = calls._launch.call_args.args[2]
-                if len(layers) == 1:
-                    expected = ["unshare_sandbox", "_launch", "enter_sandbox"]
-                    self.assertIsInstance(stage.filesystem, Bind)
-                    self.assertEqual((stage.filesystem.source, stage.filesystem.target), ("/top", "/top"))
-                else:
-                    expected = [
+                self.assertEqual(
+                    [call[0] for call in calls.mock_calls],
+                    [
                         "unshare_sandbox",
-                        "Overlay",
-                        "Overlay().__enter__",
+                        "open_layers",
                         "_launch",
-                        "Overlay().__exit__",
                         "enter_sandbox",
-                    ]
-                    calls.Overlay.assert_called_once_with(
-                        ("/top", "/base"), None, None, "/top", lazy_unmount=True
-                    )
-                    self.assertIs(stage.filesystem, calls.Overlay.return_value)
-                self.assertEqual([call[0] for call in calls.mock_calls], expected)
-                self.assertEqual(calls._launch.call_args.args[1], "/top")
+                    ],
+                )
+                calls.open_layers.assert_called_once_with(tuple(reversed(layers)))
+                self.assertEqual(calls._launch.call_args.args[1], tools)
+                # main() closes the file descriptor of the tools tree after enter_sandbox().
+                with self.assertRaises(OSError):
+                    os.fstat(tools)
                 calls.enter_sandbox.assert_called_once_with(
                     (), None, suppress_chown=True, suppress_sync=True
                 )
@@ -546,8 +545,8 @@ class TestLayers(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         lines = process.stdout.splitlines()
         self.assertEqual(lines[:3], ["from the base", "from the layer", "tool"])
-        # Only the binds of the tools tree show the merged tree. The overlay that the sandbox mounts in
-        # its scratch directory must not appear anywhere else, for example below the host's /var.
+        # Only the binds of the tools tree show the merged tree. The overlay of the layers stays detached,
+        # so it must not appear at any other mount point.
         merged = {line.split()[4] for line in lines[3:] if " - overlay " in line and str(layer) in line}
         self.assertEqual(merged, {"/usr", "/etc"})
 
@@ -651,8 +650,8 @@ class TestStartup(unittest.TestCase):
                     "-B",
                     "-c",
                     "import sys; sys.path.insert(0, sys.argv[1]); import sandbox; "
-                    "sandbox._launch(sandbox._parse(['--tools', sys.argv[2], '--', 'true']), sys.argv[2], "
-                    "sandbox.Stage()); "
+                    "sandbox._launch(sandbox._parse(['--tools', sys.argv[2], '--', 'true']), "
+                    "sandbox.open_layers((sys.argv[2],))); "
                     "print('\\n'.join(sys.modules))",
                     str(Path(sandbox.__file__).parent),
                     str(tools),
@@ -731,6 +730,9 @@ class TestInteractiveShell(unittest.TestCase):
             ),
             unittest.mock.patch.object(sandbox, "_launch", return_value=launch),
             unittest.mock.patch.object(sandbox, "unshare_sandbox"),
+            unittest.mock.patch.object(
+                sandbox, "open_layers", side_effect=lambda _: os.open("/", os.O_PATH)
+            ),
             unittest.mock.patch.object(sandbox, "enter_sandbox", side_effect=enter),
             unittest.mock.patch.object(sandbox, "_interactive_shell", side_effect=shell),
             unittest.mock.patch.object(os, "execvpe") as execute,

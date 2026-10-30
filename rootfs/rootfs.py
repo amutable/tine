@@ -232,7 +232,7 @@ def source_overlay(source: Path, target: Path) -> Generator[Path]:
         os.utime(upper, ns=(source_attributes.st_atime_ns, source_attributes.st_mtime_ns))
         # A child process can keep a file descriptor open in the mount, and a normal unmount then
         # fails with EBUSY.
-        stack.enter_context(Overlay((source,), upper, work, target, lazy_unmount=True))
+        stack.enter_context(Overlay((source,), upper, work, target, lazy_unmount=True)).mount()
         yield target
 
 
@@ -266,11 +266,11 @@ def readonly_project(project: Path, outputs: Mapping[Path, Path]) -> Generator[N
             if not resolved.is_relative_to(os.path.realpath(project)):
                 raise ValueError(f"readonly_project: output leaves the project: {output} -> {resolved}")
             (project / output).mkdir(parents=True, exist_ok=True)
-            stack.enter_context(Bind(project / output, mounted))
+            stack.enter_context(Bind(project / output, mounted)).mount()
         # The read-only bind covers `project`, but the working directory of this process still
         # refers to the writable mount underneath. Change into `project` again, so that relative
         # paths of this process and of its children resolve through the read-only bind.
-        stack.enter_context(Bind(project, project, readonly=True))
+        stack.enter_context(Bind(project, project, readonly=True)).mount()
         os.chdir(project)
         yield
 
@@ -278,17 +278,17 @@ def readonly_project(project: Path, outputs: Mapping[Path, Path]) -> Generator[N
 def _apivfs(stack: ExitStack, target: Path) -> None:
     """Mount the API and temporary filesystems expected by package scripts."""
     tty = Path(os.ttyname(2)) if os.isatty(2) else None
-    stack.enter_context(Devices(target / "dev", tty))
-    stack.enter_context(Bind(Path("/proc"), target / "proc"))
-    stack.enter_context(Tmpfs(target / "run"))
+    stack.enter_context(Devices(target / "dev", tty)).mount()
+    stack.enter_context(Bind(Path("/proc"), target / "proc")).mount()
+    stack.enter_context(Tmpfs(target / "run")).mount()
 
     # The root splits temporary space as box/sandbox.py does. /tmp is a tmpfs for small files that
     # live briefly. /var/tmp is on disk, because package scripts stage gigabytes there. `buck run`
     # on a box and `buck test` have no scratch directory, so /var/tmp is a tmpfs there as well.
-    stack.enter_context(Tmpfs(target / "tmp"))
+    stack.enter_context(Tmpfs(target / "tmp", mode="1777")).mount()
 
     if "BUCK_SCRATCH_PATH" not in os.environ:
-        stack.enter_context(Tmpfs(target / "var/tmp"))
+        stack.enter_context(Tmpfs(target / "var/tmp", mode="1777")).mount()
     else:
         # In a run action, the sandbox mounts the action's scratch directory at /var/tmp, and TMPDIR
         # points there. Buck creates the scratch directory in buck-out, inside the project. /var/tmp
@@ -299,7 +299,7 @@ def _apivfs(stack: ExitStack, target: Path) -> None:
             stack.enter_context(tempfile.TemporaryDirectory(prefix="var-tmp.", ignore_cleanup_errors=True))
         )
         backing.chmod(0o1777)  # what a tmpfs mounted on /var/tmp defaults to
-        stack.enter_context(Bind(backing, target / "var/tmp"))
+        stack.enter_context(Bind(backing, target / "var/tmp")).mount()
 
 
 @contextmanager
@@ -357,19 +357,19 @@ def rootfs(
             # like every other mount and let the kernel finish in the background.
             stack.enter_context(
                 Overlay(tuple(components), upper, work, target, lazy_unmount=upperdir is None)
-            )
+            ).mount()
         elif bind is not None:
             if capture_bind:
                 # Enter before registering the unmount so capture runs after it.
                 stack.enter_context(capture_on_exit(bind))
-            stack.enter_context(Bind(Path(bind), target))
+            stack.enter_context(Bind(Path(bind), target)).mount()
         else:
             raise ValueError("rootfs needs bind= or lowers=")
         if apivfs:
             _apivfs(stack, target)
         for src, dst in binds or []:
             dest = target / str(dst).lstrip("/")
-            stack.enter_context(Bind(Path(src), dest))
+            stack.enter_context(Bind(Path(src), dest)).mount()
         if chroot:
             # Enter last so callbacks resolve paths after the chroot unwinds.
             stack.enter_context(_chroot(target))
