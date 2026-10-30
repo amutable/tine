@@ -17,15 +17,18 @@ import shutil
 import stat
 import tempfile
 from collections.abc import Generator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from enum import Enum, auto
 from pathlib import Path
 
 from isolation import (
+    AT_FDCWD,
     Bind,
+    Close,
     Devices,
     Overlay,
     Tmpfs,
+    open_directory,
     submounts,
 )
 from isolation import (
@@ -264,33 +267,39 @@ def readonly_project(project: Path, outputs: Mapping[Path, Path]) -> Generator[N
     project = project.absolute()
     if len(set(outputs.values())) != len(outputs):
         raise ValueError(f"readonly_project: outputs share a mount point: {sorted(outputs)}")
-    # ExitStack runs this callback last, after every unmount. An earlier chdir() would change into
-    # the read-only bind of `project`, and getcwd() fails once the unmount has detached that bind.
     with ExitStack() as stack:
-        stack.callback(os.chdir, os.getcwd())
+        # The file descriptor refers to the working directory on the writable mount, also while the
+        # read-only bind of `project` covers it.
+        cwd = stack.enter_context(Close(open_directory(AT_FDCWD, ".", create=False)))
+        stack.callback(os.fchdir, cwd)
+        root = stack.enter_context(Close(open_directory(AT_FDCWD, str(project), create=False)))
         # Mount the outputs before `project` becomes read-only. A bind of a directory on a read-only
         # mount is read-only too.
         for output, mounted in outputs.items():
-            # A build of an older revision can have declared this output on a content-based path.
-            # Buck then left a symlink to the content-based path at the plain path, and a kept action
-            # never removes that symlink. `kept_dir()` in project/defs.bzl describes the problem. The
-            # bind would follow the symlink out of `project`.
-            if (project / output).is_symlink():
-                (project / output).unlink()
-            # The bind and mkdir() follow a symlink in any component of the path, not only in the
-            # last component. For an output whose resolved path is outside `project`, mkdir() would
-            # create directories outside `project`, and the bind would make an outside directory
-            # writable for the build. The check runs after the removal of the stale symlink above.
-            resolved = Path(os.path.realpath(project / output))
-            if not resolved.is_relative_to(os.path.realpath(project)):
-                raise ValueError(f"readonly_project: output leaves the project: {output} -> {resolved}")
-            (project / output).mkdir(parents=True, exist_ok=True)
-            stack.enter_context(Bind(project / output, mounted)).mount()
+            relative = output.relative_to(project) if output.is_absolute() else output
+            # A symlink in any component of `output` can point out of `project`. Creating the output
+            # through it would make a directory outside `project` writable for the build. open_directory()
+            # fails with EXDEV on a path that leaves `project`.
+            try:
+                with Close(open_directory(root, str(relative.parent), beneath=True)) as parent:
+                    # A stale symlink would bind an old content-based output instead of the current output.
+                    # A kept action never removes the symlink; `kept_dir()` in project/defs.bzl explains why.
+                    with suppress(FileNotFoundError):
+                        if stat.S_ISLNK(os.lstat(relative.name, dir_fd=parent).st_mode):
+                            os.unlink(relative.name, dir_fd=parent)
+                    source = open_directory(parent, relative.name, beneath=True)
+            except OSError as error:
+                if error.errno != errno.EXDEV:
+                    raise
+                raise ValueError(f"readonly_project: output leaves the project: {output}") from error
+            with Close(source):
+                stack.enter_context(Bind(".", mounted, root=source)).mount()
         # The read-only bind covers `project`, but the working directory of this process still
-        # refers to the writable mount underneath. Change into `project` again, so that relative
-        # paths of this process and of its children resolve through the read-only bind.
-        stack.enter_context(Bind(project, project, readonly=True)).mount()
-        os.chdir(project)
+        # refers to the writable mount underneath. After fchdir() into the bind, relative paths of
+        # this process and of its children resolve through the read-only bind.
+        bind = stack.enter_context(Bind(project, project, readonly=True))
+        bind.mount()
+        os.fchdir(bind.fd)
         yield
 
 

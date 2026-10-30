@@ -220,6 +220,11 @@ class TestReadonlyProject(unittest.TestCase):
         (self.project / "src").mkdir(parents=True)
         (self.project / "input").write_text("input", encoding="utf-8")
 
+    def test_a_missing_project_is_not_created(self) -> None:
+        with self.assertRaises(FileNotFoundError), rootfs.readonly_project(self.root / "missing", {}):
+            self.fail("a missing project must not be created")
+        self.assertFalse((self.root / "missing").exists())
+
     def test_only_the_outputs_stay_writable(self) -> None:
         # The build drivers pass two outputs. The path of a kept output has several components, so
         # the second output is nested.
@@ -235,7 +240,7 @@ class TestReadonlyProject(unittest.TestCase):
                 raises = self.assertRaises(RuntimeError) if fail else nullcontext()
                 with raises:
                     with rootfs.readonly_project(self.project, outputs):
-                        # The writes are checked before the working directory. Without the chdir()
+                        # The writes are checked before the working directory. Without the fchdir()
                         # in `readonly_project()`, a relative path resolves through the writable
                         # mount underneath. The write checks then fail too, and not only the check
                         # of the working directory.
@@ -286,6 +291,16 @@ class TestReadonlyProject(unittest.TestCase):
                 self.assertEqual(list((self.root / "elsewhere").iterdir()), [])
                 self.assertFalse((self.root / "out").exists())
                 self.assertFalse((self.root / "mounted").is_mount())
+
+    def test_a_symlink_outside_the_project_is_left_alone(self) -> None:
+        # The output path names a symlink, but only through the symlink `store` out of `project`.
+        (self.root / "elsewhere/gen").mkdir(parents=True)
+        (self.root / "elsewhere/gen/out").symlink_to("target")
+        (self.project / "store").symlink_to(self.root / "elsewhere")
+        with chdir(self.project), self.assertRaises(ValueError):
+            with rootfs.readonly_project(self.project, {Path("store/gen/out"): self.root / "mounted"}):
+                pass
+        self.assertTrue((self.root / "elsewhere/gen/out").is_symlink())
 
     def test_two_outputs_sharing_a_mount_point_are_refused(self) -> None:
         mounted = self.root / "mounted"

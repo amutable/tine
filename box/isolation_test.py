@@ -169,11 +169,16 @@ class TestPaths(unittest.TestCase):
         self.fd = os.open(self.root, os.O_PATH | os.O_DIRECTORY)
         self.addCleanup(os.close, self.fd)
 
+    def test_opening_a_missing_directory_can_fail_without_creating_it(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            isolation.open_directory(self.fd, "missing/child", create=False)
+        self.assertFalse((self.root / "missing").exists())
+
     def test_dot_components_do_not_escape_the_root(self) -> None:
         (self.root / "sub").mkdir()
         for path in ("/", "/.", "/..", "/../..", "/sub/..", "/sub/../../"):
             with self.subTest(path=path):
-                self.assertEqual(_path(isolation._directory(self.fd, path)), self.root)
+                self.assertEqual(_path(isolation.open_directory(self.fd, path)), self.root)
 
     def test_absolute_symlinks_resolve_inside_the_root(self) -> None:
         (self.root / "real").mkdir()
@@ -214,10 +219,21 @@ class TestPaths(unittest.TestCase):
         (self.root / outside.relative_to("/")).mkdir(parents=True)
         (self.root / "alias").symlink_to(outside)
 
-        created = _path(isolation._directory(self.fd, "/alias/new/directory"))
+        created = _path(isolation.open_directory(self.fd, "/alias/new/directory"))
 
         self.assertEqual(created, self.root / outside.relative_to("/") / "new/directory")
         self.assertFalse((outside / "new").exists())
+
+    def test_a_path_that_leaves_the_root_fails_beneath_it(self) -> None:
+        outside = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp")))
+        (self.root / "absolute").symlink_to(outside)
+        (self.root / "relative").symlink_to(Path("..") / outside.name)
+        for path in ("absolute/new", "relative/new", "../new", "/new"):
+            with self.subTest(path=path), self.assertRaises(OSError) as caught:
+                isolation.open_directory(self.fd, path, beneath=True)
+            self.assertEqual(caught.exception.errno, errno.EXDEV)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((self.root.parent / "new").exists())
 
     def test_symlink_target_text_is_preserved(self) -> None:
         target = self.root / "link"

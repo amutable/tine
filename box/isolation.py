@@ -93,6 +93,7 @@ SCMP_ARCH_S390X = 0x80000016
 SCMP_FLTATR_ACT_BADARCH = 2
 SCMP_FLTATR_API_SYSRAWRC = 9
 
+RESOLVE_BENEATH = 0x08
 RESOLVE_IN_ROOT = 0x10
 STATMOUNT_MNT_POINT = 0x00000010
 STATX_MNT_ID_UNIQUE = 0x00004000
@@ -577,15 +578,17 @@ def _overlay(lowers: tuple[str, ...], upper: str | None, work: str | None, attri
         return _fsmount(fs, attributes)
 
 
-def _lookup(root: int, path: StrPath, flags: int = 0) -> int:
+def _lookup(root: int, path: StrPath, flags: int = 0, *, beneath: bool = False) -> int:
     """Open `path` with O_PATH.
 
-    If `root` is a directory, `path` resolves inside it, and neither `..` nor a symlink leaves it.
+    If `root` is a directory, `path` resolves inside it, and neither `..` nor a symlink leaves it. With
+    `beneath`, a path that leaves `root` fails with EXDEV instead.
     """
-    how = _OpenHow(
-        flags=flags | os.O_PATH | os.O_CLOEXEC,
-        resolve=0 if root == AT_FDCWD else RESOLVE_IN_ROOT,
-    )
+    if beneath:
+        resolve = RESOLVE_BENEATH
+    else:
+        resolve = 0 if root == AT_FDCWD else RESOLVE_IN_ROOT
+    how = _OpenHow(flags=flags | os.O_PATH | os.O_CLOEXEC, resolve=resolve)
     # A lookup inside `root` fails with EAGAIN when a mount or a rename anywhere on the host happens while
     # it resolves a `..` component. openat2(2) asks the caller to retry.
     attempts = 100
@@ -611,19 +614,23 @@ def _split(path: str) -> tuple[str, str]:
     return parent or ".", name
 
 
-def _directory(root: int, path: str) -> int:
-    """Open the directory `path` in `root` with O_PATH, and create it and its missing parents first."""
+def open_directory(root: int, path: str, *, beneath: bool = False, create: bool = True) -> int:
+    """Open the directory `path` in `root` with O_PATH, creating missing parents when `create` is true.
+
+    `path` resolves as in `_lookup()`.
+    """
     try:
-        return _lookup(root, path, os.O_DIRECTORY)
+        return _lookup(root, path, os.O_DIRECTORY, beneath=beneath)
     except FileNotFoundError:
-        pass
+        if not create:
+            raise
     parent, name = _split(path)
-    with Close(_directory(root, parent)) as fd:
+    with Close(open_directory(root, parent, beneath=beneath)) as fd:
         try:
             os.mkdir(name, 0o755, dir_fd=fd)
         except FileExistsError:
             pass
-    return _lookup(root, path, os.O_DIRECTORY)
+    return _lookup(root, path, os.O_DIRECTORY, beneath=beneath)
 
 
 def _touch(dirfd: int, name: str, mode: int = 0o666) -> None:
@@ -636,13 +643,13 @@ def _mount_point(root: int, path: str, *, directory: bool) -> int:
     A mount of a file or a symlink covers a symlink at `path` itself rather than its target.
     """
     if directory:
-        return _directory(root, path)
+        return open_directory(root, path)
     try:
         return _lookup(root, path, os.O_NOFOLLOW)
     except FileNotFoundError:
         pass
     parent, name = _split(path)
-    with Close(_directory(root, parent)) as fd:
+    with Close(open_directory(root, parent)) as fd:
         _touch(fd, name, 0o644)
     return _lookup(root, path, os.O_NOFOLLOW)
 
@@ -971,7 +978,7 @@ class Symlink:
     def attach(self, root: int = AT_FDCWD) -> None:
         """Create the symlink at `target`, resolved inside the directory `root`."""
         parent, name = _split(self.target)
-        with Close(_directory(root, parent)) as fd:
+        with Close(open_directory(root, parent)) as fd:
             try:
                 os.symlink(self.source, name, dir_fd=fd)
             except FileExistsError:
