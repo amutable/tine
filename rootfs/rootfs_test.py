@@ -212,6 +212,32 @@ class TestBuildrootScratch(unittest.TestCase):
             self.assertEqual(backing.stat().st_mode & 0o7777, 0o1777)
 
 
+class TestMountPoints(unittest.TestCase):
+    def test_an_absolute_symlink_in_a_layer_resolves_inside_the_root(self) -> None:
+        scratch = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="mount-test.", dir="/var/tmp")))
+        outside = scratch / "outside"
+        outside.mkdir()
+        lower = scratch / "lower"
+        (lower / outside.relative_to("/")).mkdir(parents=True)
+        # In the image, /run names the copy of `outside` inside the image. On the host, the same path
+        # is `outside`.
+        (lower / "run").symlink_to(outside)
+        for apivfs in (False, True):
+            with (
+                self.subTest(apivfs=apivfs),
+                rootfs.rootfs(
+                    scratch / "target",
+                    lowers=[lower],
+                    binds=[] if apivfs else [(scratch, "/run/project")],
+                    apivfs=apivfs,
+                ) as tree,
+            ):
+                if not apivfs:
+                    self.assertTrue((tree / outside.relative_to("/") / "project").is_mount())
+                self.assertFalse(outside.is_mount())
+                self.assertFalse((outside / "project").exists())
+
+
 class TestReadonlyProject(unittest.TestCase):
     @override
     def setUp(self) -> None:

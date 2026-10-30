@@ -303,20 +303,20 @@ def readonly_project(project: Path, outputs: Mapping[Path, Path]) -> Generator[N
         yield
 
 
-def _apivfs(stack: ExitStack, target: Path) -> None:
-    """Mount the API and temporary filesystems expected by package scripts."""
+def _apivfs(stack: ExitStack, root: int) -> None:
+    """Mount the API and temporary filesystems expected by package scripts in the directory `root`."""
     tty = Path(os.ttyname(2)) if os.isatty(2) else None
-    stack.enter_context(Devices(target / "dev", tty)).mount()
-    stack.enter_context(Bind(Path("/proc"), target / "proc")).mount()
-    stack.enter_context(Tmpfs(target / "run")).mount()
+    stack.enter_context(Devices("/dev", tty)).mount(root)
+    stack.enter_context(Bind(Path("/proc"), "/proc")).mount(root)
+    stack.enter_context(Tmpfs("/run")).mount(root)
 
     # The root splits temporary space as box/sandbox.py does. /tmp is a tmpfs for small files that
     # live briefly. /var/tmp is on disk, because package scripts stage gigabytes there. `buck run`
     # on a box and `buck test` have no scratch directory, so /var/tmp is a tmpfs there as well.
-    stack.enter_context(Tmpfs(target / "tmp", mode="1777")).mount()
+    stack.enter_context(Tmpfs("/tmp", mode="1777")).mount(root)
 
     if "BUCK_SCRATCH_PATH" not in os.environ:
-        stack.enter_context(Tmpfs(target / "var/tmp", mode="1777")).mount()
+        stack.enter_context(Tmpfs("/var/tmp", mode="1777")).mount(root)
     else:
         # In a run action, the sandbox mounts the action's scratch directory at /var/tmp, and TMPDIR
         # points there. Buck creates the scratch directory in buck-out, inside the project. /var/tmp
@@ -327,7 +327,7 @@ def _apivfs(stack: ExitStack, target: Path) -> None:
             stack.enter_context(tempfile.TemporaryDirectory(prefix="var-tmp.", ignore_cleanup_errors=True))
         )
         backing.chmod(0o1777)  # what a tmpfs mounted on /var/tmp defaults to
-        stack.enter_context(Bind(backing, target / "var/tmp")).mount()
+        stack.enter_context(Bind(backing, "/var/tmp")).mount(root)
 
 
 @contextmanager
@@ -384,22 +384,24 @@ def rootfs(
             # capture() reads and rewrites the upperdir after the unmount, so a captured upper needs a
             # strict unmount. Nobody reads an ephemeral upper, so it is unmounted lazily like every
             # other mount.
-            stack.enter_context(
+            mounted: Overlay | Bind = stack.enter_context(
                 Overlay(tuple(components), upper, work, target, strict_unmount=upperdir is not None)
-            ).mount()
+            )
         elif bind is not None:
             if capture_bind:
                 # Enter before registering the unmount so capture runs after it.
                 stack.enter_context(capture_on_exit(bind))
             # capture() reads the bind source after the unmount, like the upper of an overlay.
-            stack.enter_context(Bind(Path(bind), target, strict_unmount=capture_bind)).mount()
+            mounted = stack.enter_context(Bind(Path(bind), target, strict_unmount=capture_bind))
         else:
             raise ValueError("rootfs needs bind= or lowers=")
+        mounted.mount()
+        # An image layer can contain an absolute symlink at a mount point. The mount points resolve inside
+        # the root, so that the symlink doesn't place a mount outside of the root.
         if apivfs:
-            _apivfs(stack, target)
+            _apivfs(stack, mounted.fd)
         for src, dst in binds or []:
-            dest = target / str(dst).lstrip("/")
-            stack.enter_context(Bind(Path(src), dest)).mount()
+            stack.enter_context(Bind(Path(src), dst)).mount(mounted.fd)
         if chroot:
             # Enter last so callbacks resolve paths after the chroot unwinds.
             stack.enter_context(_chroot(target))
