@@ -11,9 +11,11 @@ layer can hold.
 """
 
 import contextlib
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Generator, Sequence
 from pathlib import Path
 from typing import TypedDict
@@ -117,18 +119,90 @@ def kernel_versions(tree: Path) -> list[str]:
     )
 
 
+# The directories depmod reads its configuration from by default, in its order of precedence.
+_DEPMOD_CONFIG = (
+    "etc/depmod.d",
+    "run/depmod.d",
+    "usr/local/lib/depmod.d",
+    "usr/lib/depmod.d",
+    "lib/depmod.d",
+)
+
+
+# The suffixes of the module files that depmod indexes.
+_MODULE_SUFFIXES = (".ko", ".ko.gz", ".ko.xz", ".ko.zst")
+
+
+def depmod_config(root: Path) -> dict[str, str]:
+    """The contents of the depmod.d files below `root` that depmod reads, by file name."""
+    files: dict[str, str] = {}
+    for directory in _DEPMOD_CONFIG:
+        path = root / directory
+        if not path.is_dir():
+            continue
+        for entry in sorted(path.iterdir()):
+            # depmod reads only files named `*.conf`. A file in an earlier directory hides a file
+            # with the same name in a later directory.
+            if entry.name.startswith(".") or not entry.name.endswith(".conf") or entry.name in files:
+                continue
+            if entry.is_file():
+                files[entry.name] = entry.read_text(encoding="utf-8")
+    for name, text in files.items():
+        # depmod searches an `external` directory without the `--basedir` prefix, so it would
+        # index the box's directory instead of the image's.
+        if any(line.split()[:1] == ["external"] for line in text.splitlines()):
+            fail(f"depmod: {name} lists an external module directory, which depmod cannot index in an image")
+    return files
+
+
+def check_module_symlinks(tree: Path, version: str) -> None:
+    """Fail on a module that is an absolute symlink, which depmod would resolve in the box."""
+    for directory, dirnames, filenames in os.walk(tree / "usr/lib/modules" / version):
+        # depmod does not index the `build` and `source` directories of a kernel.
+        dirnames[:] = [name for name in dirnames if name not in ("build", "source")]
+        for name in filenames:
+            path = Path(directory, name)
+            if name.endswith(_MODULE_SUFFIXES) and path.is_symlink() and os.readlink(path).startswith("/"):
+                fail(f"depmod: the module {path.relative_to(tree)} is an absolute symlink")
+
+
+def depmod_command(tool: str, tree: Path, version: str, *, config: Path, moduledir: bool) -> list[str]:
+    """The depmod invocation indexing one kernel's modules with the configuration in `config`."""
+    return [
+        tool,
+        "--all",
+        f"--basedir={tree}",
+        # kmod 34 added `--moduledir`. Earlier versions always index /lib/modules, which a merged
+        # /usr links to /usr/lib/modules.
+        *(["--moduledir=/usr/lib/modules"] if moduledir else []),
+        # depmod reads no default configuration directory once `--config` is given.
+        f"--config={config}",
+        version,
+    ]
+
+
 def depmod(tree: Path) -> None:
     """Rebuild the module indexes modprobe and udev read, for every kernel the image installs."""
     versions = kernel_versions(tree)
     if not versions:
         return
-    # depmod reads its search-order configuration from absolute paths that `--basedir` does not
-    # move, and writes indexes its own kmod defines, so this is the image's depmod and no other.
-    with rootfs.chroot(tree):
-        tool = _image_tool("depmod", "depmod")
+    tool = _box_tool("depmod", "depmod")
+    usage = subprocess.run([tool, "--help"], capture_output=True, text=True, check=True).stdout
+    # `--basedir` does not move the directories depmod reads its configuration from. The driver
+    # reads the image's configuration itself, inside the image's root, so that an absolute symlink
+    # in the image resolves to a file of the image.
+    with rootfs.chroot(tree) as root:
+        files = depmod_config(root)
+    for version in versions:
+        check_module_symlinks(tree, version)
+    with tempfile.TemporaryDirectory(prefix="depmod.") as scratch:
+        config = Path(scratch)
+        for name, text in files.items():
+            (config / name).write_text(text, encoding="utf-8")
         for version in versions:
             print(f"depmod: {version}", file=sys.stderr)
-            _run("depmod", [tool, "--all", version])
+            cmd = depmod_command(tool, tree, version, config=config, moduledir="--moduledir" in usage)
+            _run("depmod", cmd)
 
 
 def hwdb_command(tool: str, tree: Path, *, usr: bool, strict: bool) -> list[str]:

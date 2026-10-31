@@ -95,7 +95,8 @@ box.new(
             "arch": [
                 # cryptsetup contains veritysetup.
                 "cryptsetup",
-                # The uki driver resolves module dependencies through libkmod.
+                # kmod contains depmod, which image.ops.depmod() runs against the image. The uki driver
+                # resolves module dependencies through libkmod, which kmod contains as well.
                 "kmod",
                 # libp11-kit contains p11-kit's PKCS#11 client module.
                 "libp11-kit",
@@ -112,6 +113,7 @@ box.new(
             ],
             "debian": [
                 "cryptsetup-bin",
+                # kmod contains depmod, which image.ops.depmod() runs against the image.
                 "kmod",
                 # kmod/kmod.py loads libkmod.so.2 with dlopen(), and no package in this list depends on it.
                 "libkmod2",
@@ -136,6 +138,8 @@ box.new(
                 "udev",
             ],
             "fedora": [
+                # kmod contains depmod, which image.ops.depmod() runs against the image.
+                "kmod",
                 # The uki driver resolves module dependencies through libkmod.
                 "kmod-libs",
                 "openssh-clients",

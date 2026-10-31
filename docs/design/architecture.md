@@ -1504,12 +1504,17 @@ system changes, exactly as its package database would.
 
 Their tools are the box's, applied to the mounted image through the `--root` interface systemd gives them,
 which is the same relationship every other layer driver has to the image and is what lets an image that
-installs no systemd still be finalized. Two cannot work that way and use the image's own binaries in a
-chroot: `locale-gen` is a distribution's own script over its own sources, and `depmod` resolves its
-search-order configuration from absolute paths that `--basedir` does not relocate, so a box-side run
-would silently apply the wrong module ordering. Its index format is its own kmod's to define as well, and a
-box older than the image would leave out index files the image's modprobe expects. Both report the
-missing binary by name rather than skipping.
+installs no systemd still be finalized. `depmod` runs from the box as well. `--basedir` does not relocate
+the directories it reads its search order from, so the driver reads the image's `depmod.d` files inside the
+image's root and passes a copy with `--config`. `depmod` would look in the box for an `external` directory
+and for the target of an absolute module symlink. The driver therefore fails the build when the image's
+configuration lists an `external` directory or a module is an absolute symlink. The layer runs in the tools
+box of the image's own release, which resolves its packages from the release's repositories, its additional
+repositories included. An image whose kmod comes from those repositories gets an index in the format its modprobe reads.
+The `additional_repositories` and `local_packages` of a package manager do not reach the tools box, so an
+image that installs kmod from them is indexed by the release's kmod.
+`locale-gen` runs in a chroot of the image, because it is a distribution's own script over its own
+sources. An image whose `/etc/locale.gen` lists a locale but that has no `locale-gen` fails the build.
 
 ### Reproducibility and caching
 

@@ -34,6 +34,70 @@ class TestKernelVersions(unittest.TestCase):
         self.assertEqual(finalize.kernel_versions(self.tree), [])
 
 
+class TestDepmod(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="finalize.")))
+
+    def test_reads_only_the_configuration_it_is_given(self) -> None:
+        self.assertEqual(
+            finalize.depmod_command(
+                "/usr/bin/depmod",
+                Path("/buildroot"),
+                "6.19.0-1",
+                config=Path("/tmp/depmod.d"),
+                moduledir=True,
+            ),
+            [
+                "/usr/bin/depmod",
+                "--all",
+                "--basedir=/buildroot",
+                "--moduledir=/usr/lib/modules",
+                "--config=/tmp/depmod.d",
+                "6.19.0-1",
+            ],
+        )
+
+    def test_leaves_out_the_module_directory_for_a_kmod_without_the_option(self) -> None:
+        cmd = finalize.depmod_command(
+            "/usr/bin/depmod", Path("/buildroot"), "6.19.0-1", config=Path("/tmp/depmod.d"), moduledir=False
+        )
+        self.assertNotIn("--moduledir=/usr/lib/modules", cmd)
+
+    def test_an_earlier_directory_hides_a_file_of_the_same_name(self) -> None:
+        for directory, content in (("etc/depmod.d", "etc"), ("usr/lib/depmod.d", "usr")):
+            (self.tree / directory).mkdir(parents=True)
+            (self.tree / directory / "search.conf").write_text(content)
+        (self.tree / "usr/lib/depmod.d/other.conf").write_text("other")
+        self.assertEqual(finalize.depmod_config(self.tree), {"search.conf": "etc", "other.conf": "other"})
+
+    def test_reads_only_conf_files(self) -> None:
+        (self.tree / "usr/lib/depmod.d").mkdir(parents=True)
+        (self.tree / "usr/lib/depmod.d/README").write_text("readme")
+        (self.tree / "usr/lib/depmod.d/.hidden.conf").write_text("hidden")
+        self.assertEqual(finalize.depmod_config(self.tree), {})
+
+    def test_an_external_module_directory_fails_the_build(self) -> None:
+        (self.tree / "etc/depmod.d").mkdir(parents=True)
+        (self.tree / "etc/depmod.d/external.conf").write_text("external * /opt/modules\n")
+        with self.assertRaises(SystemExit):
+            finalize.depmod_config(self.tree)
+
+    def test_an_absolute_module_symlink_fails_the_build(self) -> None:
+        kernel = self.tree / "usr/lib/modules/6.19.0-1/weak-updates"
+        kernel.mkdir(parents=True)
+        (kernel / "foo.ko.xz").symlink_to("/usr/lib/modules/6.18.0-1/extra/foo.ko.xz")
+        with self.assertRaises(SystemExit):
+            finalize.check_module_symlinks(self.tree, "6.19.0-1")
+
+    def test_ignores_symlinks_in_build_and_source(self) -> None:
+        kernel = self.tree / "usr/lib/modules/6.19.0-1/build"
+        kernel.mkdir(parents=True)
+        (kernel / "foo.ko").symlink_to("/usr/src/foo.ko")
+        (kernel / "relative.ko").symlink_to("foo.ko")
+        finalize.check_module_symlinks(self.tree, "6.19.0-1")
+
+
 class TestHwdb(unittest.TestCase):
     def test_writes_the_database_the_image_ships_in_usr(self) -> None:
         self.assertEqual(
