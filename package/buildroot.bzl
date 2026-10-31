@@ -6,6 +6,7 @@
 load("//distribution:defs.bzl", "TOOLS_BOX_ATTR")
 load(":install.bzl", "install_packages")
 load(":manager.bzl", "PackageManagerInfo")
+load(":repository.bzl", "LocalPackageInfo")
 
 BuildrootInfo = provider(
     doc = "A base root, and the package manager and box that build native packages on it.",
@@ -60,6 +61,47 @@ _buildroot = rule(
         "_box": TOOLS_BOX_ATTR,
     },
 )
+
+def package_buildroot(
+    ctx: AnalysisContext,
+    owner: str,
+    base: BuildrootInfo,
+    build_requires: list[str],
+    buildroot_packages: list[Dependency],
+) -> list[Artifact]:
+    """Return the layer stack, bottom to top, that one package builds on.
+
+    The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
+    delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
+    `owner` starts a failure message.
+    """
+    stack = [base.root]
+    if not build_requires and not buildroot_packages:
+        return stack
+    package_system = base.package_manager[PackageManagerInfo].package_system
+    extra_packages = []
+    for dependency in buildroot_packages:
+        info = dependency[LocalPackageInfo]
+        if info.package_system.label != package_system.label:
+            fail(
+                "{}: buildroot dependency {} uses package system {}, expected {}".format(
+                    owner,
+                    dependency.label,
+                    info.package_system.label,
+                    package_system.label,
+                ),
+            )
+        extra_packages.append(info.packages)
+    return stack + [
+        install_packages(
+            ctx,
+            base.package_manager,
+            base.box,
+            build_requires,
+            stack = stack,
+            extra_packages = extra_packages,
+        ),
+    ]
 
 def buildroot(name: str, **kwargs) -> None:
     if not name.endswith(".buildroot"):

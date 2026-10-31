@@ -7,8 +7,7 @@ load("//:specs.bzl", "spec_args")
 load("//box:build.bzl", "box_layer")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load("//git:defs.bzl", "git")
-load("//package:buildroot.bzl", "BuildrootInfo")
-load("//package:install.bzl", "install_packages")
+load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//package:repository.bzl", "LocalPackageInfo", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
@@ -47,39 +46,12 @@ def rpm_remote_repository(
 
 def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     base_buildroot = ctx.attrs.buildroot[BuildrootInfo]
-    package_manager_dep = base_buildroot.package_manager
-    package_manager = package_manager_dep[PackageManagerInfo]
+    package_manager = base_buildroot.package_manager[PackageManagerInfo]
     system = package_manager.package_system[PackageSystemInfo]
     if system.build == None:
         fail("rpm_package: package system {} builds no packages".format(package_manager.package_system.label))
 
-    # Share the base buildroot; add package-specific BuildRequires as a delta.
-    buildroot = [base_buildroot.root]
-
-    if ctx.attrs.build_requires or ctx.attrs.buildroot_packages:
-        # Self-hosted package outputs outrank upstream while resolving the delta.
-        extra_packages = []
-        for dependency in ctx.attrs.buildroot_packages:
-            info = dependency[LocalPackageInfo]
-            if info.package_system.label != package_manager.package_system.label:
-                fail(
-                    "rpm_package: buildroot dependency {} uses package system {}, expected {}".format(
-                        dependency.label,
-                        info.package_system.label,
-                        package_manager.package_system.label,
-                    ),
-                )
-            extra_packages.append(info.packages)
-        buildroot = buildroot + [
-            install_packages(
-                ctx,
-                package_manager_dep,
-                base_buildroot.box,
-                ctx.attrs.build_requires,
-                stack = buildroot,
-                extra_packages = extra_packages,
-            )
-        ]
+    buildroot = package_buildroot(ctx, "rpm_package", base_buildroot, ctx.attrs.build_requires, ctx.attrs.buildroot_packages)
 
     source_tree = ctx.attrs.source_tree
     rpms = project.kept_dir(ctx.actions, "rpms")
