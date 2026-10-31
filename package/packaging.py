@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Check out the dist-git commit that a source checkout pins for its packaging.
+"""Check out the packaging commit that a source checkout pins.
 
 The pin is a JSON file in the checkout that maps each distro to a repository `url`, a `branch` and a
 `commit`. Some forges refuse to serve a commit by its hash, so the driver fetches the branch and requires
@@ -70,16 +70,16 @@ def check_out(pin: Path, distro: str, out: Path) -> None:
         fail(f"{pin}: commit {commit} is not on branch {branch} of {url}")
     subprocess.run([*git, "checkout", "--quiet", "--detach", commit], check=True)
     shutil.rmtree(out / ".git")
-    # build.py copies the files at the top of the tree into SOURCES outside the chroot, and the whole
-    # project is readable there. build.py follows symlinks, so a symlink to a file of the project would
-    # put that file into the package.
+    # The build drivers copy the files at the top of the tree into the build outside the chroot, and the
+    # whole project is readable there. The copy follows symlinks, so a symlink to a file of the project
+    # would put that file into the package.
     if links := sorted(path.name for path in out.iterdir() if path.is_symlink()):
         fail(f"{pin}: commit {commit} contains symlinks at the top of its tree: {', '.join(links)}")
 
 
 def main(argv: list[str] | None = None) -> None:
     """Parse an invocation and check out the pinned packaging."""
-    spec = specs.parse(Spec, "rpm-packaging", argv)
+    spec = specs.parse(Spec, "packaging", argv)
     check_out(Path(spec["pin"]), spec["distro"], Path(spec["out"]))
 
 

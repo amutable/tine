@@ -3,7 +3,7 @@
 
 """Tests for the checkout of a source checkout's pinned packaging.
 
-buck test tine//package_system/rpm:packaging-test
+buck test tine//package:packaging-test
 """
 
 import contextlib
@@ -28,7 +28,7 @@ class CheckOut(unittest.TestCase):
     @override
     def setUp(self) -> None:
         self.scratch = Path(
-            self.enterContext(tempfile.TemporaryDirectory(prefix="rpm-packaging-test.", dir="/var/tmp"))
+            self.enterContext(tempfile.TemporaryDirectory(prefix="packaging-test.", dir="/var/tmp"))
         )
         self.enterContext(
             mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull})

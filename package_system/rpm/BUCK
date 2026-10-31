@@ -48,17 +48,6 @@ box_python_test(
     deps = ["//:specs", "//:util", "//rootfs:rootfs"],
 )
 
-# The driver runs in the box with network access. It reads a source checkout's packaging pin and writes the
-# pinned dist-git tree.
-tine_python_binary(name = "packaging", main = "packaging.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
-
-box_python_test(
-    name = "packaging-test",
-    box = _BOX,
-    srcs = ["packaging.py", "packaging_test.py"],
-    deps = ["//:specs", "//:util"],
-)
-
 tine_python_binary(
     name = "snapshot",
     deps = ["//:util", "//package:href", "//package:snapshotter"],

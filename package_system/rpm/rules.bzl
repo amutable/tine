@@ -4,11 +4,11 @@
 """RPM repositories and package-build rules."""
 
 load("//:specs.bzl", "spec_args")
-load("//box:build.bzl", "box_layer")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load("//git:defs.bzl", "git")
 load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot")
 load("//package:manager.bzl", "PackageManagerInfo")
+load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "LocalPackageInfo", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
 load("//project:defs.bzl", "project")
@@ -62,25 +62,13 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
         spec_file = source_tree.project(in_place_spec)
     packaging = None
     if source_tree != None and ctx.attrs.in_place_packaging != None:
-        # The pin file is the fetch's only input, so an edit elsewhere in the checkout does not rerun the fetch.
-        packaging = ctx.actions.declare_output(_PRIVATE + "/packaging", dir = True)
-        ctx.actions.run(
-            cmd_args(
-                # The tools box contains no git.
-                box_run(box = box_layer(ctx, base_buildroot.box, ["git-core"]), exe = ctx.attrs._packaging, network = True),
-                spec_args(
-                    ctx.actions,
-                    "packaging.spec.json",
-                    {
-                        "distro": ctx.attrs.in_place_packaging_distro,
-                        "out": packaging.as_output(),
-                        "pin": source_tree.project(ctx.attrs.in_place_packaging),
-                    },
-                ),
-            ),
-            allow_cache_upload = True,
-            category = "rpm_packaging",
-            local_only = True,
+        packaging = pinned_packaging(
+            ctx,
+            base_buildroot,
+            "git-core",
+            ctx.attrs._packaging,
+            source_tree.project(ctx.attrs.in_place_packaging),
+            ctx.attrs.in_place_packaging_distro,
         )
         spec_file = packaging.project(ctx.attrs.package + ".spec")
     if spec_file == None:
@@ -191,7 +179,7 @@ _rpm_package = rule(
             attrs.string(),
             doc = "declared binary subpackage names (the %package list)",
         ),
-        "_packaging": attrs.exec_dep(providers = [RunInfo], default = "tine//package_system/rpm:packaging"),
+        "_packaging": attrs.exec_dep(providers = [RunInfo], default = "tine//package:packaging"),
     },
 )
 

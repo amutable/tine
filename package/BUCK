@@ -4,7 +4,7 @@
 """Native package systems, repositories, releases, managers, and buildroots."""
 
 load("//box:test.bzl", "box_python_test")
-load("//python:defs.bzl", "tine_python_library")
+load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
 
 tine_python_library(
     name = "href",
@@ -47,4 +47,16 @@ box_python_test(
     box = "tine//distribution:tools.box",
     srcs = ["installer_test.py", "transaction_test.py"],
     deps = [":installer", ":transaction"],
+)
+
+# The driver runs in the box with network access. It reads a source checkout's packaging pin and writes the
+# tree of the pinned commit.
+tine_python_binary(name = "packaging", main = "packaging.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
+
+box_python_test(
+    name = "packaging-test",
+    # The test creates git repositories, and the dev box contains git.
+    box = "tine//tools:dev.box",
+    srcs = ["packaging.py", "packaging_test.py"],
+    deps = ["//:specs", "//:util"],
 )
