@@ -232,10 +232,10 @@ image.layer(
 ```
 
 - `image.ops.depmod()` rebuilds `modules.dep` and its `.bin` indexes for every kernel the image installs, and
-  does nothing for an image that installs none. It runs the image's own `depmod`, because the tool
-  reads its search-order configuration from absolute paths that `--basedir` does not move, and writes
-  index files whose compatibility is its own kmod's business. An image with modules but no `depmod`
-  fails the build by name rather than shipping a stale index.
+  does nothing for an image that installs none. It runs the box's `depmod` with the image's `depmod.d`
+  configuration, so the image's search order applies. The box's `depmod` would look for an `external`
+  module directory, and for the target of an absolute symlink, in the box. A `depmod.d` file that lists an
+  `external` directory, or a module that is an absolute symlink, therefore fails the build.
 - `image.ops.hwdb(usr = True, strict = True)` compiles `hwdb.d` into the binary database udev actually reads.
   It writes `/usr/lib/udev/hwdb.bin`, where the image ships it and nothing writable shadows it, and drops
   the `/etc` copy; `usr = False` writes that copy instead. `strict = False` accepts a source file the
@@ -244,10 +244,14 @@ image.layer(
   is how Debian and Arch generate locales; a distribution that ships them as packages has no such file and
   the operation does nothing.
 
-`image.ops.hwdb()` is the one that runs a box tool against the mounted image, exactly as `image.ops.run()`
-does by default, so an image that installs no systemd of its own still gets a database; the other two must be
-the image's own. What they write is captured by the layer that runs them, so it is built once and
-cached rather than repeated by every terminal output.
+`image.ops.depmod()` and `image.ops.hwdb()` run a box tool against the mounted image, exactly as
+`image.ops.run()` does by default, so an image that installs no kmod or systemd of its own still gets its
+indexes and database. The box is the tools box of the image's release. It installs its packages from the
+release's repositories, so its tools match an image that installs kmod and systemd from those repositories.
+The `additional_repositories` and `local_packages` of a package manager do not reach the box: an image that
+installs kmod or systemd from them still gets the release's `depmod` and `systemd-hwdb`.
+`image.ops.locale_gen()` runs the image's own `locale-gen`. The layer that runs a generator captures what it
+writes, so it is built once and cached rather than repeated by every terminal output.
 
 `image.archive`, `image.portable`, `image.disk`'s root filesystem, and `image.initrd` end their operations
 with `image.ops.depmod()`, `image.ops.hwdb()` and `image.ops.locale_gen()` at their defaults, because a

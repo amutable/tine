@@ -349,7 +349,7 @@ def merge_os_release(fields: dict[str, str]) -> LayerOperation:
     return ("os_release", fields)
 
 def depmod() -> LayerOperation:
-    """Rebuild the module indexes for every kernel the image installs, with the image's depmod."""
+    """Rebuild the module indexes for every kernel the image installs."""
     return ("depmod",)
 
 def hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
