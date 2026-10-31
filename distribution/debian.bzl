@@ -168,7 +168,10 @@ def debian_release(
         name = name + ".repositories",
         target_compatible_with = distribution.serves(name, architectures),
         package_system = PACKAGE_SYSTEM,
-        required_repositories = [":{}.{}.repository".format(name, _REQUIRED)],
+        # A box resolves against the universe and nothing else. An image runs the tools of the release's
+        # tools box against what it installs from these repositories, so the tools box resolves from
+        # them as well.
+        required_repositories = [":{}.{}.repository".format(name, _REQUIRED)] + additional_repositories,
         optional_repository_groups = {component: [":{}.{}.repository".format(name, component)] for component in _COMPONENTS if component != _REQUIRED},
         default_repository_groups = ["non-free-firmware"],
     )
