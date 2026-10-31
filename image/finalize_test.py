@@ -6,12 +6,14 @@
 buck test tine//image:test
 """
 
+import gzip
 import tempfile
 import unittest
 from pathlib import Path
 from typing import override
 
 import finalize
+import rootfs
 
 
 class TestKernelVersions(unittest.TestCase):
@@ -117,17 +119,111 @@ class TestLocales(unittest.TestCase):
     def setUp(self) -> None:
         self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="finalize.")))
         (self.tree / "etc").mkdir()
+        self.locales = self.tree / "usr/share/i18n/locales"
+        self.locales.mkdir(parents=True)
+        self.overrides = self.tree / "usr/local/share/i18n/locales"
+        self.charmaps = self.tree / "usr/share/i18n/charmaps"
+        self.charmaps.mkdir()
 
     def test_an_image_without_locale_gen_generates_nothing(self) -> None:
-        self.assertFalse(finalize.wants_locales(self.tree))
+        self.assertIsNone(finalize.locale_entries(self.tree))
 
-    def test_a_commented_out_locale_gen_asks_for_nothing(self) -> None:
+    def test_an_empty_locale_gen_generates_nothing(self) -> None:
+        (self.tree / "etc/locale.gen").touch()
+        self.assertIsNone(finalize.locale_entries(self.tree))
+
+    def test_a_commented_out_locale_gen_lists_no_locale(self) -> None:
         (self.tree / "etc/locale.gen").write_text("# en_US.UTF-8 UTF-8\n\n")
-        self.assertFalse(finalize.wants_locales(self.tree))
+        self.assertEqual(finalize.locale_entries(self.tree), [])
 
-    def test_an_uncommented_locale_is_a_request(self) -> None:
-        (self.tree / "etc/locale.gen").write_text("# a comment\nen_US.UTF-8 UTF-8\n")
-        self.assertTrue(finalize.wants_locales(self.tree))
+    def test_reads_every_uncommented_entry(self) -> None:
+        (self.tree / "etc/locale.gen").write_text(
+            "# a comment\nen_US.UTF-8 UTF-8\n  de_DE@euro ISO-8859-15  \n"
+        )
+        self.assertEqual(
+            finalize.locale_entries(self.tree),
+            [("en_US.UTF-8", "UTF-8"), ("de_DE@euro", "ISO-8859-15")],
+        )
+
+    def test_an_entry_without_a_charset_fails_the_build(self) -> None:
+        (self.tree / "etc/locale.gen").write_text("en_US.UTF-8\n")
+        with self.assertRaises(SystemExit):
+            finalize.locale_entries(self.tree)
+
+    def test_strips_the_charset_but_keeps_the_modifier(self) -> None:
+        (self.locales / "de_DE@euro").touch()
+        self.assertEqual(
+            finalize.locale_source(self.tree, "de_DE.ISO-8859-15@euro"),
+            (self.locales / "de_DE@euro").resolve(),
+        )
+
+    def test_prefers_a_source_named_after_the_whole_locale(self) -> None:
+        (self.locales / "en_US").touch()
+        (self.locales / "en_US.UTF-8").touch()
+        self.assertEqual(
+            finalize.locale_source(self.tree, "en_US.UTF-8"), (self.locales / "en_US.UTF-8").resolve()
+        )
+
+    def test_prefers_an_override_in_usr_local(self) -> None:
+        self.overrides.mkdir(parents=True)
+        (self.locales / "en_US").touch()
+        (self.overrides / "en_US").touch()
+        self.assertEqual(
+            finalize.locale_source(self.tree, "en_US.UTF-8"), (self.overrides / "en_US").resolve()
+        )
+
+    def test_a_locale_without_a_source_fails_the_build(self) -> None:
+        with self.assertRaises(SystemExit):
+            finalize.locale_source(self.tree, "xx_XX.UTF-8")
+
+    def test_takes_a_charmap_by_its_file_name(self) -> None:
+        with gzip.open(self.charmaps / "UTF-8.gz", "wt") as charmap:
+            charmap.write("<code_set_name> UTF-8\n")
+        self.assertEqual(finalize.charmap_name(self.tree, "UTF-8"), "UTF-8")
+
+    def test_finds_a_charmap_by_an_alias_in_its_header(self) -> None:
+        with gzip.open(self.charmaps / "ISO-8859-1.gz", "wt") as charmap:
+            charmap.write(
+                "<code_set_name> ISO-8859-1\n"
+                "% alias ISO_8859-1\n"
+                "% alias LATIN1\n"
+                "CHARMAP\n"
+                "% alias NOT-AN-ALIAS\n"
+            )
+        self.assertEqual(finalize.charmap_name(self.tree, "latin1"), "ISO-8859-1")
+        with self.assertRaises(SystemExit):
+            finalize.charmap_name(self.tree, "NOT-AN-ALIAS")
+
+    def test_a_charset_without_a_charmap_fails_the_build(self) -> None:
+        with self.assertRaises(SystemExit):
+            finalize.charmap_name(self.tree, "UTF8X")
+
+    def test_reads_an_absolute_symlink_inside_the_image(self) -> None:
+        (self.tree / "usr/share/i18n/SUPPORTED").write_text("en_US.UTF-8 UTF-8\n")
+        (self.tree / "etc/locale.gen").symlink_to("/usr/share/i18n/SUPPORTED")
+        with rootfs.chroot(self.tree) as root:
+            entries = finalize.locale_entries(root)
+        self.assertEqual(entries, [("en_US.UTF-8", "UTF-8")])
+
+    def test_writes_into_the_archive_of_the_image(self) -> None:
+        self.assertEqual(
+            finalize.localedef_command(
+                "/usr/bin/localedef",
+                Path("/buildroot"),
+                Path("/buildroot/usr/share/i18n/locales/en_US"),
+                "UTF-8",
+                "en_US.UTF-8",
+                Path("/buildroot/usr/share/locale/locale.alias"),
+            ),
+            [
+                "/usr/bin/localedef",
+                "--prefix=/buildroot",
+                "--inputfile=/buildroot/usr/share/i18n/locales/en_US",
+                "--charmap=UTF-8",
+                "--alias-file=/buildroot/usr/share/locale/locale.alias",
+                "en_US.UTF-8",
+            ],
+        )
 
 
 class TestWorldWritable(unittest.TestCase):
