@@ -1508,13 +1508,14 @@ installs no systemd still be finalized. `depmod` runs from the box as well. `--b
 the directories it reads its search order from, so the driver reads the image's `depmod.d` files inside the
 image's root and passes a copy with `--config`. `depmod` would look in the box for an `external` directory
 and for the target of an absolute module symlink. The driver therefore fails the build when the image's
-configuration lists an `external` directory or a module is an absolute symlink. The layer runs in the tools
-box of the image's own release, which resolves its packages from the release's repositories, its additional
-repositories included. An image whose kmod comes from those repositories gets an index in the format its modprobe reads.
-The `additional_repositories` and `local_packages` of a package manager do not reach the tools box, so an
-image that installs kmod from them is indexed by the release's kmod.
-`locale-gen` runs in a chroot of the image, because it is a distribution's own script over its own
-sources. An image whose `/etc/locale.gen` lists a locale but that has no `locale-gen` fails the build.
+configuration lists an `external` directory or a module is an absolute symlink. `locale-gen` is a
+distribution's script around `localedef`, so the driver runs the same loop itself. It runs the box's
+`localedef` with `--prefix` and `I18NPATH` set to directories in the image, and it finds each locale's
+source and charmap inside the image's root. The layer runs in the tools box of the image's own release,
+which resolves its packages from the release's repositories, its additional repositories included. An image
+whose kmod and glibc come from those repositories gets an index and a locale archive in the formats it
+reads. The `additional_repositories` and `local_packages` of a package manager do not reach the tools box,
+so an image that installs kmod or glibc from them is finalized with the release's versions.
 
 ### Reproducibility and caching
 

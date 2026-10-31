@@ -10,7 +10,9 @@ half: the authored tmpfiles snippets a driver applies to the stack it just mount
 layer can hold.
 """
 
+import bz2
 import contextlib
+import gzip
 import os
 import shutil
 import subprocess
@@ -89,14 +91,6 @@ def _box_tool(name: str, what: str) -> str:
     path = shutil.which(name)
     if path is None:
         fail(f"{what}: this box carries no {name}")
-    return path
-
-
-def _image_tool(name: str, what: str) -> str:
-    """Find a tool inside the already-entered image, which is the only place it can come from."""
-    path = shutil.which(name)
-    if path is None:
-        fail(f"{what}: the image itself has to carry {name}, and does not")
     return path
 
 
@@ -226,21 +220,138 @@ def hwdb(tree: Path, *, usr: bool, strict: bool) -> None:
         (tree / "etc/udev/hwdb.bin").unlink(missing_ok=True)
 
 
-def wants_locales(tree: Path) -> bool:
-    """Whether the image asks for locales to be generated, in the shape locale-gen expects."""
-    config = tree / "etc/locale.gen"
-    if not config.is_file():
-        return False
-    return any(
-        line.strip() and not line.strip().startswith("#")
-        for line in config.read_text(encoding="utf-8").splitlines()
-    )
+# The directories locale-gen searches for locale sources, in its order.
+_I18N = ("usr/local/share/i18n", "usr/share/i18n")
+
+
+def locale_entries(root: Path) -> list[tuple[str, str]] | None:
+    """The locale and charset of every entry in /etc/locale.gen below `root`.
+
+    The result is None when the file is missing or empty, which is when locale-gen leaves the archive
+    alone.
+    """
+    config = root / "etc/locale.gen"
+    if not config.is_file() or config.stat().st_size == 0:
+        return None
+    entries = []
+    for line in config.read_text(encoding="utf-8").splitlines():
+        fields = line.split(maxsplit=1)
+        if not fields or fields[0].startswith("#"):
+            continue
+        if len(fields) < 2:
+            fail(f"locale_gen: the entry {line.strip()!r} in /etc/locale.gen has no charset")
+        entries.append((fields[0], fields[1].strip()))
+    return entries
+
+
+def locale_source(root: Path, locale: str) -> Path:
+    """The source definition for `locale` below `root`, searched the way locale-gen searches it."""
+    base = locale.split(".", 1)[0].split("@", 1)[0]
+    modifier = "@" + locale.split("@", 1)[1] if "@" in locale else ""
+    for name in (locale, base + modifier):
+        for i18n in _I18N:
+            source = root / i18n / "locales" / name
+            if source.is_file():
+                return source.resolve()
+    fail(f"locale_gen: the image has no source definition for {locale}")
+
+
+def _charmap_names(path: Path) -> list[str]:
+    """The names that the header of the charmap `path` declares, which localedef matches aliases against."""
+    names = []
+    with (
+        gzip.open(path, "rt", encoding="utf-8", errors="replace")
+        if path.name.endswith(".gz")
+        else bz2.open(path, "rt", encoding="utf-8", errors="replace")
+        if path.name.endswith(".bz2")
+        else path.open(encoding="utf-8", errors="replace")
+    ) as charmap:
+        for line in charmap:
+            # The header ends where the character definitions start.
+            if "CHARMAP" in line:
+                break
+            fields = line.split()
+            if fields[:1] == ["<code_set_name>"] and len(fields) > 1:
+                names.append(fields[1])
+            elif fields[:2] == ["%", "alias"] and len(fields) > 2:
+                names.append(fields[2])
+    return names
+
+
+def charmap_name(root: Path, charset: str) -> str:
+    """The name of the charmap below `root` for `charset`, which can be an alias of the charmap."""
+    for i18n in _I18N:
+        for suffix in ("", ".gz", ".bz2"):
+            if (root / i18n / "charmaps" / (charset + suffix)).is_file():
+                return charset
+    # Without --force, localedef fails on an alias. With --force, it looks for the alias among the
+    # box's charmaps only. The driver looks for the alias among the image's charmaps instead.
+    charmaps = root / "usr/share/i18n/charmaps"
+    if charmaps.is_dir():
+        for path in sorted(charmaps.iterdir()):
+            if path.is_file() and charset.lower() in (name.lower() for name in _charmap_names(path)):
+                return path.name.removesuffix(".gz").removesuffix(".bz2")
+    fail(f"locale_gen: the image has no charmap for {charset}")
+
+
+def localedef_command(
+    tool: str, tree: Path, source: Path, charmap: str, locale: str, alias: Path | None
+) -> list[str]:
+    """The localedef invocation adding one locale to the image's locale archive."""
+    # locale-gen also passes --force. With --force, localedef writes a locale whose definition has
+    # errors. It also exits with 0 when the charmap is missing.
+    return [
+        tool,
+        f"--prefix={tree}",
+        f"--inputfile={source}",
+        f"--charmap={charmap}",
+        *([f"--alias-file={alias}"] if alias is not None else []),
+        locale,
+    ]
+
+
+def _in_tree(tree: Path, path: Path) -> Path:
+    return tree / str(path).lstrip("/")
 
 
 def locale_gen(tree: Path) -> None:
     """Generate the locales /etc/locale.gen asks for, for the distributions that work that way."""
-    if not wants_locales(tree):
+    # The driver reads the image's files inside the image's root, so that an absolute symlink in the
+    # image resolves to a file of the image.
+    with rootfs.chroot(tree) as root:
+        entries = locale_entries(root)
+        if entries is None:
+            return
+        # locale-gen deletes the archive before it generates the locales that /etc/locale.gen lists.
+        (root / "usr/lib/locale/locale-archive").unlink(missing_ok=True)
+        locales = [
+            (locale, locale_source(root, locale), charmap_name(root, charset)) for locale, charset in entries
+        ]
+        # Arch's glibc contains locale.alias and its locale-gen passes it. Debian contains no
+        # locale.alias, and its locale-gen passes none.
+        alias = root / "usr/share/locale/locale.alias"
+        alias_file = alias.resolve() if alias.is_file() else None
+    if not locales:
         return
-    # locale-gen is a distribution's own script over its own locale sources, not a shared tool.
-    with rootfs.chroot(tree):
-        _run("locale_gen", [_image_tool("locale-gen", "locale_gen")])
+    tool = _box_tool("localedef", "locale_gen")
+    # localedef searches I18NPATH for the files that a locale source includes with `copy` and for
+    # the charmap. Without I18NPATH, it reads the box's copies.
+    env = os.environ | {"I18NPATH": ":".join(str(tree / i18n) for i18n in _I18N)}
+    for locale, source, charmap in locales:
+        print(f"locale_gen: {locale} {charmap}", file=sys.stderr)
+        cmd = localedef_command(
+            tool,
+            tree,
+            _in_tree(tree, source),
+            charmap,
+            locale,
+            _in_tree(tree, alias_file) if alias_file is not None else None,
+        )
+        # localedef opens the charmap and the files that `copy` includes relative to its working
+        # directory before it searches I18NPATH. The root of the image contains no file with such a
+        # name.
+        rc = subprocess.run(cmd, env=env, cwd=tree).returncode
+        # localedef exits with 1 for a warning and for a failure to write the archive, and with 4 when
+        # it wrote nothing. Only 0 means that the archive contains the locale.
+        if rc != 0:
+            fail(f"locale_gen: `{' '.join(cmd)}` failed (rc={rc})")

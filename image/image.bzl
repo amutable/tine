@@ -361,7 +361,7 @@ def hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
     return ("hwdb", usr, strict)
 
 def locale_gen() -> LayerOperation:
-    """Generate the locales the image's /etc/locale.gen asks for, with its own locale-gen."""
+    """Generate the locales the image's /etc/locale.gen lists into the image's locale archive."""
     return ("locale_gen",)
 
 # Every generator, for the compositions: they declare a whole product rather than one layer, so they

@@ -240,18 +240,22 @@ image.layer(
   It writes `/usr/lib/udev/hwdb.bin`, where the image ships it and nothing writable shadows it, and drops
   the `/etc` copy; `usr = False` writes that copy instead. `strict = False` accepts a source file the
   image cannot parse. An image with no `hwdb.d` is left alone.
-- `image.ops.locale_gen()` runs the image's own `locale-gen` when `/etc/locale.gen` asks for something, which
-  is how Debian and Arch generate locales; a distribution that ships them as packages has no such file and
-  the operation does nothing.
+- `image.ops.locale_gen()` generates the locales that `/etc/locale.gen` lists into
+  `/usr/lib/locale/locale-archive`, which is how Debian and Arch generate locales. It does the work of the
+  distribution's `locale-gen` with the box's `localedef`, the image's locale sources and the image's
+  charmaps. A charset can be a charmap's alias, such as `LATIN1`. An entry without a charset, a locale or
+  charset that the image has no definition for, or a warning from `localedef` fails the build, where
+  `locale-gen` would skip the entry. A non-empty `/etc/locale.gen` replaces the archive, even when every
+  line in it is a comment. A distribution that installs locales as packages has no such file, and the
+  operation does nothing.
 
-`image.ops.depmod()` and `image.ops.hwdb()` run a box tool against the mounted image, exactly as
-`image.ops.run()` does by default, so an image that installs no kmod or systemd of its own still gets its
-indexes and database. The box is the tools box of the image's release. It installs its packages from the
-release's repositories, so its tools match an image that installs kmod and systemd from those repositories.
-The `additional_repositories` and `local_packages` of a package manager do not reach the box: an image that
-installs kmod or systemd from them still gets the release's `depmod` and `systemd-hwdb`.
-`image.ops.locale_gen()` runs the image's own `locale-gen`. The layer that runs a generator captures what it
-writes, so it is built once and cached rather than repeated by every terminal output.
+The generators run box tools against the mounted image, exactly as `image.ops.run()` does by default, so an
+image that installs no kmod or systemd of its own still gets its indexes and database. The box is the tools
+box of the image's release. It installs its packages from the release's repositories, so its tools match an
+image that installs kmod, systemd and glibc from those repositories. The `additional_repositories` and
+`local_packages` of a package manager do not reach the box: an image that installs kmod, systemd or glibc
+from them still gets the release's `depmod`, `systemd-hwdb` and `localedef`. The layer that runs a generator
+captures what it writes, so it is built once and cached rather than repeated by every terminal output.
 
 `image.archive`, `image.portable`, `image.disk`'s root filesystem, and `image.initrd` end their operations
 with `image.ops.depmod()`, `image.ops.hwdb()` and `image.ops.locale_gen()` at their defaults, because a
