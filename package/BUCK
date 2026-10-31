@@ -35,6 +35,13 @@ tine_python_library(
 )
 
 tine_python_library(
+    name = "subpackage",
+    srcs = ["subpackage.py"],
+    deps = ["//:util"],
+    visibility = ["PUBLIC"],
+)
+
+tine_python_library(
     name = "transaction",
     srcs = ["transaction.py"],
     deps = [":snapshotter", "//:util"],

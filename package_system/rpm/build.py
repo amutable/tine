@@ -12,7 +12,6 @@ isolation around the chroot.
 """
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +24,7 @@ import specs
 import util
 
 import rootfs
+import subpackage
 
 # A persistent build directory marks a local iteration build; skip the release-only costs of
 # optimization, debug packaging, and payload compression.
@@ -203,9 +203,12 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
     print(f"collected {len(produced)} binary rpms{source_output} into {spec['out']}", file=sys.stderr)
 
     if spec["subpackages"]:
-        _emit_subpackages(
+        subpackage.emit(
             {name: subpackages / f"{name}.rpm" for name in spec["subpackages"]},
             produced,
+            version=r"-[^-]+-[^-]+\.[^.]+\.rpm",
+            # rpmbuild adds debuginfo and debugsource packages on its own.
+            generated=r"-debug(info|source)-",
             strict=spec["packaging"] is None,
         )
 
@@ -215,41 +218,6 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Parse an invocation and build its RPMs."""
     return build_rpm(specs.parse(Spec, "build_rpm", argv))
-
-
-def _emit_subpackages(declared: dict[str, Path], produced: dict[str, Path], *, strict: bool) -> None:
-    """Match declared subpackages to output NVRA names, and fail on any difference if `strict`."""
-    names_by_len = sorted(declared, key=len, reverse=True)
-    patterns = {name: re.compile(rf"^{re.escape(name)}-[^-]+-[^-]+\.[^.]+\.rpm$") for name in declared}
-
-    matched: dict[str, str] = {}  # subpackage name -> produced basename
-    for fname in sorted(produced):
-        for name in names_by_len:
-            if patterns[name].match(fname):
-                if name not in matched:
-                    matched[name] = fname
-                break
-
-    # Tolerate auto-generated debug outputs, but still match explicitly declared debug names.
-    missing = sorted(set(declared) - set(matched))
-    unexpected = sorted(
-        f for f in produced if f not in set(matched.values()) and not re.search(r"-debug(info|source)-", f)
-    )
-    if missing or unexpected:
-        report = (
-            "subpackage fidelity gate failed:\n"
-            f"  declared but not produced: {missing}\n"
-            f"  produced but not declared: {unexpected}"
-        )
-        if strict:
-            util.fail(report)
-        # The declared subpackages come from the imported spec, and a pinned spec can differ from it.
-        # Buck fails a build of a declared sub-target that this build did not produce.
-        print(f"{report}\nThe pinned packaging differs from the imported metadata.", file=sys.stderr)
-
-    for name, fname in matched.items():
-        util.clone_file(produced[fname], declared[name], allow_link=True)
-    print(f"emitted {len(matched)} subpackage sub-targets", file=sys.stderr)
 
 
 if __name__ == "__main__":
