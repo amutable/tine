@@ -72,7 +72,7 @@ pin in the file, and `--commit` commits the result.
 release version, such as `syft_1.54.1_linux_amd64.tar.gz` in release `v1.54.1`, is matched to the
 same file in the newest release.
 
-For a pin with a `url`, `bump` replaces the old release with the new one in each artifact name and
-`strip_prefix`. A release with a leading `v`, such as `v1.2.3`, also replaces `1.2.3` in a name that
-doesn't contain `v1.2.3`. When the release changes, `bump` downloads every artifact again to compute its
-digest and size, and fails if a download ends early.
+`bump` replaces the old release with the new one in each `strip_prefix`, and for a pin with a `url` also in
+each artifact name. A release with a leading `v`, such as `v1.2.3`, also replaces `1.2.3` in a name that
+doesn't contain `v1.2.3`. When the release of a pin with a `url` changes, `bump` downloads every artifact
+again to compute its digest and size, and fails if a download ends early.
