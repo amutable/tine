@@ -1,11 +1,16 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Python bootstrap targets with an automatically generated, isolated ty check."""
+"""Python libraries, binaries and tests with isolated type checks."""
 
 load("@prelude//:rules.bzl", "python_bootstrap_binary", "python_bootstrap_library")
+load("@prelude//decls:common.bzl", "buck")
+load("@prelude//decls:toolchains_common.bzl", "toolchains_common")
 load("@prelude//python_bootstrap:python_bootstrap.bzl", "PythonBootstrapSources")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("@prelude//python_bootstrap:toolchain.bzl", "PythonBootstrapToolchainInfo")
+load("@prelude//test:inject_test_run_info.bzl", "inject_test_run_info")
+load("@prelude//utils:selects.bzl", "selects")
+load("//box:defs.bzl", "box")
 
 _TYPECHECK_LABEL = "python-typecheck"
 
@@ -43,7 +48,7 @@ def _ty_check_impl(ctx: AnalysisContext) -> list[Provider]:
     # A driver's third-party imports resolve inside the box it runs in, so check it once per declared
     # box. Always name an environment, since ty otherwise falls back to the host interpreter and a
     # driver's imports would resolve against whatever the developer happens to have installed.
-    environments = {box.label.name: box[BoxInfo].layers for box in ctx.attrs.boxes}
+    environments = {box_dep.label.name: box_dep[box.Info].layers for box_dep in ctx.attrs.boxes}
     outputs = []
     for name, layers in (environments or {"stdlib": []}).items():
         output = ctx.actions.declare_output("checked-" + name)
@@ -68,7 +73,7 @@ def _ty_check_impl(ctx: AnalysisContext) -> list[Provider]:
 _ty_check = rule(
     impl = _ty_check_impl,
     attrs = {
-        "boxes": attrs.list(attrs.exec_dep(providers = [BoxInfo]), default = []),
+        "boxes": attrs.list(attrs.exec_dep(providers = [box.Info]), default = []),
         "deps": attrs.list(attrs.dep(providers = [PythonBootstrapSources]), default = []),
         "labels": attrs.list(attrs.string(), default = []),
         "pyproject": attrs.option(attrs.source(), default = None),
@@ -111,7 +116,7 @@ def _library(
 def _box_python_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     tree = ctx.actions.copied_dir("tree", flat_tree([ctx.attrs.main], ctx.attrs.deps))
     command = cmd_args(
-        box_run(ctx.attrs.box[BoxInfo], relaxed = True),
+        box.run(ctx.attrs.box[box.Info], relaxed = True),
         "python3",
         "-B",
         tree.project(ctx.attrs.main.short_path),
@@ -121,7 +126,7 @@ def _box_python_binary_impl(ctx: AnalysisContext) -> list[Provider]:
 _box_python_binary = rule(
     impl = _box_python_binary_impl,
     attrs = {
-        "box": attrs.dep(providers = [BoxInfo], doc = "box whose interpreter and packages run it"),
+        "box": attrs.dep(providers = [box.Info], doc = "box whose interpreter and packages run it"),
         "deps": attrs.list(attrs.dep(providers = [PythonBootstrapSources]), default = []),
         "main": attrs.source(doc = "the entry point"),
     },
@@ -150,9 +155,59 @@ def _binary(
         boxes = [box]
     ty_check(name = name + "-ty", srcs = [main], deps = deps, boxes = boxes)
 
+def _python_test_impl(ctx: AnalysisContext) -> list[Provider]:
+    # A test can read files beside __file__, so copy its inputs to keep those reads in the declared tree.
+    root = ctx.actions.copied_dir("tree", flat_tree(ctx.attrs.srcs, ctx.attrs.deps))
+    if ctx.attrs.box != None:
+        # The box mounts the project at a different path, so buck run must pass relative artifact values.
+        setenv = {name: cmd_args(value, relative_to = ctx.label.project_root) for name, value in ctx.attrs.env.items()}
+        command = cmd_args(box.run(ctx.attrs.box[box.Info], setenv = setenv), "python3")
+        env = {}
+    else:
+        command = cmd_args(ctx.attrs._python_bootstrap_toolchain[PythonBootstrapToolchainInfo].interpreter)
+        env = ctx.attrs.env
+    command.add("-B", "-m", "unittest", "discover", "-s", root, "-p", "*_test.py")
+    return [DefaultInfo(default_output = root)] + inject_test_run_info(
+        ctx,
+        ExternalRunnerTestInfo(
+            type = "custom",
+            command = [command],
+            env = env,
+            labels = ctx.attrs.labels,
+            run_from_project_root = True,
+            use_project_relative_paths = True,
+            default_executor = CommandExecutorConfig(local_enabled = True, remote_enabled = False) if ctx.attrs.box != None else None,
+        ),
+    )
+
+_python_test = rule(
+    impl = _python_test_impl,
+    attrs = {
+        "box": attrs.option(attrs.dep(providers = [box.Info]), default = None),
+        "deps": attrs.list(attrs.dep(providers = [PythonBootstrapSources]), default = []),
+        "env": attrs.dict(attrs.string(), attrs.arg(), default = {}),
+        "labels": attrs.list(attrs.string(), default = []),
+        "srcs": attrs.list(attrs.source()),
+        "_python_bootstrap_toolchain": toolchains_common.python_bootstrap(),
+    }
+    | buck.inject_test_env_arg(),
+)
+
+def _test(
+    name: str,
+    srcs: list[str] | Select,
+    box: str | Select | None = None,
+    deps: list[str] | Select | None = None,
+    **kwargs,
+) -> None:
+    """Run unittest discovery with bootstrap Python or a box, and typecheck in the same environment."""
+    _python_test(name = name, box = box, srcs = srcs, deps = deps, **kwargs)
+    ty_check(name = name + "-ty", srcs = srcs, deps = deps, boxes = selects.apply(box, lambda value: [] if value == None else [value]))
+
 python = struct(
     binary = _binary,
     flat_tree = flat_tree,
     library = _library,
+    test = _test,
     typecheck = ty_check,
 )

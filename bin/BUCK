@@ -16,7 +16,7 @@ python.library(
     deps = ["//:util"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     # Runtime path setup handles imports, but the type checker still needs the dependency.

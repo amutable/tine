@@ -4,7 +4,6 @@
 """Logical images, their compositions and output formats, and the drivers that build them."""
 
 load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
-load("//box:defs.bzl", "box")
 load("//python:defs.bzl", "python")
 load(":image.bzl", "image_tools")
 
@@ -98,7 +97,7 @@ python.binary(
     visibility = ["PUBLIC"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

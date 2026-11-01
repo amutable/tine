@@ -3,7 +3,6 @@
 
 """The RPM native package system and its driver bundle."""
 
-load("//box:defs.bzl", "box")
 load("//package:system.bzl", "package_system")
 load("//python:defs.bzl", "python")
 
@@ -41,7 +40,7 @@ python.binary(
 
 python.binary(name = "build", main = "build.py", deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"])
 
-box.python_test(
+python.test(
     name = "build-test",
     box = _BOX,
     srcs = ["build.py", "build_test.py"],
@@ -70,14 +69,14 @@ python.binary(
     deps = [":rpmkeys", "//:specs", "//:util"],
 )
 
-box.python_test(
+python.test(
     name = "plan-test",
     box = _BOX,
     srcs = ["createrepo.py", "plan.py", "plan_test.py"],
     deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = _BOX,
     srcs = ["keyring.py", "rpmkeys.py", "verify.py", "verify_test.py"],

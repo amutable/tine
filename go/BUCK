@@ -95,7 +95,7 @@ python.binary(
 # without one.
 go.releases(name = "unrefreshed.releases")
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

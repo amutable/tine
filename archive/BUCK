@@ -3,7 +3,6 @@
 
 """Shared archive primitives."""
 
-load("//box:defs.bzl", "box")
 load("//python:defs.bzl", "python")
 
 python.library(
@@ -19,7 +18,7 @@ python.library(
     visibility = ["tine//..."],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = ["cpio.py", "cpio_test.py", "tar.py", "tar_test.py"],

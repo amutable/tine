@@ -96,6 +96,11 @@ the alias and forwarding what it does not declare:
 toolchain_alias(name = "python_bootstrap", actual = "tine//:python_bootstrap", visibility = ["PUBLIC"])
 ```
 
+`python.test` runs unittest discovery over `srcs` and the Python libraries in `deps`. It uses the
+bootstrap interpreter by default. Pass `box` to run with a box's interpreter and packages. Each suite
+also declares a type check against the selected environment. `env` can contain artifact references such
+as `$(location //target)`, and applies to both `buck test` and `buck run`.
+
 ### Building with out-of-tree checkouts
 
 A cell root must be project-relative, so Buck cannot point a cell directly at an external directory.

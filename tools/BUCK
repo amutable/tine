@@ -78,8 +78,7 @@ http.tool(
     ],
 )
 
-# tine's dev environment for importer and its unit tests. Used by every `box_python_test` suite
-# (hermetic), `tine//tools:importer` (relaxed), and anyone entering it as a box.
+# The dev box supplies the importer and boxed Python suites with package tools.
 # The dev box layers over the tools box, so it installs only its own packages. A test of an image runs in
 # the dev box of the image's release. No image depends on the dev box, so a change to its packages rebuilds
 # no image.
@@ -144,7 +143,7 @@ python.binary(
     deps = ["//:util"],
 )
 
-box.python_test(
+python.test(
     name = "dev-test",
     box = ":dev.box",
     srcs = [
@@ -165,7 +164,7 @@ python.binary(
 )
 
 # The dev box carries gpg, which the armoring test reads its output back with.
-box.python_test(
+python.test(
     name = "catalog-test",
     box = ":dev.box",
     srcs = ["catalog.py", "catalog_test.py"],
@@ -335,7 +334,7 @@ command_alias(
     exe = ":swtpm-signing.box",
 )
 
-box.python_test(
+python.test(
     name = "importer-test",
     box = ":dev.box",
     srcs = [

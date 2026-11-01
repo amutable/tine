@@ -3,7 +3,6 @@
 
 """Target-root and stored-layer filesystem primitives."""
 
-load("//box:defs.bzl", "box")
 load("//python:defs.bzl", "python")
 
 python.library(
@@ -13,7 +12,7 @@ python.library(
     visibility = ["tine//..."],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "tine//tools:dev.box",
     srcs = ["rootfs_test.py"],

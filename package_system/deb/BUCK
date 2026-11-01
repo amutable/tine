@@ -3,7 +3,6 @@
 
 """The Debian package planner, repository snapshotter, and the metadata readers they share."""
 
-load("//box:defs.bzl", "box")
 load("//package:system.bzl", "package_system")
 load("//python:defs.bzl", "python")
 
@@ -105,7 +104,7 @@ package_system(
 )
 
 # The tests sign a Release with gpg and verify it with sqv. The dev box has gpg and sqv.
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

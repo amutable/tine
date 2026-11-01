@@ -2,3 +2,33 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """Python driver rules."""
+
+load(":defs.bzl", "python")
+
+export_file(
+    name = "test-input",
+    src = "BUCK",
+)
+
+python.test(
+    name = "test",
+    srcs = ["test_test.py"],
+    deps = ["//archive:cpio"],
+    env = {
+        "PYTHON_TEST_INPUT": "$(location :test-input)",
+        "PYTHON_TEST_INTERPRETER": "$(location_exec //tools:python3)",
+        "PYTHON_TEST_VALUE": "spaces 'quotes' \"double quotes\" $literal;",
+    },
+)
+
+python.test(
+    name = "box-test",
+    box = "//tools:dev.box",
+    srcs = ["test_test.py"],
+    deps = ["//archive:cpio"],
+    env = {
+        "PYTHON_TEST_INPUT": "$(location :test-input)",
+        "PYTHON_TEST_INTERPRETER": "/usr/bin/python3",
+        "PYTHON_TEST_VALUE": "spaces 'quotes' \"double quotes\" $literal;",
+    },
+)
