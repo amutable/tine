@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "64ed65b31258e0fcd325f9a580f26969e7c198cdcb780ceb02beac1fdd33afc6",
+        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261024T203415Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-arm64/Packages.xz",
-        "sha256": "ad48a5310b79ab2aae023d87e5f722d671d366c538072c864596bbf01ea744fa",
-        "size": 47200,
-        "url": "https://snapshot.debian.org/archive/debian/20261024T203415Z/dists/testing/contrib/binary-arm64/by-hash/SHA256/ad48a5310b79ab2aae023d87e5f722d671d366c538072c864596bbf01ea744fa"
+        "sha256": "aa0a1a1a141ec9d67d03e060fd0903ec5dfb03e36549e94a7be67d52093aee03",
+        "size": 47192,
+        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/contrib/binary-arm64/by-hash/SHA256/aa0a1a1a141ec9d67d03e060fd0903ec5dfb03e36549e94a7be67d52093aee03"
       }
     ],
     "inline": {}
@@ -70,7 +70,6 @@
     "3c1c3439e9a71f3b4fb70309f46ef089b7e6996aa8ebf1006eabcb15bde1c7aa": {"location":"pool/contrib/o/openh264/libopenh264-cisco8_2.6.0+dfsg-2+b2_arm64.deb","size":10344},
     "3d959e7545dcc4d856fb09df27619f57230f4cdaa32d29da343fe317ca8c03e5": {"location":"pool/contrib/a/astrometry-data-2mass/astrometry-data-2mass-07_1.2_all.deb","size":3436},
     "3e2da65dbd853626670a52a25c39fe6722adb87bbfa26b7b9a8874d3a65c502f": {"location":"pool/contrib/f/festvox-rablpc8k/festvox-rablpc8k_1.4.0-4_all.deb","size":2776412},
-    "3ed607e24e4eead3efe5066862a207373e28f51f9d0eeb0f8ed9e6dab57315fc": {"location":"pool/contrib/m/mbrola/mbrola_3.3+dfsg-9_arm64.deb","size":162516},
     "3ee284111582bb29b7d286e5171d126b4b911d72b9ffe03a4434911d0639dc1e": {"location":"pool/contrib/z/zsnapd/zsnapd-rcmd_0.8.15-1_all.deb","size":9160},
     "3fff0d818ae149412f3d6abfcc5ba8589cc5b948baa9bb289f50a6817bfcc530": {"location":"pool/contrib/r/rocksndiamonds/rocksndiamonds_4.4.1.3+dfsg-2_arm64.deb","size":859400},
     "40de27a245d9470f8a680bfe7131ff0d5ec3d614b03f6c80fed10ba033c402d7": {"location":"pool/contrib/n/nvidia-support/nvidia-support_20240109+1_arm64.deb","size":14788},
@@ -84,12 +83,14 @@
     "46b7d638e3b3f2dc80889ef1bd68eb703f4a446d0760852edc600f89a9c5a6c6": {"location":"pool/contrib/g/game-data-packager/game-data-packager_89_all.deb","size":12170836},
     "479016b17d0be646dba859c1e1465f65a6169db2f7aaf8ff400b8317b136cacb": {"location":"pool/contrib/t/taradino/rott_20251222-2_all.deb","size":3676},
     "48feba5653ea82b16e421acdfafc3faf87e1b47b048a354b95ad473103b978ae": {"location":"pool/contrib/p/python-pynvml/python3-pynvml_12.550.89-3_arm64.deb","size":33868},
+    "49d67e5abbc46a9516e2236a95fe328d05152caca0e283be923f0283ad7a00ef": {"location":"pool/contrib/j/jazz2-native/jazz2-native_3.9.0+ds-2_arm64.deb","size":1419404},
     "4b21118671f73c383a7df64aeb119d664381a9f55243e81aa20bb1f7408cb979": {"location":"pool/contrib/g/gobi-loader/gobi-loader_0.7+git20171116.143deb4+dfsg-1_arm64.deb","size":8164},
     "4b556cc362af1363ed5ec0846fc21d03c2b7fa8fa0d2ea9e065d9f3559a285a2": {"location":"pool/contrib/r/ruby-spamcheck/ruby-spamcheck_1.10.1-2_all.deb","size":5164},
     "4b8f2891cdb2bc297c5d11c7acd269dd5410ce945c096891ac5f515549a9223a": {"location":"pool/contrib/o/openvr/libopenvr-dev_2.12.1~ds1-1_arm64.deb","size":92676},
     "4ca154b5f9b80c3e1ea89bcab4beccdcf7fc9996583d80a03307459e427233e2": {"location":"pool/contrib/n/nvidia-modprobe/nvidia-modprobe_610.57.04-1_arm64.deb","size":20192},
     "4ceb00c751d96ac1077190c55f40a09253fdcb17e093d84f4f3962528694be12": {"location":"pool/contrib/o/openrct2-opensfx/openrct2-opensfx_1.0.6-1_all.deb","size":4280620},
     "4e01b8b12ff913928ebadec2a14b7647062202c60c103ac34346007ed7d09ffb": {"location":"pool/contrib/s/sabnzbdplus/sabnzbdplus_5.1.3+dfsg-1_all.deb","size":736776},
+    "4e52af026f3da0c1dff3ba82d620356d9079f147785959779f813a7f2b6d7bcb": {"location":"pool/contrib/m/mbrola/mbrola_3.3+dfsg-10_arm64.deb","size":164428},
     "4e9f6084e3c864e57805959c7303d3e4f863ab7ca48a9cdf3c765d1c09ffaf22": {"location":"pool/contrib/g/gnuboy/gnuboy-sdl_1.0.3-7.2_arm64.deb","size":76044},
     "4f1c3ff18d09382f6e1c36c5fc9f498f9ac5b111ce8af7616b792f722c729bd8": {"location":"pool/contrib/b/b43-fwcutter/firmware-b43-installer_019-14_all.deb","size":8620},
     "54d67de1079a5637a531007eb7d9762b7df09e4e8f1a36b0602feeece5c3a024": {"location":"pool/contrib/e/exult/exult_1.12.1-3_arm64.deb","size":8630212},
@@ -168,9 +169,9 @@
     "8be2882ba3275178db97a923890eace75e656ff5b68eefb22991d3d79795b885": {"location":"pool/contrib/g/gemrb/gemrb_0.9.4+dfsg-1+b1_arm64.deb","size":78620},
     "8f3eafcc1e121e082355d6317e06654945d4b019be3357d68f0ca0bace90de59": {"location":"pool/contrib/k/kinect-audio-setup/kinect-audio-setup_0.5-3_arm64.deb","size":15628},
     "90aac87d44e7b9fc821730fafc1544cc52556db2b7bd3c99dd1bd2c4909555c0": {"location":"pool/contrib/g/glx-alternatives/glx-alternative-nvidia_1.2.2_arm64.deb","size":5776},
+    "90e81d77bcb497bf4b7f65f83e9859ac85b7c12ff0891ed505cc8ffc5ba595d9": {"location":"pool/contrib/j/jazz2-native/jazz2-native-data_3.9.0+ds-2_all.deb","size":775552},
     "9368d55026035ca9ba67bf3e764537c1bcbec75d5db307cb5b171cffe880bfc2": {"location":"pool/contrib/libg/libgdf/matlab-gdf_0.1.3-17_all.deb","size":21292},
     "95ce14cb81386678dfbbe3205cb16fea414534cd3aa94cfc55cdfa39f0af5c61": {"location":"pool/contrib/i/indi-sbig/indi-sbig_2.1+20221220234924-5_arm64.deb","size":30928},
-    "95e528c7f2b3e6b25025c703d721ef24b284ae2ee8aac0736f24aa84fed23503": {"location":"pool/contrib/j/jazz2-native/jazz2-native_3.8.0+ds-1_arm64.deb","size":1256392},
     "9674e53f11a6bd1d2355bda50d88f6c8f1da5e7c1ff9d3846429d88cc0967c38": {"location":"pool/contrib/f/festvox-mbrola/festvox-us3_1.95-5_all.deb","size":11932},
     "9818f9e12c2f2c6be3c8961df5ab1ed399a955d9a798d29f1a859414cab92fac": {"location":"pool/contrib/h/hyperspec/hyperspec_1.35_all.deb","size":8120},
     "989631c8dbcf6eefcba4d95bd55902014ed9eec47225292c02df6dc00f0e8f7d": {"location":"pool/contrib/p/python-seqcluster/python3-seqcluster_1.2.9+ds-8_all.deb","size":1642500},
@@ -281,7 +282,6 @@
     "fc77d7f5272df6a7b4e5a77453f99f058c09882c5bb2c43063f2c3aff81c7753": {"location":"pool/contrib/u/uqm-russian/uqm-russian_1.0.2-9_all.deb","size":725528},
     "fca007540288cc341fedeff34af20f6ce0610c706648afd50d8e6f5128f4665e": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_1_all.deb","size":3152},
     "fcd3a3188b9c9523fec37c86a959ef1d12a15384b4f9effbe78a2d23602016a8": {"location":"pool/contrib/g/gemrb/gemrb-icewind-dale-data_0.9.4+dfsg-1_all.deb","size":116256},
-    "fdeac976a9af8ee4c2ad7759e418c414fd888440ca40d855e3e24aed1ca346a7": {"location":"pool/contrib/j/jazz2-native/jazz2-native-data_3.8.0+ds-1_all.deb","size":750032},
     "fe27522a596aa6860a2b7d887bd2bc521ed7975ec59b8c9db3267e7def5abbb6": {"location":"pool/contrib/n/nvidia-egl-gbm/libnvidia-egl-gbm1_1.1.2.1-1_arm64.deb","size":11956},
     "fe8306aad738d651da8dd87e138692b9ce7b74c9d1473c2f5d69f04332320045": {"location":"pool/contrib/z/zfs-linux/libuutil3linux_2.4.4-1_arm64.deb","size":48780},
     "fea93a0d5d315ac994916a0b723066d2e7e8353adb87edc29b78de56fe99b1f0": {"location":"pool/contrib/d/diaspora-installer/diaspora-installer-mysql_0.9.0.0+debian3_all.deb","size":4732},

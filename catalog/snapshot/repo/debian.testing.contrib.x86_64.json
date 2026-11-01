@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "64ed65b31258e0fcd325f9a580f26969e7c198cdcb780ceb02beac1fdd33afc6",
+        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261024T203415Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-amd64/Packages.xz",
-        "sha256": "95c8f4bc3910bf27e87ddf3f98b3b0cc58828a1c99ae206cd7da84a1d4f30811",
-        "size": 48332,
-        "url": "https://snapshot.debian.org/archive/debian/20261024T203415Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/95c8f4bc3910bf27e87ddf3f98b3b0cc58828a1c99ae206cd7da84a1d4f30811"
+        "sha256": "9c196febcc95ec1e1716081a4e52c51d9d410a939751c3ec206e6ec9285437a2",
+        "size": 48344,
+        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/9c196febcc95ec1e1716081a4e52c51d9d410a939751c3ec206e6ec9285437a2"
       }
     ],
     "inline": {}
@@ -119,6 +119,7 @@
     "6ece44ed0a76d88d9be740615fcd77e7ab1f78d6b5167ac5a2aaac5b8126f2be": {"location":"pool/contrib/o/openmohaa/openmohaa-common_0.82.1+dfsg-4_amd64.deb","size":1700712},
     "6f0c2f8857f46bd427c9b58ea6f01bafd6c34104cb29c93e24e00492a2c21164": {"location":"pool/contrib/d/doris/python3-doris_5.0.3~beta+dfsg-19_all.deb","size":78940},
     "70deb77eac9c53bc1e983e03471126ba6c3f560144d62b29149eca9799ebfc37": {"location":"pool/contrib/m/matlab-support/matlab-support_0.5_all.deb","size":95000},
+    "7100e02d9872824a863251030a52c932909a93ca184829952d58dabfcc098e49": {"location":"pool/contrib/j/jazz2-native/jazz2-native_3.9.0+ds-2_amd64.deb","size":1697528},
     "71fbb0fa93d002f6274a34f07db4df5aa4a4e4a4a75e76f1a39f9ab241ad9aa4": {"location":"pool/contrib/b/bladerf/bladerf-fpga-hostedx115_0.2025.10-2_all.deb","size":20612},
     "7215319862cb9147e818309d2ac14c38bda8fb32ac8eb3d5febc6c7ad9ca8c41": {"location":"pool/contrib/p/python-vertica/python3-vertica_1.4.0-2_all.deb","size":74000},
     "723cbe8355299a55bcc83eb05305d8c39ebe3ee8aa7872daf26246349042d513": {"location":"pool/contrib/x/xserver-xorg-video-ivtvdev/xserver-xorg-video-ivtv_1.1.2-3_amd64.deb","size":21792},
@@ -164,6 +165,7 @@
     "8c7e4a25efddcb732659444d5ef87d90d08f035545d4de1dc9d6cea0244be8dd": {"location":"pool/contrib/p/primus-vk/nvidia-primus-vk-common_1.6.4-4+b2_amd64.deb","size":3560},
     "8eb749bb5a9100f43c212e85be2e292d1cd12f6f93648306608dd1bf6820acf8": {"location":"pool/contrib/j/julius/julius_1.8.0+dfsg-3_amd64.deb","size":645092},
     "90af864722529b13ec139b88da9751fd4787e5dab1ffdfedbf57a72066d99387": {"location":"pool/contrib/z/zfs-linux/zfsutils-linux_2.4.4-1_amd64.deb","size":611808},
+    "90e81d77bcb497bf4b7f65f83e9859ac85b7c12ff0891ed505cc8ffc5ba595d9": {"location":"pool/contrib/j/jazz2-native/jazz2-native-data_3.9.0+ds-2_all.deb","size":775552},
     "920729842ee9b3b6a1bfc3202250d7362434d14a82ba4eb2d38a1f039323effd": {"location":"pool/contrib/i/isight-firmware-tools/isight-firmware-tools_1.6-4.3_amd64.deb","size":28884},
     "9215fb6ad942b549ce19d4b19c2d06982104e4e623fb57680b2d3e2b348d217d": {"location":"pool/contrib/d/descent3/descent3_1.5.0+ds-2_amd64.deb","size":2685816},
     "92e3044b8ea712caf6b353cebf38e439185ae0c9427d4f75817b52a29f6d40ec": {"location":"pool/contrib/o/opentyrian/opentyrian_2.1.20260912-1_amd64.deb","size":249148},
@@ -209,6 +211,7 @@
     "b2a4c1d493976e9e7c8654511f1d78a800b806950ae25c073207247c3917fd8d": {"location":"pool/contrib/t/taradino/taradino_20251222-2_amd64.deb","size":452216},
     "b35743447d7f00793fd05e4cbef57fc0aaf2930e0494bd0921d9938a2e849a00": {"location":"pool/contrib/z/zfs-linux/libnvpair3linux_2.4.4-1_amd64.deb","size":58016},
     "b3b421ea8566a5338af72f5dcb635ec69cc9075d4d7569b5ae0301a4dcd5eb67": {"location":"pool/contrib/e/esix/esix_1-4_all.deb","size":41692},
+    "b4347c16200970dabf647e96258768c065a5406c3311e85d045bf6ee55a2a5b2": {"location":"pool/contrib/m/mbrola/mbrola_3.3+dfsg-10_amd64.deb","size":166644},
     "b56d31d6c310bee379de0d868ddfa5726bf54d53c98e213f9d89aec2f6ec3c5f": {"location":"pool/contrib/o/openrct2/openrct2-data_0.5.6+ds-1_all.deb","size":3462000},
     "b58c5612e9550bd2269b66b6c693398fb1c48f908a721a488010d64b236552a2": {"location":"pool/contrib/o/octave-jnifti/matlab-jnifti_0.8-1_all.deb","size":17288},
     "b7fa75b380825b831bfaa3203191705c52341768b57a452fb964223510c3f46e": {"location":"pool/contrib/b/boinc/boinc-virtualbox_8.2.15+dfsg-10_amd64.deb","size":16484},
@@ -245,7 +248,6 @@
     "d48c39585c21a9be43799c013a808409efaae8155e1ddac1afac7f232ca67941": {"location":"pool/contrib/a/alien-arena/alien-arena_7.71.7+dfsg-1_amd64.deb","size":873496},
     "d538cae55a9ee0a9d974faa1e7fbaf4a86f73cec7db41ce13e6973adf1347d3b": {"location":"pool/contrib/p/pvpgn/pvpgn_1.99.7.2.1+dfsg-5_amd64.deb","size":1006252},
     "d91f865765f1421f5b3bd4fa2788f79e1955001fcd77ec1bda8f1d727f84f01f": {"location":"pool/contrib/g/gpustat/gpustat_1.1.1-2_all.deb","size":25680},
-    "d94ea5bbb8b201935e8a40d758f1a224030d13a1ba669cc75293823933554c7f": {"location":"pool/contrib/m/mbrola/mbrola_3.3+dfsg-9_amd64.deb","size":165736},
     "d96316da02406cf6329c97d733c8da68d44560f8baef7965dfa86b0324d1442c": {"location":"pool/contrib/d/dhewm3/dhewm3-doom3_1.5.5+dfsg-2_amd64.deb","size":1173408},
     "d9e983fcead5c3c4b5d0e3f9732c941a2802b45017ac3305dc44620bd5ae63f7": {"location":"pool/contrib/libd/libdemeter-perl/libdemeter-perl_0.9.27+ds6-9_all.deb","size":41775744},
     "da0ef77e4083b7e2d5eaeee6679d942118174b1540df5bf20cdc35c8916c469b": {"location":"pool/contrib/g/gcc-doc-defaults/gcc-doc-base_15.2.0-1_all.deb","size":30812},
@@ -255,7 +257,6 @@
     "de723d4a912183cf19e4041a337ce4047f3504c40cfb5bcb2a41e87a9d4a1cfa": {"location":"pool/contrib/a/astrometry-data-2mass/astrometry-data-2mass-03_1.2_all.deb","size":3436},
     "e20c4332d8efaf9189459d94bb7c328a4ca6c420e6597d74af88aa3db7b1c10a": {"location":"pool/contrib/h/hipify/hipify-clang_7.0.2+dfsg-1_amd64.deb","size":8132740},
     "e39a1b1edff8fcf56e043c9f9bd696a07dc5144e95ca6d71ebbb83e7509401f1": {"location":"pool/contrib/i/indi-asi/indi-asi_2.2+20221225102500-2_amd64.deb","size":66396},
-    "e5d630a0b42eb8ae2cd8514310d46206695750f34e4ed8dc47cd1b035657f744": {"location":"pool/contrib/j/jazz2-native/jazz2-native_3.8.0+ds-1_amd64.deb","size":1506752},
     "e605cce1bb149e1cb7b617a4036fa302c95693684d7398ce2f007c6e697c0ee1": {"location":"pool/contrib/o/openrct2-title-sequences/openrct2-title-sequences_0.5.6-1_all.deb","size":6876352},
     "e67d02d563f5046f6e4eb5d866a470520340c30868d317b74840928f63976a97": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate-2_0.9.4+dfsg-1+b1_amd64.deb","size":11368},
     "e6a82768a951b6012b600845343e04fc880ec95df9a6a7abfcb54f7c7fefa53f": {"location":"pool/contrib/b/boinc/boinc-client-nvidia-cuda_8.2.15+dfsg-10_amd64.deb","size":16224},
@@ -287,7 +288,6 @@
     "fca007540288cc341fedeff34af20f6ce0610c706648afd50d8e6f5128f4665e": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_1_all.deb","size":3152},
     "fcd3a3188b9c9523fec37c86a959ef1d12a15384b4f9effbe78a2d23602016a8": {"location":"pool/contrib/g/gemrb/gemrb-icewind-dale-data_0.9.4+dfsg-1_all.deb","size":116256},
     "fcdd52937a4693cc30442aec93ebeaacc12f52b57bac81ee1d339feb4143ff03": {"location":"pool/contrib/a/alsa-tools/alsa-firmware-loaders_1.2.15-3_amd64.deb","size":24872},
-    "fdeac976a9af8ee4c2ad7759e418c414fd888440ca40d855e3e24aed1ca346a7": {"location":"pool/contrib/j/jazz2-native/jazz2-native-data_3.8.0+ds-1_all.deb","size":750032},
     "fea93a0d5d315ac994916a0b723066d2e7e8353adb87edc29b78de56fe99b1f0": {"location":"pool/contrib/d/diaspora-installer/diaspora-installer-mysql_0.9.0.0+debian3_all.deb","size":4732},
     "fecc2d183e0b3ef937d0233927a63f68b87170aade9cf5d2801635ae2b50ec18": {"location":"pool/contrib/g/geogram/libgeogram1_1.9.6-1_amd64.deb","size":1788668},
     "ff7032f724f582ff4ab008808d8ed9fc24fc0216742ead1f2f609068a523ad84": {"location":"pool/contrib/z/zfs-linux/libzfs7linux_2.4.4-1_amd64.deb","size":241260}
