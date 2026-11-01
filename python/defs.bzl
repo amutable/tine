@@ -95,7 +95,7 @@ def ty_check(
     manifests = glob(["pyproject.toml"])
     _ty_check(name = name, boxes = boxes, deps = deps, labels = [_TYPECHECK_LABEL], pyproject = manifests[0] if manifests else None, srcs = srcs)
 
-def tine_python_library(
+def _library(
     name: str,
     srcs: list[str] | Select,
     deps: list[str] | Select | None = None,
@@ -108,17 +108,6 @@ def tine_python_library(
     if typecheck:
         ty_check(name = name + "-ty", srcs = srcs, deps = deps, boxes = boxes)
 
-def tine_python_binary(
-    name: str,
-    main: str | Select,
-    deps: list[str] | Select | None = None,
-    boxes: list[str] | Select | None = None,
-    **kwargs,
-) -> None:
-    """Declare a flat bootstrap binary and the ty check over its entry point."""
-    python_bootstrap_binary(name = name, main = main, deps = deps, **kwargs)
-    ty_check(name = name + "-ty", srcs = [main], deps = deps, boxes = boxes)
-
 def _box_python_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     tree = ctx.actions.copied_dir("tree", flat_tree([ctx.attrs.main], ctx.attrs.deps))
     command = cmd_args(
@@ -130,13 +119,6 @@ def _box_python_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     return [DefaultInfo(default_output = tree), RunInfo(args = command)]
 
 _box_python_binary = rule(
-    doc = """A flat Python tree run by a box's own interpreter, host-integrated.
-
-    For a tool whose third-party imports come from the box's packages: the bootstrap interpreter a
-    `tine_python_binary` runs under has the standard library and nothing else. Relaxed, so the tool
-    sees the host's network, environment and files, which is what a long-running service on the
-    developer's machine needs.
-    """,
     impl = _box_python_binary_impl,
     attrs = {
         "box": attrs.dep(providers = [BoxInfo], doc = "box whose interpreter and packages run it"),
@@ -145,13 +127,32 @@ _box_python_binary = rule(
     },
 )
 
-def box_python_binary(
+def _binary(
     name: str,
-    box: str,
-    main: str,
+    main: str | Select,
     deps: list[str] | Select | None = None,
+    box: str | None = None,
+    boxes: list[str] | Select | None = None,
     **kwargs,
 ) -> None:
-    """Declare a box-hosted Python command and the ty check over its entry point, in that box."""
-    _box_python_binary(name = name, box = box, main = main, deps = deps, **kwargs)
-    ty_check(name = name + "-ty", srcs = [main], deps = deps, boxes = [box])
+    """Declare a flat Python binary and the ty check over its entry point.
+
+    The bootstrap interpreter has only the standard library. A binary that imports packages from a box
+    passes `box`. The box's interpreter then runs the binary with the host's network, environment and
+    files.
+    """
+    if box == None:
+        python_bootstrap_binary(name = name, main = main, deps = deps, **kwargs)
+    else:
+        if boxes != None:
+            fail("python.binary {}: a binary with box is checked in that box, so it takes no boxes".format(name))
+        _box_python_binary(name = name, box = box, main = main, deps = deps, **kwargs)
+        boxes = [box]
+    ty_check(name = name + "-ty", srcs = [main], deps = deps, boxes = boxes)
+
+python = struct(
+    binary = _binary,
+    flat_tree = flat_tree,
+    library = _library,
+    typecheck = ty_check,
+)

@@ -27,12 +27,12 @@ SPDX-License-Identifier: MPL-2.0
 Cell layout and architecture: [the design plan](docs/design/architecture.md). User guides are under
 `docs/user/`, design documents under `docs/design/`.
 
-- A unit test is `<driver>_test.py` beside its driver, run by a `box_python_test` in the same package.
-- An assertion about what a build produced is a `box_sh_test` beside the target that produced it, taking
+- A unit test is `<driver>_test.py` beside its driver, run by a `box.python_test` in the same package.
+- An assertion about what a build produced is a `box.sh_test` beside the target that produced it, taking
   artifacts as `$(location)` arguments so it runs against pinned tools rather than the host's.
-- Python sources reach a suite in another package through `deps` on a `tine_python_library`, never
+- Python sources reach a suite in another package through `deps` on a `python.library`, never
   `export_file`.
-- Python drivers use `tine_python_library`/`tine_python_binary`. Never declare the prelude's bootstrap
+- Python drivers use `python.library`/`python.binary`. Never declare the prelude's bootstrap
   target or a `-ty` check by hand; the macros do both.
 - A driver importing third-party modules lists the `boxes` its check resolves against, one check per box.
   `typecheck = False` is for vendored sources only.

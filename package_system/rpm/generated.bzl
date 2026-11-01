@@ -5,7 +5,7 @@
 
 load("@prelude//:native.bzl", "native")
 load("//package:local_packages.bzl", "local_packages")
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("//platforms:architecture.bzl", "architecture")
 load(":rules.bzl", "rpm_package")
 
 # Keep these records aligned with the importer's generated schema.
@@ -28,17 +28,17 @@ SrcpkgMetadata = record(
 
 PackageMetadata = dict[str, typing.Any]
 
-def _build_requires(meta: SrcpkgMetadata, architecture: str) -> list[str]:
+def _build_requires(meta: SrcpkgMetadata, rpm_arch: str) -> list[str]:
     """Combine common and one architecture's conditional BuildRequires."""
     brs = meta.build_requires
-    return sorted(brs["_all"] + brs.get(architecture, []))
+    return sorted(brs["_all"] + brs.get(rpm_arch, []))
 
 def _by_architecture(meta: SrcpkgMetadata, value: typing.Callable) -> Select:
     """`value(rpm_arch)` for each architecture the import recorded binaries for.
 
     Building for any other architecture fails configuring the target.
     """
-    return architecture.select({name: value(spellings.rpm) for name, spellings in ARCHITECTURES.items() if spellings.rpm in meta.binaries})
+    return architecture.select({name: value(spellings.rpm) for name, spellings in architecture.ARCHITECTURES.items() if spellings.rpm in meta.binaries})
 
 def _parse_metadata(meta: PackageMetadata) -> SrcpkgMetadata:
     """Validate one generated JSON value and return its typed representation."""

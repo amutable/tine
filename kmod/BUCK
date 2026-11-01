@@ -3,17 +3,17 @@
 
 """Kernel module selection for the initrd of a UKI."""
 
-load("//box:test.bzl", "box_python_test")
-load("//python:defs.bzl", "tine_python_library")
+load("//box:defs.bzl", "box")
+load("//python:defs.bzl", "python")
 
-tine_python_library(
+python.library(
     name = "kmod",
     srcs = ["kmod.py"],
     deps = ["//:util"],
     visibility = ["tine//..."],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "tine//tools:dev.box",
     srcs = [

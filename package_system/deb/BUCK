@@ -3,41 +3,41 @@
 
 """The Debian package planner, repository snapshotter, and the metadata readers they share."""
 
-load("//box:test.bzl", "box_python_test")
+load("//box:defs.bzl", "box")
 load("//package:system.bzl", "package_system")
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
+load("//python:defs.bzl", "python")
 
-tine_python_library(
+python.library(
     name = "aptget",
     srcs = ["aptget.py"],
     deps = ["//:util"],
 )
 
-tine_python_library(
+python.library(
     name = "deb822",
     srcs = ["deb822.py"],
     deps = ["//:util", "//package:href", "//package:snapshotter"],
 )
 
-tine_python_library(
+python.library(
     name = "debfile",
     srcs = ["debfile.py"],
     deps = ["//:util"],
 )
 
-tine_python_library(
+python.library(
     name = "release",
     srcs = ["release.py"],
     deps = [":deb822", "//:util", "//package:href", "//package:snapshotter"],
 )
 
-tine_python_binary(
+python.binary(
     name = "extract",
     main = "extract.py",
     deps = [":debfile", "//package:extractor"],
 )
 
-tine_python_binary(
+python.binary(
     name = "plan",
     main = "plan.py",
     deps = [
@@ -51,7 +51,7 @@ tine_python_binary(
     ],
 )
 
-tine_python_binary(
+python.binary(
     name = "snapshot",
     main = "snapshot.py",
     deps = [
@@ -63,19 +63,19 @@ tine_python_binary(
     ],
 )
 
-tine_python_binary(
+python.binary(
     name = "verify",
     main = "verify.py",
     deps = [":deb822", ":release", "//:specs", "//:util", "//package:snapshotter"],
 )
 
-tine_python_binary(
+python.binary(
     name = "install",
     main = "install.py",
     deps = [":aptget", ":debfile", "//:util", "//package:installer"],
 )
 
-tine_python_binary(
+python.binary(
     name = "pkgdb",
     main = "pkgdb.py",
     deps = [":debfile", "//:specs", "//:util", "//archive:tar", "//image:finalize"],
@@ -105,7 +105,7 @@ package_system(
 )
 
 # The tests sign a Release with gpg and verify it with sqv. The dev box has gpg and sqv.
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

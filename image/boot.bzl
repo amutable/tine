@@ -4,7 +4,7 @@
 """Unified kernel images, and the boot artifacts extracted from a completed logical image."""
 
 load("//kmod:initrd_modules.toml", _INITRD_MODULES = "value")
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("//platforms:architecture.bzl", "architecture")
 load(":archive.bzl", "ImageArchiveInfo")
 load(
     ":ddi.bzl",
@@ -126,7 +126,7 @@ def declare_uki(
         image = image,
         spec = {
             "cmdline": cmdline,
-            "efi_arch": ARCHITECTURES[arch].efi,
+            "efi_arch": architecture.ARCHITECTURES[arch].efi,
             "image_id": image_id,
             "initrd_modules": initrd_modules,
             "initrds": [initrd.archive for initrd in initrds],
@@ -142,7 +142,7 @@ def declare_uki(
             "secure_boot": signing_key_spec(secure_boot_key),
             "sign_expected_pcr": signing_key_spec(sign_expected_pcr_key),
             "splash": splash,
-            "systemd_arch": ARCHITECTURES[arch].systemd,
+            "systemd_arch": architecture.ARCHITECTURES[arch].systemd,
             "version": version,
         },
     )
@@ -178,7 +178,7 @@ def _uki_impl(ctx: AnalysisContext) -> list[Provider]:
     return [DefaultInfo(default_output = info.ukis, sub_targets = uki_subtargets(info)), info]
 
 UKI_ATTRS = {
-    "arch": attrs.enum(ARCHITECTURES.keys(), default = architecture.configured()),
+    "arch": attrs.enum(architecture.ARCHITECTURES.keys(), default = architecture.configured()),
     "cmdline": attrs.list(
         attrs.string(),
         default = [],

@@ -3,11 +3,11 @@
 
 """Prebuilt tools downloaded and verified by Buck."""
 
-load("//python:defs.bzl", "tine_python_binary")
+load("//python:defs.bzl", "python")
 
 # The pinned CPython is new enough to have zstd in its standard library.
 # PUBLIC: an `http.tool(compressed = True)` in a consuming project depends on it.
-tine_python_binary(
+python.binary(
     name = "unzstd",
     main = "unzstd.py",
     visibility = ["PUBLIC"],

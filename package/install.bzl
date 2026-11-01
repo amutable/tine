@@ -3,8 +3,8 @@
 
 """Resolve and install native packages into filesystem roots."""
 
-load("//:specs.bzl", "spec_args")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load("//platforms:architecture.bzl", "architecture")
 load(":local_packages.bzl", "LocalPackageUniverseInfo", "select_local_packages")
 load(":manager.bzl", "PackageManagerInfo", "configure_repositories")
@@ -75,7 +75,7 @@ def resolve_packages(
     tx = ctx.actions.declare_output(prefix + "transaction.json")
     plan = solve_command(
         ctx = ctx,
-        box = box_dep[BoxInfo],
+        box = box_dep[box.Info],
         system = system,
         repositories = plan_repositories,
         install = install,
@@ -110,8 +110,8 @@ def _install_actions(
     out = ctx.actions.declare_output("install.delta" if stack else "root", dir = True)
     work = ctx.actions.declare_output("install.work", dir = True) if stack else None
     cmd = cmd_args(
-        box_run(box = box_dep[BoxInfo], exe = system.install),
-        spec_args(
+        box.run(box = box_dep[box.Info], exe = system.install),
+        specs.args(
             ctx.actions,
             "install.spec.json",
             {
@@ -137,7 +137,7 @@ def _install_packages_impl(ctx: AnalysisContext) -> list[Provider]:
 _install_packages = anon_rule(
     impl = _install_packages_impl,
     attrs = {
-        "box": attrs.dep(providers = [BoxInfo]),
+        "box": attrs.dep(providers = [box.Info]),
         "extra_packages": attrs.list(attrs.source(), default = []),
         "install": attrs.list(attrs.string()),
         "package_manager": attrs.dep(providers = [PackageManagerInfo]),
@@ -150,7 +150,7 @@ _install_packages = anon_rule(
 def install_packages(
     ctx: AnalysisContext,
     package_manager: Dependency,
-    box: Dependency,
+    box_dep: Dependency,
     install: list[str],
     stack: list[Artifact] = [],
     extra_packages: list[Artifact] = [],
@@ -159,7 +159,7 @@ def install_packages(
         root = ctx.actions.anon_target(
             _install_packages,
             {
-                "box": box,
+                "box": box_dep,
                 "extra_packages": extra_packages,
                 "install": sorted(install),
                 "name": "//install-packages:{}".format(package_manager.label.name),
@@ -168,4 +168,4 @@ def install_packages(
         ).artifact("root")
         # A promise is resolved before the anon target is analysed, so its path kind is asserted here.
         return ctx.actions.assert_short_path(ctx.actions.assert_has_content_based_path(root), short_path = "root")
-    return _install_actions(ctx, package_manager, box, install, stack, extra_packages)
+    return _install_actions(ctx, package_manager, box_dep, install, stack, extra_packages)

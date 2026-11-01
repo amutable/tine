@@ -5,7 +5,7 @@
 
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
-load("//python:defs.bzl", "box_python_binary", "tine_python_library")
+load("//python:defs.bzl", "python")
 
 # External dependencies. Production and tests run in the same box.
 box.new(
@@ -29,14 +29,14 @@ _MODULES = [
     "wire.py",
 ]
 
-tine_python_library(
+python.library(
     name = "lib",
     srcs = _MODULES,
     boxes = [":shim.box"],
     visibility = ["tine//..."],
 )
 
-box_python_binary(
+python.binary(
     name = "shim",
     box = ":shim.box",
     main = "shim.py",
@@ -45,14 +45,14 @@ box_python_binary(
 )
 
 # A real S3 server for tests, here and for the round trip in tine//tests. Standard library only.
-tine_python_library(
+python.library(
     name = "seaweed",
     srcs = ["seaweed.py"],
     visibility = ["tine//tests/..."],
 )
 
 # Keys and certificates for the tests, and a throwaway CA for a test bucket.
-box_python_binary(
+python.binary(
     name = "test-ca",
     box = ":shim.box",
     main = "test_ca.py",

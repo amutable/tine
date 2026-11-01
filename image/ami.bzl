@@ -3,8 +3,8 @@
 
 """Amazon Machine Images: a bootable disk with what EC2 needs to register it."""
 
-load("//box:runtime.bzl", "BoxInfo", "box_run")
-load("//platforms:architecture.bzl", "ARCHITECTURES")
+load("//box:defs.bzl", "box")
+load("//platforms:architecture.bzl", "architecture")
 load(":publish.bzl", "PublishedFile", "PublishedInfo")
 
 # What `RegisterImage` accepts in an image name besides letters and digits.
@@ -35,7 +35,7 @@ def declare_ami(
     *,
     arch: str,
     basename: str,
-    box: BoxInfo,
+    box_info: box.Info,
     disk: Artifact,
     importer: RunInfo,
     secure_boot_certificate: Artifact | None,
@@ -47,11 +47,11 @@ def declare_ami(
     `aws ec2 register-image --cli-input-json` takes them as they are once the import adds the snapshot.
     The subtarget publishes them as `<basename>.ami.json`, so that a release carries everything an import
     needs besides the disk. Running the subtarget imports the disk with `importer`. With a
-    `secure_boot_certificate`, the parameters include the UEFI variable store that enrolls it; `box`
+    `secure_boot_certificate`, the parameters include the UEFI variable store that enrolls it; `box_info`
     provides the tool that writes it.
     """
     register = {
-        "Architecture": ARCHITECTURES[arch].ec2,
+        "Architecture": architecture.ARCHITECTURES[arch].ec2,
         "BlockDeviceMappings": [
             {
                 "DeviceName": _ROOT_DEVICE,
@@ -83,7 +83,7 @@ def declare_ami(
             _with_uefi_data(
                 out = parameters.as_output(),
                 register = register,
-                uefi_data = _uefi_data(actions, box, secure_boot_certificate),
+                uefi_data = _uefi_data(actions, box_info, secure_boot_certificate),
             ),
         )
     return [
@@ -113,7 +113,7 @@ _with_uefi_data = dynamic_actions(
     },
 )
 
-def _uefi_data(actions: AnalysisActions, box: BoxInfo, certificate: Artifact) -> Artifact:
+def _uefi_data(actions: AnalysisActions, box_info: box.Info, certificate: Artifact) -> Artifact:
     """The instance's initial UEFI variable store, which trusts `certificate` as PK, KEK, and db.
 
     Without it, an instance boots in Secure Boot setup mode, and the first thing it boots may enroll
@@ -122,7 +122,7 @@ def _uefi_data(actions: AnalysisActions, box: BoxInfo, certificate: Artifact) ->
     uefi_data = actions.declare_output("ami-uefi-data")
     actions.run(
         cmd_args(
-            box_run(box = box),
+            box.run(box = box_info),
             "virt-fw-vars",
             "--set-pk",
             _SIGNATURE_OWNER,

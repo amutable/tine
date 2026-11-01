@@ -76,6 +76,7 @@ def _host() -> str:
     fail("architecture: tine runs on {}, not on this host".format(sorted(ARCHITECTURES)))
 
 architecture = struct(
+    ARCHITECTURES = ARCHITECTURES,
     configured = _configured,
     host = _host,
     select = _select,

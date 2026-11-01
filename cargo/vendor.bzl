@@ -3,7 +3,7 @@
 
 """Turn a loaded Cargo.lock's crate list into the vendored tree an offline build reads."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 
 # The attributes one crate-graph vendoring costs a rule. `assemble_vendor` names its outputs
 # unconditionally, so a rule may call it once.
@@ -31,7 +31,7 @@ def assemble_vendor(actions: AnalysisActions, tool: RunInfo, crates: list[dict[s
     actions.run(
         cmd_args(
             tool,
-            spec_args(
+            specs.args(
                 actions,
                 root + "/cargo-vendor.spec.json",
                 {

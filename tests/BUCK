@@ -3,11 +3,11 @@
 
 """Cross-image test drivers. Unit tests live beside the code they exercise (`tine//<pkg>:test`)."""
 
-load("//python:defs.bzl", "tine_python_binary")
+load("//python:defs.bzl", "python")
 
 # Generic image_vm boot smoke driver: boots any VM runner under a pty, waits for the autologin
 # shell, asserts the system settled, then powers off. Reused by the example smoke targets.
-tine_python_binary(
+python.binary(
     name = "boot-smoke",
     main = "boot-smoke.py",
     visibility = ["PUBLIC"],
@@ -16,7 +16,7 @@ tine_python_binary(
 # The shared build cache end to end: a cold build through `tine buck` publishes the Go example to a
 # SeaweedFS bucket, and a cleaned checkout with a fresh shim gets it back. Minutes rather than
 # seconds and needs a network for the Go modules, so it is a ci.sh group rather than a suite.
-tine_python_binary(
+python.binary(
     name = "cache-roundtrip-driver",
     main = "cache_roundtrip.py",
     deps = [
@@ -34,7 +34,7 @@ command_alias(
 
 # The test builds the Secure Boot example twice in an isolation dir of its own and takes minutes. tools/ci.sh
 # runs it as a group instead of as a test suite.
-tine_python_binary(
+python.binary(
     name = "rebuild-reproducibility",
     main = "rebuild_reproducibility.py",
     deps = ["//:util"],

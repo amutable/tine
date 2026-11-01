@@ -3,7 +3,7 @@
 
 """Package a logical image as an extension DDI or as a portable service DDI."""
 
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("//platforms:architecture.bzl", "architecture")
 load(
     ":ddi.bzl",
     "declare_ddi",
@@ -77,7 +77,7 @@ def ddi_names(what: str, name: str, version: str, arch: str) -> (str, str):
 
     if arch == "_any":
         return "{}_{}_all".format(name, version), "_any"
-    systemd_arch = ARCHITECTURES[arch].systemd
+    systemd_arch = architecture.ARCHITECTURES[arch].systemd
     return "{}_{}_{}".format(name, version, systemd_arch), systemd_arch
 
 def _declare_preset(
@@ -278,7 +278,7 @@ def declare_portable(
 
 _COMMON_ATTRS = {
     "arch": attrs.enum(
-        ARCHITECTURES.keys() + ["_any"],
+        architecture.ARCHITECTURES.keys() + ["_any"],
         default = architecture.configured(),
         doc = "architecture the image runs on, in its name and the ARCHITECTURE of an extension, "
         + "\"_any\" publishes the DDI as '..._all' and sets ARCHITECTURE=_any",

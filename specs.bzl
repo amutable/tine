@@ -31,3 +31,9 @@ def executable(exe: Dependency) -> cmd_args:
     """Name an executable in a spec, keeping its runtime files as action inputs."""
     info = exe[DefaultInfo]
     return cmd_args(info.default_outputs[0], delimiter = "", hidden = info.other_outputs)
+
+specs = struct(
+    args = spec_args,
+    argument = spec_argument,
+    executable = executable,
+)

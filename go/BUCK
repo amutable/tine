@@ -4,10 +4,9 @@
 """Go source builds: one online, go.sum-verified module fetch, then an offline compile."""
 
 load("//box:defs.bzl", "box")
-load("//box:test.bzl", "box_python_test")
 load("//distribution:defs.bzl", "distribution")
 load("//go:defs.bzl", "go")
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
+load("//python:defs.bzl", "python")
 
 # The box that go.package() builds in unless a project names its own. Fedora's golang package depends on
 # gcc, so go enables cgo in the Fedora box. The Arch and Debian boxes contain no C compiler, so go disables
@@ -30,7 +29,7 @@ box.new(
 
 # The project's source artifacts in; the module root, its pins, the go.mod files the fetch reads and the
 # Go release to build with out.
-tine_python_binary(
+python.binary(
     name = "workspace",
     main = "workspace.py",
     visibility = ["PUBLIC"],
@@ -38,25 +37,25 @@ tine_python_binary(
 )
 
 # refresh-catalog runs this driver on the host through a go.releases target's [snapshot] sub-target.
-tine_python_binary(
+python.binary(
     name = "releases",
     main = "releases.py",
     visibility = ["PUBLIC"],
     deps = [":goversion", "//:specs", "//:util"],
 )
 
-tine_python_library(
+python.library(
     name = "goversion",
     srcs = ["goversion.py"],
 )
 
-tine_python_library(
+python.library(
     name = "toolchain",
     srcs = ["toolchain.py"],
 )
 
 # Runs inside the box with the network: go.mod and go.sum files in, the verified module cache out.
-tine_python_binary(
+python.binary(
     name = "fetch",
     main = "fetch.py",
     visibility = ["PUBLIC"],
@@ -68,7 +67,7 @@ tine_python_binary(
 )
 
 # Runs inside the box offline: the source tree and its module cache in, the declared binaries out.
-tine_python_binary(
+python.binary(
     name = "build",
     main = "build.py",
     visibility = ["PUBLIC"],
@@ -81,7 +80,7 @@ tine_python_binary(
 )
 
 # Runs inside the box offline. It runs each test binary that the build compiled in the binary's package directory.
-tine_python_binary(
+python.binary(
     name = "runner",
     main = "runner.py",
     visibility = ["PUBLIC"],
@@ -96,7 +95,7 @@ tine_python_binary(
 # without one.
 go.releases(name = "unrefreshed.releases")
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

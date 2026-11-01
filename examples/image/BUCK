@@ -11,10 +11,10 @@ image rule declares for itself.
 """
 
 load("@tine//box:defs.bzl", "box")
-load("@tine//distribution:defs.bzl", "FAMILIES", "distribution")
+load("@tine//distribution:defs.bzl", "distribution")
 load("@tine//image:defs.bzl", "image")
-load("@tine//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
-load("@tine//python:defs.bzl", "box_python_binary")
+load("@tine//platforms:architecture.bzl", "architecture")
+load("@tine//python:defs.bzl", "python")
 load("@tine//tests:defs.bzl", "tests")
 load(":expected.json", _expected = "value")
 
@@ -253,7 +253,7 @@ tests.vm_smoke(
         # volatile root, and whether anything recreates that symlink is a property of the
         # distribution's own systemd rather than of the image.
         # Each family's os-release ID is the family's name.
-        distribution.select({name: "grep -q '^ID={}$' /usr/lib/os-release".format(name) for name in FAMILIES}),
+        distribution.select({name: "grep -q '^ID={}$' /usr/lib/os-release".format(name) for name in distribution.FAMILIES}),
         "bootctl | grep -F 'Secure Boot: disabled (setup)'",
         # The build compiled the hardware database into /usr, which is read-only here, so a guest
         # that has it got it from the build rather than from a boot-time regeneration.
@@ -311,7 +311,7 @@ assert register["Architecture"] == sys.argv[2], register
 assert register["BlockDeviceMappings"][0]["Ebs"]["VolumeSize"] == 2, register
 ' "$@"
 """,
-    args = ["$(location :boot-demo.fedora[ami])"] + architecture.select({name: [spellings.ec2] for name, spellings in ARCHITECTURES.items()}),
+    args = ["$(location :boot-demo.fedora[ami])"] + architecture.select({name: [spellings.ec2] for name, spellings in architecture.ARCHITECTURES.items()}),
     distro = _FEDORA,
 )
 
@@ -480,7 +480,7 @@ box.sh_test(
         "$(location :boot-demo.fedora[boot][initrd])",
         "$(location :boot-demo.fedora[initrd])",
     ]
-    + architecture.select({name: [name] for name in ARCHITECTURES}),
+    + architecture.select({name: [name] for name in architecture.ARCHITECTURES}),
     distro = _FEDORA,
 )
 
@@ -501,7 +501,7 @@ box.sh_test(
     labels = ["image"],
     box = "tine//distribution:tools.box",
     test = "uki-microcode.sh",
-    args = ["$(location :boot-demo.fedora[boot][uki])"] + architecture.select({name: [name] for name in ARCHITECTURES}),
+    args = ["$(location :boot-demo.fedora[boot][uki])"] + architecture.select({name: [name] for name in architecture.ARCHITECTURES}),
     distro = _FEDORA,
 )
 
@@ -523,9 +523,9 @@ box.sh_test(
     box = "@tine//tools:dev.box",
     script = 'test "$(basename "$1")" = "$2" && test "$(basename "$3")" = "$4"',
     args = ["$(location :demo-ext.fedora)"]
-    + architecture.select({name: ["demo-ext_0_{}.sysext.raw".format(spellings.systemd)] for name, spellings in ARCHITECTURES.items()})
+    + architecture.select({name: ["demo-ext_0_{}.sysext.raw".format(spellings.systemd)] for name, spellings in architecture.ARCHITECTURES.items()})
     + ["$(location :demo-confext.fedora)"]
-    + architecture.select({name: ["demo-confext_0_{}.confext.raw".format(spellings.systemd)] for name, spellings in ARCHITECTURES.items()}),
+    + architecture.select({name: ["demo-confext_0_{}.confext.raw".format(spellings.systemd)] for name, spellings in architecture.ARCHITECTURES.items()}),
     distro = _FEDORA,
 )
 
@@ -537,9 +537,9 @@ box.sh_test(
     box = "@tine//tools:dev.box",
     script = 'test "$(basename "$1")" = "$2" && test "$(basename "$3")" = "$4"',
     args = ["$(location :demo-portable.fedora)"]
-    + architecture.select({name: ["demo-portable_0_{}.raw".format(spellings.systemd)] for name, spellings in ARCHITECTURES.items()})
+    + architecture.select({name: ["demo-portable_0_{}.raw".format(spellings.systemd)] for name, spellings in architecture.ARCHITECTURES.items()})
     + ["$(location :demo-portable-ext.fedora)"]
-    + architecture.select({name: ["demo-portable-ext_0_{}.raw".format(spellings.systemd)] for name, spellings in ARCHITECTURES.items()}),
+    + architecture.select({name: ["demo-portable-ext_0_{}.raw".format(spellings.systemd)] for name, spellings in architecture.ARCHITECTURES.items()}),
     distro = _FEDORA,
 )
 
@@ -590,7 +590,7 @@ box.sh_test(
     }),
 )
 
-box_python_binary(
+python.binary(
     name = "refresh-expected",
     box = "@tine//tools:dev.box",
     main = "expected.py",

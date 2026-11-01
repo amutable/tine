@@ -3,9 +3,8 @@
 
 """Build a Rust project from its own source tree, offline and SBOM-visible."""
 
-load("//:specs.bzl", "executable", "spec_args")
-load("//box:build.bzl", "box_layer")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//platforms:architecture.bzl", "architecture")
 load("//project:defs.bzl", "project")
@@ -67,7 +66,7 @@ git --git-dir="$git_dir" config --bool core.bare true""",
     actions.run(
         cmd_args(
             build,
-            spec_args(
+            specs.args(
                 actions,
                 _PRIVATE + "/cargo-build.spec.json",
                 {
@@ -115,12 +114,12 @@ def _cargo_package_impl(ctx: AnalysisContext) -> list[Provider]:
     # the cache, only do that for incremental builds; otherwise build in scratch space.
     target = project.kept_dir(ctx.actions, _PRIVATE + "/target") if ctx.attrs.incremental else None
 
-    box = box_layer(ctx, ctx.attrs.box, ctx.attrs.buildroot_packages)
+    build_box = box.layer(ctx, ctx.attrs.box, ctx.attrs.buildroot_packages)
     resolved = ctx.actions.declare_output(_PRIVATE + "/workspace.json")
     ctx.actions.run(
         cmd_args(
             ctx.attrs._lock[RunInfo],
-            spec_args(
+            specs.args(
                 ctx.actions,
                 _PRIVATE + "/cargo-lock.spec.json",
                 {
@@ -136,10 +135,10 @@ def _cargo_package_impl(ctx: AnalysisContext) -> list[Provider]:
 
     ctx.actions.dynamic_output_new(
         _cargo_build(
-            auditable = executable(ctx.attrs._auditable),
+            auditable = specs.executable(ctx.attrs._auditable),
             bin = bin.as_output(),
             binaries = ctx.attrs.binaries,
-            build = box_run(box = box, exe = ctx.attrs._build),
+            build = box.run(box = build_box, exe = ctx.attrs._build),
             fetch = ctx.attrs._fetch[RunInfo],
             incremental = ctx.attrs.incremental,
             lock = resolved,
@@ -149,7 +148,7 @@ def _cargo_package_impl(ctx: AnalysisContext) -> list[Provider]:
             vendor = ctx.attrs._vendor[RunInfo],
         ),
     )
-    return project.binaries_providers(outputs, box_run(box, relaxed = True, name = ctx.label.name))
+    return project.binaries_providers(outputs, box.run(build_box, relaxed = True, name = ctx.label.name))
 
 _cargo_package = rule(
     impl = _cargo_package_impl,
@@ -157,7 +156,7 @@ _cargo_package = rule(
         "binaries": attrs.list(attrs.string(), doc = "binaries to take out of the build"),
         # `box` is a dep rather than an exec_dep, so tine//cargo:build.box builds from the release of the
         # distribution that the binaries are built for.
-        "box": attrs.dep(providers = [BoxInfo], default = "tine//cargo:build.box", doc = "box with the Rust toolchain"),
+        "box": attrs.dep(providers = [box.Info], default = "tine//cargo:build.box", doc = "box with the Rust toolchain"),
         "buildroot_packages": attrs.list(
             attrs.string(), default = [], doc = "packages to install on top of `box`, such as the development packages the project links against"
         ),

@@ -1256,8 +1256,11 @@ and `image.vm`) and the `image.archive`, `image.sysext`, `image.confext`, `image
 are members of the `image` struct exported from `tine//image:defs.bzl`; that facade is the public API, and
 the modules behind it are implementation structure. Every public facade a consuming project loads from
 exports one namespace struct the same way: `box`, `cargo`, `go`, `git`, `package`, `package_system/rpm`,
-`package_system/deb`, `package_system/pacman`, `distribution`, `http`, and `tests`. Every rule resolves its
-drivers through one `ImageToolsInfo` bundle at `tine//image:tools` instead of a private attribute per driver.
+`package_system/deb`, `package_system/pacman`, `distribution`, `http`, `platform`, `python`, and `tests`.
+Internal callers can use a public facade when the import does not create a load cycle. A facade's
+dependencies import the implementation helpers directly.
+Every rule resolves its drivers through one `ImageToolsInfo` bundle at `tine//image:tools` instead of a private
+attribute per driver.
 
 The package database and SBOMs are supply-chain outputs read from the assembled image, never shipped in it.
 Declaring any logical image declares both lazy facets, so compositions inherit them rather than repeating a

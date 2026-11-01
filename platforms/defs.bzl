@@ -9,7 +9,7 @@ be reached as `exec_dep`. They cannot execute target platform code.
 """
 
 load("@prelude//cfg/exec_platform:marker.bzl", "get_exec_platform_marker")
-load(":architecture.bzl", "ARCHITECTURES")
+load(":architecture.bzl", "architecture")
 
 def check_unmarked(platform: PlatformInfo, marker: ConstraintValueInfo) -> None:
     """Fail if `platform` contains the exec marker constraint `marker`."""
@@ -24,18 +24,19 @@ def _architecture_transition_impl(platform: PlatformInfo, refs: struct) -> Platf
     check_unmarked(platform, refs.exec_marker[ConstraintValueInfo])
     setting = refs.cpu[ConstraintSettingInfo].label
     cpu = platform.configuration.constraints.get(setting)
-    for name in ARCHITECTURES:
+    for name in architecture.ARCHITECTURES:
         target = getattr(refs, name)[PlatformInfo]
         if cpu != None and target.configuration.constraints[setting].label == cpu.label:
             return target
-    fail("{} configures none of the architectures {}".format(platform.label, sorted(ARCHITECTURES)))
+    fail("{} configures none of the architectures {}".format(platform.label, sorted(architecture.ARCHITECTURES)))
 
 # A rule that sets this as its `cfg` is configured for the target platform of the caller's architecture.
 # All callers of one architecture then reach the same configured target, whatever else their
 # configurations contain.
 architecture_transition = transition(
     impl = _architecture_transition_impl,
-    refs = {name: "tine//platforms:" + name for name in ARCHITECTURES} | {"cpu": "config//cpu/constraints:cpu", "exec_marker": get_exec_platform_marker()},
+    refs = {name: "tine//platforms:" + name for name in architecture.ARCHITECTURES}
+    | {"cpu": "config//cpu/constraints:cpu", "exec_marker": get_exec_platform_marker()},
 )
 
 def _target_platform_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -122,3 +123,10 @@ def execution_platform(name: str, **kwargs) -> None:
     one. So the cache decision happens via `[buck2_re_client]` config presence.
     """
     _execution_platform(name = name, allow_cache_uploads = read_root_config("tine", "cache-uploads") == "true", remote_cache_enabled = _cache_configured(), **kwargs)
+
+platform = struct(
+    architecture_transition = architecture_transition,
+    check_unmarked = check_unmarked,
+    execution = execution_platform,
+    target = target_platform,
+)

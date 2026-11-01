@@ -3,14 +3,14 @@
 
 """Expand a template a project ships into a file an image installs."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 
 def _substitute_impl(ctx: AnalysisContext) -> list[Provider]:
     out = ctx.actions.declare_output(ctx.label.name)
     ctx.actions.run(
         cmd_args(
             ctx.attrs._substitute[RunInfo],
-            spec_args(
+            specs.args(
                 ctx.actions,
                 "substitute.spec.json",
                 {

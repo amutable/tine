@@ -3,9 +3,8 @@
 
 """The action that checks out the packaging commit that a source checkout pins."""
 
-load("//:specs.bzl", "spec_args")
-load("//box:build.bzl", "box_layer")
-load("//box:runtime.bzl", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load(":buildroot.bzl", "BuildrootInfo")
 
 def pinned_packaging(
@@ -25,9 +24,9 @@ def pinned_packaging(
     ctx.actions.run(
         cmd_args(
             # The tools box of the buildroot contains no git.
-            box_run(box = box_layer(ctx, buildroot.box, [git]), exe = driver, network = True),
+            box.run(box = box.layer(ctx, buildroot.box, [git]), exe = driver, network = True),
             # The pin file is the fetch's only input, so an edit elsewhere in the checkout does not rerun the fetch.
-            spec_args(ctx.actions, "packaging.spec.json", {"distro": distro, "out": packaging.as_output(), "pin": pin, "subdir": subdir}),
+            specs.args(ctx.actions, "packaging.spec.json", {"distro": distro, "out": packaging.as_output(), "pin": pin, "subdir": subdir}),
         ),
         allow_cache_upload = True,
         category = "packaging",

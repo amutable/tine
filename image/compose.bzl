@@ -3,10 +3,10 @@
 
 """Convenience compositions for image products."""
 
-load("//box:runtime.bzl", "BoxInfo")
+load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:manager.bzl", "PackageManagerInfo")
-load("//platforms:architecture.bzl", "ARCHITECTURES")
+load("//platforms:architecture.bzl", "architecture")
 load(":ami.bzl", "declare_ami")
 load(
     ":archive.bzl",
@@ -114,7 +114,7 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
     tools = ctx.attrs._tools[ImageToolsInfo]
     image = declare_image(
         ctx,
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         tools = tools,
         install_docs = ctx.attrs.install_docs,
         install_langs = ctx.attrs.install_langs,
@@ -218,7 +218,7 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
     tools = ctx.attrs._tools[ImageToolsInfo]
     image = declare_image(
         ctx,
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         tools = tools,
         identifier = "image",
         package_manager = ctx.attrs.package_manager,
@@ -263,7 +263,7 @@ def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
         parent = ctx.attrs.parent[ImageInfo]
     image = declare_image(
         ctx,
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         tools = tools,
         identifier = "image",
         package_manager = ctx.attrs.package_manager,
@@ -300,7 +300,7 @@ _extension = rule(
 def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
     image = declare_image(
         ctx,
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         tools = ctx.attrs._tools[ImageToolsInfo],
         identifier = "image",
         package_manager = ctx.attrs.package_manager,
@@ -345,7 +345,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
 
     root = declare_image(
         ctx,
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         tools = tools,
         identifier = "root",
         install_docs = ctx.attrs.install_docs,
@@ -397,7 +397,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
 
     # Everything this composition publishes is named after the image identity: the disk, the UKI,
     # and every split partition, which repart names after the image it writes them out of.
-    basename = "{}_{}_{}".format(image_id, version, ARCHITECTURES[ctx.attrs.arch].systemd)
+    basename = "{}_{}_{}".format(image_id, version, architecture.ARCHITECTURES[ctx.attrs.arch].systemd)
 
     if bootable:
         # The disk() macro makes a disk bootable only when its definitions contain an ESP partition.
@@ -413,7 +413,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         system = declare_ddi(
             ctx,
             tools = tools,
-            systemd_arch = ARCHITECTURES[ctx.attrs.arch].systemd,
+            systemd_arch = architecture.ARCHITECTURES[ctx.attrs.arch].systemd,
             basename = basename,
             definitions = system_definitions,
             disk = False,
@@ -459,7 +459,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         composed = declare_ddi(
             ctx,
             tools = tools,
-            systemd_arch = ARCHITECTURES[ctx.attrs.arch].systemd,
+            systemd_arch = architecture.ARCHITECTURES[ctx.attrs.arch].systemd,
             basename = basename,
             definitions = boot_definitions,
             identifier = "disk",
@@ -504,7 +504,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         composed = declare_ddi(
             ctx,
             tools = tools,
-            systemd_arch = ARCHITECTURES[ctx.attrs.arch].systemd,
+            systemd_arch = architecture.ARCHITECTURES[ctx.attrs.arch].systemd,
             basename = basename,
             definitions = definitions,
             identifier = "disk",
@@ -530,7 +530,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             tools = tools,
             basename = basename,
             disk = composed.info,
-            box = top.box,
+            box_dep = top.box,
             format = format,
             virtual_size = ctx.attrs.virtual_size if format in VIRTUAL_SIZE_FORMATS else None,
         )
@@ -546,7 +546,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             ctx.actions,
             arch = ctx.attrs.arch,
             basename = basename,
-            box = ctx.attrs._ami_box[BoxInfo],
+            box_info = ctx.attrs._ami_box[box.Info],
             disk = raw,
             importer = ctx.attrs._ami_import[RunInfo],
             # A key held by a token has a URI, not a file, for a certificate; every key rule publishes the
@@ -625,7 +625,7 @@ _BOOTABLE_ATTRS = UKI_ATTRS | {
         providers = [InitrdInfo],
         doc = "the initrd to boot; the declaration macro declares a conventional one when given none",
     ),
-    "_ami_box": attrs.dep(providers = [BoxInfo], default = "tine//tools:aws.box"),
+    "_ami_box": attrs.dep(providers = [box.Info], default = "tine//tools:aws.box"),
     "_ami_import": attrs.dep(providers = [RunInfo], default = "tine//image:ami-import"),
 }
 

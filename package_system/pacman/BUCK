@@ -3,30 +3,30 @@
 
 """The alpm (pacman) native package system and its driver bundle."""
 
-load("//box:test.bzl", "box_python_test")
+load("//box:defs.bzl", "box")
 load("//package:system.bzl", "package_system")
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
+load("//python:defs.bzl", "python")
 
 # Host tools bootstrap the box; remaining drivers run inside it.
 
 # alpm's formats, read and written without the library, plus the library that resolves against
 # them. The host-side drivers below use only the first half; see alpm.py.
-tine_python_library(name = "alpm", srcs = ["alpm.py"], deps = ["//:util"])
+python.library(name = "alpm", srcs = ["alpm.py"], deps = ["//:util"])
 
-tine_python_binary(
+python.binary(
     name = "extract",
     main = "extract.py",
     deps = [":alpm", "//package:extractor"],
 )
 
-tine_python_binary(
+python.binary(
     name = "install",
     main = "install.py",
     deps = [":alpm", "//:util", "//package:installer"],
 )
 
 # The capture driver implements the terminal-image contract, so it takes that library.
-tine_python_binary(
+python.binary(
     name = "pkgdb",
     main = "pkgdb.py",
     deps = [
@@ -37,8 +37,8 @@ tine_python_binary(
         "//image:finalize",
     ],
 )
-tine_python_binary(name = "index", main = "index.py", deps = [":alpm", "//:specs", "//:util"])
-tine_python_binary(
+python.binary(name = "index", main = "index.py", deps = [":alpm", "//:specs", "//:util"])
+python.binary(
     name = "plan",
     main = "plan.py",
     deps = [
@@ -51,21 +51,21 @@ tine_python_binary(
     ],
 )
 
-tine_python_binary(
+python.binary(
     name = "snapshot",
     main = "snapshot.py",
     deps = [":alpm", "//:util", "//package:href", "//package:snapshotter"],
 )
 
-tine_python_library(name = "gnupg", srcs = ["gnupg.py"])
+python.library(name = "gnupg", srcs = ["gnupg.py"])
 
-tine_python_binary(
+python.binary(
     name = "keyring",
     main = "keyring.py",
     deps = [":gnupg", "//:specs", "//:util"],
 )
 
-tine_python_binary(
+python.binary(
     name = "verify",
     main = "verify.py",
     deps = [":alpm", ":gnupg", "//:specs", "//:util", "//package:snapshotter"],
@@ -97,14 +97,14 @@ package_system(
     visibility = ["PUBLIC"],
 )
 
-box_python_test(
+box.python_test(
     name = "plan-test",
     box = "//tools:dev.box",
     srcs = ["alpm.py", "plan.py", "plan_test.py"],
     deps = ["//:specs", "//:util", "//package:href", "//package:transaction", "//rootfs:rootfs"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     deps = ["//:specs", "//:util", "//package:snapshotter"],
