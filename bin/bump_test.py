@@ -215,6 +215,27 @@ class ReleasePin(unittest.TestCase):
         self.assertEqual(data["syft"]["release"], "v1.51.0")
         self.assertEqual(data["syft"]["platforms"]["x86_64"]["artifact"], "syft_1.51.0_linux_amd64.tar.gz")
 
+    def test_moves_a_versioned_strip_prefix_with_the_release(self) -> None:
+        """gh names the top directory of its archive after the tag without its leading "v"."""
+        pins = {
+            "gh": {
+                "repository": "cli/cli",
+                "release": "v2.103.0",
+                "platforms": {
+                    "x86_64": {
+                        "artifact": "gh_2.103.0_linux_amd64.tar.gz",
+                        "sha256": "0" * 64,
+                        "size": 1,
+                        "strip_prefix": "gh_2.103.0_linux_amd64",
+                    },
+                },
+            },
+        }
+        release = {"tag_name": "v2.103.3", "assets": [self.asset("gh_2.103.3_linux_amd64.tar.gz")]}
+        entry = self.bump(pins, release)["gh"]["platforms"]["x86_64"]
+        self.assertEqual(entry["artifact"], "gh_2.103.3_linux_amd64.tar.gz")
+        self.assertEqual(entry["strip_prefix"], "gh_2.103.3_linux_amd64")
+
     def test_bumps_a_pin_needing_no_python_with_no_ty_config(self) -> None:
         """A consuming project can have no ty configuration."""
         release = {"tag_name": "v1.51.0", "assets": [self.asset("syft_1.51.0_linux_amd64.tar.gz")]}

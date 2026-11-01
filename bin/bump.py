@@ -213,6 +213,7 @@ def _bump_tool(
         entry["artifact"] = new_artifact
         entry["sha256"] = digest
         entry["size"] = size
+        _move_strip_prefix(entry, f"{name} platform {arch}", previous, tag)
     spec["release"] = tag
     print(f"{name}: updated {previous} -> {tag}" if changed else f"{name}: {tag} is up to date")
     return (previous, tag) if changed else None
