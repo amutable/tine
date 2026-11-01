@@ -23,14 +23,14 @@ _ARCH_SIGNING_KEYS = {
     "gromit": ("99B6618472A3B3B814185BAED7D3D823B88BDB9B", "ed1qppfih3jee3fqsa8kydgw8wfdjtqd"),
 }
 
-def arch_signing_keys(*users) -> dict[str, str]:
+def _signing_keys(*users) -> dict[str, str]:
     """The `signing_keys` for repositories whose packagers the named main keys vouch for, all of them by default.
 
     A packager's key counts once three declared main keys certify it, so declare at least three.
     """
     users = users or tuple(_ARCH_SIGNING_KEYS)
     if len({user: True for user in users}) < 3:
-        fail("arch_signing_keys: three main keys must vouch for a packager, so declare at least three distinct ones: {}".format(users))
+        fail("arch.signing_keys: three main keys must vouch for a packager, so declare at least three distinct ones: {}".format(users))
     for user in users:
         if user not in _ARCH_SIGNING_KEYS:
             fail("no Arch main key is known for {}; add its fingerprint to distribution/arch.bzl".format(user))
@@ -75,7 +75,7 @@ def _check_name(name: str) -> None:
     if not name.startswith("arch.") or name.count(".") != 1:
         fail("arch release name must be 'arch.<release>': {}".format(name))
 
-def arch_release(
+def _release(
     name: str,
     architectures: list[str],
     signing_keys: dict[str, str],
@@ -92,7 +92,7 @@ def arch_release(
     """Declare the conventional Arch Linux release target bundle.
 
     `signing_keys` are the main keys whose certifications make a packager's key count, normally
-    `arch_signing_keys()`; they are stated so that a reviewer sees which keys a release trusts.
+    `arch.signing_keys()`; they are stated so that a reviewer sees which keys a release trusts.
 
     Every repository shares one archive pin, so the release stays internally consistent: core and
     extra are only guaranteed to solve together when they come from the same day. Overriding the
@@ -102,12 +102,12 @@ def arch_release(
     _check_name(name)
     unknown = [component for component in repository_urls if component not in _COMPONENTS]
     if unknown:
-        fail("arch_release: unknown repository components {}".format(sorted(unknown)))
+        fail("arch.release: unknown repository components {}".format(sorted(unknown)))
     if (archive_snapshot == None) == (not repository_urls):
-        fail("arch_release: takes archive_snapshot or repository_urls, not both or neither: {}".format(name))
+        fail("arch.release: takes archive_snapshot or repository_urls, not both or neither: {}".format(name))
     if repository_urls and sorted(repository_urls) != sorted(_COMPONENTS):
         fail(
-            "arch_release: repository_urls must cover every component {}: {}".format(
+            "arch.release: repository_urls must cover every component {}: {}".format(
                 sorted(_COMPONENTS),
                 name,
             ),
@@ -168,3 +168,8 @@ def arch_release(
         repository_priorities = repository_priorities,
         visibility = visibility,
     )
+
+arch = struct(
+    release = _release,
+    signing_keys = _signing_keys,
+)
