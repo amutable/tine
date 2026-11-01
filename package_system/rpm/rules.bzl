@@ -119,6 +119,7 @@ _rpm_package = rule(
 def rpm_package(
     name: str,
     package: str,
+    source_date_epoch: int,
     spec: str | None = None,
     dev: bool | None = None,
     in_place_packaging: str | None = None,
@@ -158,6 +159,7 @@ def rpm_package(
     _rpm_package(
         name = name,
         package = package,
+        source_date_epoch = source_date_epoch,
         spec = spec,
         configured_dev = configured_dev,
         source_tree = source_tree,
