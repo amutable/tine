@@ -27,6 +27,8 @@ class Spec(TypedDict):
     pin: str
     distro: str
     out: str
+    # `subdir` names the directory of the commit that contains the packaging, or None for the whole tree.
+    subdir: str | None
 
 
 def read_pin(path: Path, distro: str) -> tuple[str, str, str]:
@@ -52,15 +54,23 @@ def read_pin(path: Path, distro: str) -> tuple[str, str, str]:
     return url, branch, commit
 
 
-def check_out(pin: Path, distro: str, out: Path) -> None:
-    """Fill `out` with the tree at the commit that `pin` names for `distro`."""
+def check_out(pin: Path, distro: str, out: Path, subdir: str | None = None) -> None:
+    """Fill `out` with the tree at the commit that `pin` names for `distro`, or with its `subdir` only."""
     url, branch, commit = read_pin(pin, distro)
     subprocess.run(["git", "init", "--quiet", str(out)], check=True)
     # git resolves a relative url against its working directory, and the driver runs in the project root.
     # A pin can therefore name a repository in the project, such as the bundle in examples/package/rpm.
     # `git -C` would resolve the url against `out` instead.
     git = ["git", f"--git-dir={out / '.git'}", f"--work-tree={out}"]
-    fetched = subprocess.run([*git, "fetch", "--quiet", "--", url, f"refs/heads/{branch}"])
+    source, options = url, []
+    if subdir is not None:
+        # A Debian packaging repository also contains the upstream sources and their history. The fetch
+        # leaves out the contents of the files, and the checkout fetches the files in `subdir` only. git
+        # fetches the missing files from a named remote only.
+        subprocess.run([*git, "remote", "add", "origin", url], check=True)
+        subprocess.run([*git, "sparse-checkout", "set", "--no-cone", f"/{subdir}/"], check=True)
+        source, options = "origin", ["--filter=blob:none"]
+    fetched = subprocess.run([*git, "fetch", "--quiet", *options, "--", source, f"refs/heads/{branch}"])
     if fetched.returncode:
         fail(f"{pin}: cannot fetch branch {branch} from {url}")
     ancestor = subprocess.run(
@@ -75,12 +85,14 @@ def check_out(pin: Path, distro: str, out: Path) -> None:
     # would put that file into the package.
     if links := sorted(path.name for path in out.iterdir() if path.is_symlink()):
         fail(f"{pin}: commit {commit} contains symlinks at the top of its tree: {', '.join(links)}")
+    if subdir is not None and not (out / subdir).is_dir():
+        fail(f"{pin}: commit {commit} contains no directory {subdir}")
 
 
 def main(argv: list[str] | None = None) -> None:
     """Parse an invocation and check out the pinned packaging."""
     spec = specs.parse(Spec, "packaging", argv)
-    check_out(Path(spec["pin"]), spec["distro"], Path(spec["out"]))
+    check_out(Path(spec["pin"]), spec["distro"], Path(spec["out"]), spec["subdir"])
 
 
 if __name__ == "__main__":
