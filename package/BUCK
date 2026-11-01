@@ -14,6 +14,13 @@ tine_python_library(
 )
 
 tine_python_library(
+    name = "builder",
+    srcs = ["builder.py"],
+    visibility = ["PUBLIC"],
+    deps = ["//:util", "//rootfs:rootfs"],
+)
+
+tine_python_library(
     name = "extractor",
     srcs = ["extractor.py"],
     visibility = ["PUBLIC"],
