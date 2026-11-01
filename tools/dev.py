@@ -70,13 +70,9 @@ def _starlark_srcs() -> list[Path]:
 
 
 def _orphan_tests(cell: Path) -> list[Path]:
-    """Test files no box_python_test lists in `srcs`, which `buck test` would never run.
-
-    Each suite names its sources explicitly, so a new file beside the code is invisible until it is
-    added to one; nothing else would report that.
-    """
+    """Find test files omitted from Python test suites."""
     targets = json.loads(
-        buck_output("uquery", "kind('box_python_test', tine//...)", "--output-attribute", "srcs")
+        buck_output("uquery", "kind('python_test', tine//...)", "--output-attribute", "srcs")
     )
     # A label in the root package renders as `cell///file`, which would resolve to an absolute path.
     claimed = {
@@ -119,7 +115,7 @@ def _lint(args: argparse.Namespace) -> None:
     _bold("test targets")
     if orphans := _orphan_tests(cell):
         listing = "\n".join(f"  {p.relative_to(cell)}" for p in orphans)
-        fail(f"no box_python_test lists these, so they never run:\n{listing}")
+        fail(f"no python.test suite lists these, so they never run:\n{listing}")
     _bold("ruff")
     _run([args.ruff, "format", "--check", "--no-cache", cell])
     _run([args.ruff, "check", "--no-cache", cell])

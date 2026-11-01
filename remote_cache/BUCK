@@ -59,7 +59,7 @@ python.binary(
     deps = [":lib"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = ":shim.box",
     env = {"WEED": "$(location //tools:seaweedfs)"},

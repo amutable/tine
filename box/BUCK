@@ -4,7 +4,6 @@
 """Pinned execution-environment launcher."""
 
 load("//python:defs.bzl", "python")
-load(":defs.bzl", "box")
 
 python.library(
     name = "isolation",
@@ -19,7 +18,7 @@ python.binary(
     visibility = ["PUBLIC"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

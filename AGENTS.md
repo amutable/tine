@@ -27,7 +27,8 @@ SPDX-License-Identifier: MPL-2.0
 Cell layout and architecture: [the design plan](docs/design/architecture.md). User guides are under
 `docs/user/`, design documents under `docs/design/`.
 
-- A unit test is `<driver>_test.py` beside its driver, run by a `box.python_test` in the same package.
+- A unit test is `<driver>_test.py` beside its driver, run by a `python.test` in the same package.
+  Pass `box` when the tests need its interpreter or packages.
 - An assertion about what a build produced is a `box.sh_test` beside the target that produced it, taking
   artifacts as `$(location)` arguments so it runs against pinned tools rather than the host's.
 - Python sources reach a suite in another package through `deps` on a `python.library`, never

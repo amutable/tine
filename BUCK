@@ -4,7 +4,6 @@
 """Shared tine Python support, and the toolchain Buck2 looks up as `toolchains//`."""
 
 load("@prelude//toolchains:python.bzl", "python_bootstrap_toolchain")
-load("//box:defs.bzl", "box")
 load("//python:defs.bzl", "python")
 
 # Declared here rather than in a `toolchains` cell of its own: Buck2 forbids nesting a cell inside an
@@ -34,7 +33,7 @@ python.library(
     visibility = ["PUBLIC"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = ["util_test.py"],

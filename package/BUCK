@@ -3,7 +3,6 @@
 
 """Native package systems, repositories, releases, managers, and buildroots."""
 
-load("//box:defs.bzl", "box")
 load("//python:defs.bzl", "python")
 
 python.library(
@@ -55,7 +54,7 @@ python.library(
     visibility = ["PUBLIC"],
 )
 
-box.python_test(
+python.test(
     name = "test",
     # installer_test runs systemd-tmpfiles, which only the tools box contains.
     box = "tine//distribution:tools.box",
@@ -67,7 +66,7 @@ box.python_test(
 # tree of the pinned commit.
 python.binary(name = "packaging", main = "packaging.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
 
-box.python_test(
+python.test(
     name = "packaging-test",
     # The test creates git repositories, and the dev box contains git.
     box = "tine//tools:dev.box",
