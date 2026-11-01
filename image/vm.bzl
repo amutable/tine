@@ -4,8 +4,8 @@
 """Interactive virtual-machine image runners."""
 
 load("@prelude//platforms:defs.bzl", "host_configuration")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
-load("//distribution:defs.bzl", "TOOLS_BOX_ATTR", "distribution")
+load("//box:defs.bzl", "box")
+load("//distribution:defs.bzl", "distribution")
 load(":ddi.bzl", "DdiInfo", "SIZE_PATTERN")
 load(":extension.bzl", "ExtensionInfo", "PortableInfo")
 
@@ -14,8 +14,8 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     if disk.disk == None:
         fail("image_vm: DdiInfo does not contain a composed disk")
     run = cmd_args(
-        box_run(
-            box = ctx.attrs._box[BoxInfo],
+        box.run(
+            box = ctx.attrs._box[box.Info],
             exe = "systemd-vmspawn",
             relaxed = True,
         ),
@@ -172,7 +172,7 @@ _image_vm = rule(
         ),
         # The tools box of the image's release built the image and contains the VM stack. Booting the image
         # in that box builds no other box.
-        "_box": TOOLS_BOX_ATTR,
+        "_box": distribution.TOOLS_BOX_ATTR,
     },
     supports_incoming_transition = True,
 )

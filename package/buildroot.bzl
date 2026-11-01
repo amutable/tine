@@ -3,7 +3,7 @@
 
 """Shared native package buildroots."""
 
-load("//distribution:defs.bzl", "TOOLS_BOX_ATTR")
+load("//distribution:defs.bzl", "distribution")
 load(":install.bzl", "install_packages")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
@@ -58,7 +58,7 @@ _buildroot = rule(
             default = [],
             doc = "explicit packages installed in every package buildroot",
         ),
-        "_box": TOOLS_BOX_ATTR,
+        "_box": distribution.TOOLS_BOX_ATTR,
     },
 )
 

@@ -3,8 +3,8 @@
 
 """The attributes, the checks and the outputs that the package-build rules of all package systems share."""
 
-load("//:specs.bzl", "spec_args")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load("//git:defs.bzl", "git")
 load("//project:defs.bzl", "project")
 load(":buildroot.bzl", "BuildrootInfo", "package_buildroot")
@@ -111,8 +111,8 @@ def package_build(
 
     ctx.actions.run(
         cmd_args(
-            box_run(box = base.box[BoxInfo], exe = system.build),
-            spec_args(
+            box.run(box = base.box[box.Info], exe = system.build),
+            specs.args(
                 ctx.actions,
                 "build.spec.json",
                 spec

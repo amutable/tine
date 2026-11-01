@@ -3,23 +3,23 @@
 
 """Pinned execution-environment launcher."""
 
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
-load(":test.bzl", "box_python_test")
+load("//python:defs.bzl", "python")
+load(":defs.bzl", "box")
 
-tine_python_library(
+python.library(
     name = "isolation",
     srcs = ["isolation.py"],
     visibility = ["tine//..."],
 )
 
-tine_python_binary(
+python.binary(
     name = "sandbox",
     main = "sandbox.py",
     deps = [":isolation"],
     visibility = ["PUBLIC"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

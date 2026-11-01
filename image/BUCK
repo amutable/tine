@@ -4,8 +4,8 @@
 """Logical images, their compositions and output formats, and the drivers that build them."""
 
 load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
-load("//box:test.bzl", "box_python_test")
-load("//python:defs.bzl", "box_python_binary", "tine_python_binary", "tine_python_library")
+load("//box:defs.bzl", "box")
+load("//python:defs.bzl", "python")
 load(":image.bzl", "image_tools")
 
 # The one bundle every image rule resolves its drivers through.
@@ -25,7 +25,7 @@ image_tools(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "layer",
     main = "layer.py",
     deps = [
@@ -39,7 +39,7 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "archive",
     main = "archive.py",
     deps = [
@@ -52,7 +52,7 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "ddi",
     main = "ddi.py",
     deps = [
@@ -65,14 +65,14 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "convert",
     main = "convert.py",
     deps = ["//:specs", "//:util"],
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "uki",
     main = "uki.py",
     deps = [
@@ -85,20 +85,20 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_library(
+python.library(
     name = "version",
     srcs = ["version.py"],
 )
 
 # A project's own template in, the file an image installs out.
-tine_python_binary(
+python.binary(
     name = "substitute",
     main = "substitute.py",
     deps = ["//:specs", "//:util"],
     visibility = ["PUBLIC"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [
@@ -130,7 +130,7 @@ box_python_test(
     ],
 )
 
-tine_python_binary(
+python.binary(
     name = "sbom",
     main = "sbom.py",
     deps = [
@@ -140,7 +140,7 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "manifest",
     main = "manifest.py",
     deps = [
@@ -152,7 +152,7 @@ tine_python_binary(
 )
 
 # A driver that packages a tree lists it from inside its own action, where the tree is final.
-tine_python_library(
+python.library(
     name = "manifest-lib",
     srcs = ["manifest.py"],
     deps = [
@@ -162,14 +162,14 @@ tine_python_library(
     ],
 )
 
-tine_python_library(
+python.library(
     name = "finalize",
     srcs = ["finalize.py"],
     deps = ["//:util", "//rootfs:rootfs"],
     visibility = ["PUBLIC"],
 )
 
-tine_python_library(
+python.library(
     name = "artifacts-lib",
     srcs = ["artifacts.py"],
     boxes = ["tine//distribution:tools.box"],
@@ -180,7 +180,7 @@ tine_python_library(
     ],
 )
 
-tine_python_binary(
+python.binary(
     name = "artifacts",
     main = "artifacts.py",
     boxes = ["tine//distribution:tools.box"],
@@ -192,7 +192,7 @@ tine_python_binary(
     visibility = ["PUBLIC"],
 )
 
-tine_python_binary(
+python.binary(
     name = "boot",
     main = "boot.py",
     deps = [
@@ -207,7 +207,7 @@ tine_python_binary(
 )
 
 # Run by a bootable disk's `[ami]` subtarget, relaxed, with the host's AWS login.
-box_python_binary(
+python.binary(
     name = "ami-import",
     box = "//tools:aws.box",
     main = "ami_import.py",

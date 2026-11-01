@@ -3,11 +3,10 @@
 
 """Build and test a Go project from its own source tree: one online, verified module fetch, then an offline build."""
 
-load("//:specs.bzl", "spec_args")
-load("//box:build.bzl", "box_layer")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("//platforms:architecture.bzl", "architecture")
 load("//project:defs.bzl", "project")
 
 _PRIVATE = "__tine"
@@ -15,7 +14,7 @@ _PRIVATE = "__tine"
 GoPackageInfo = provider(
     doc = "The test binaries of a go_package, for a go_test to run.",
     fields = {
-        "box": provider_field(BoxInfo),
+        "box": provider_field(box.Info),
         "src": provider_field(Artifact),
         # The test binaries and the manifest that build.py writes beside them. It is None when the
         # go_package sets no `test_packages`.
@@ -82,7 +81,7 @@ def _go_build_impl(
         actions.run(
             cmd_args(
                 fetch,
-                spec_args(
+                specs.args(
                     actions,
                     _PRIVATE + "/go-fetch.spec.json",
                     {
@@ -103,7 +102,7 @@ def _go_build_impl(
     actions.run(
         cmd_args(
             build,
-            spec_args(
+            specs.args(
                 actions,
                 _PRIVATE + "/go-build.spec.json",
                 {
@@ -183,12 +182,12 @@ def _go_package_impl(ctx: AnalysisContext) -> list[Provider]:
         if releases == None:
             toolchain = ctx.attrs.toolchain[DefaultInfo].default_outputs[0]
 
-    box = box_layer(ctx, ctx.attrs.box, ctx.attrs.buildroot_packages)
+    build_box = box.layer(ctx, ctx.attrs.box, ctx.attrs.buildroot_packages)
     workspace = ctx.actions.declare_output(_PRIVATE + "/workspace.json")
     ctx.actions.run(
         cmd_args(
             ctx.attrs._workspace[RunInfo],
-            spec_args(
+            specs.args(
                 ctx.actions,
                 _PRIVATE + "/go-workspace.spec.json",
                 {
@@ -207,11 +206,11 @@ def _go_package_impl(ctx: AnalysisContext) -> list[Provider]:
     ctx.actions.dynamic_output_new(
         _go_build(
             bin = bin.as_output(),
-            build = box_run(box = box, exe = ctx.attrs._build),
+            build = box.run(box = build_box, exe = ctx.attrs._build),
             build_mode = ctx.attrs.build_mode,
             cgo = ctx.attrs.cgo,
             cgo_cflags = ctx.attrs.cgo_cflags,
-            fetch = box_run(box = box, exe = ctx.attrs._fetch, network = True),
+            fetch = box.run(box = build_box, exe = ctx.attrs._fetch, network = True),
             gocache = gocache.as_output() if gocache != None else None,
             goarch = architecture.spelling(ctx.attrs._arch, "go"),
             incremental = ctx.attrs.incremental,
@@ -226,8 +225,8 @@ def _go_package_impl(ctx: AnalysisContext) -> list[Provider]:
             workspace = workspace,
         ),
     )
-    entry = box_run(box, relaxed = True, name = ctx.label.name)
-    return project.binaries_providers(outputs, entry) + [GoPackageInfo(box = box, src = src, tests = tests)]
+    entry = box.run(build_box, relaxed = True, name = ctx.label.name)
+    return project.binaries_providers(outputs, entry) + [GoPackageInfo(box = build_box, src = src, tests = tests)]
 
 _go_package = rule(
     impl = _go_package_impl,
@@ -235,7 +234,7 @@ _go_package = rule(
         # `box` is a dep rather than an exec_dep, so tine//go:build.box builds from the release of the
         # distribution that the binaries are built for.
         "box": attrs.dep(
-            providers = [BoxInfo],
+            providers = [box.Info],
             default = "tine//go:build.box",
             doc = "box to build in, with the Go toolchain unless `toolchain` is set",
         ),
@@ -344,10 +343,10 @@ def _go_releases_impl(ctx: AnalysisContext) -> list[Provider]:
     toolchains = ctx.actions.dynamic_output_new(
         _go_toolchains(arch = ctx.attrs._arch, snapshot = snapshot, target = str(ctx.label.raw_target())),
     )
-    spec = spec_args(
+    spec = specs.args(
         ctx.actions,
         "snapshot.spec.json",
-        {"current": snapshot, "goarch": {arch: architecture.spelling(arch, "go") for arch in ARCHITECTURES}},
+        {"current": snapshot, "goarch": {arch: architecture.spelling(arch, "go") for arch in architecture.ARCHITECTURES}},
     )
     run_snapshot = [DefaultInfo(), RunInfo(args = cmd_args(ctx.attrs._snapshot[RunInfo], spec))]
 
@@ -388,8 +387,8 @@ def _go_test_impl(ctx: AnalysisContext) -> list[Provider]:
     if package.tests == None:
         fail("go_test {}: {} sets no `test_packages`, so its build compiles no tests".format(ctx.label.name, ctx.attrs.package.label))
     command = cmd_args(
-        box_run(box = package.box, exe = ctx.attrs._runner),
-        spec_args(
+        box.run(box = package.box, exe = ctx.attrs._runner),
+        specs.args(
             ctx.actions,
             "go-test.spec.json",
             {

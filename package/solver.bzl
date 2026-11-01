@@ -3,7 +3,7 @@
 
 """Construct package-solver commands and reusable repository caches."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load("//platforms:architecture.bzl", "architecture")
 load(":repository.bzl", "ConfiguredPackageRepositoryInfo", "encode_repositories")
@@ -29,7 +29,7 @@ def solve_command(
     command = cmd_args(
         box_run(box = box, exe = system.plan),
         "solve",
-        spec_args(
+        specs.args(
             ctx.actions,
             spec_name,
             {
@@ -62,7 +62,7 @@ def _solver_cache_impl(ctx: AnalysisContext) -> list[Provider]:
         cmd_args(
             box_run(box = box, exe = system.plan),
             "make-cache",
-            spec_args(
+            specs.args(
                 ctx.actions,
                 "make-cache.spec.json",
                 {

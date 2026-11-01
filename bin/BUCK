@@ -3,20 +3,20 @@
 
 """The command a checkout builds through."""
 
-load("//box:test.bzl", "box_python_test", "box_sh_test")
-load("//python:defs.bzl", "tine_python_library")
+load("//box:defs.bzl", "box")
+load("//python:defs.bzl", "python")
 load(":umask_test.bzl", "umask_probe")
 
 # How the launcher reads the cache settings and talks to a running shim, for the round trip in
 # tests/, which judges a build by the shim's own counters.
-tine_python_library(
+python.library(
     name = "cache_shim",
     srcs = ["cache_shim.py"],
     visibility = ["tine//tests/..."],
     deps = ["//:util"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     # Runtime path setup handles imports, but the type checker still needs the dependency.
@@ -42,7 +42,7 @@ umask_probe(name = "umask-probe")
 
 # The launcher runs Buck with umask 022, so that a builder's own umask does not reach image
 # directories; this fails when built with a umask such as 0002 without that.
-box_sh_test(
+box.sh_test(
     name = "umask-test",
     distributed = False,
     args = ["$(location :umask-probe)/directory"],

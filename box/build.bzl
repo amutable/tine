@@ -3,7 +3,7 @@
 
 """Build reusable execution environments."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 load("//distribution:defs.bzl", "distribution")
 load("//package:release.bzl", "OsReleaseInfo")
 load(
@@ -159,7 +159,7 @@ def _install(
                 box = box[BoxInfo] if isinstance(box, Dependency) else box,
                 exe = system.install,
             ),
-            spec_args(
+            specs.args(
                 ctx.actions,
                 "install.spec.json",
                 {
@@ -221,7 +221,7 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
         ctx.actions.run(
             cmd_args(
                 system.extract[RunInfo],
-                spec_args(
+                specs.args(
                     ctx.actions,
                     "extract.spec.json",
                     {

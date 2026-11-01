@@ -19,7 +19,7 @@ per-distribution aliases, such as `:image.fedora`.
 load("@tine//box:defs.bzl", "box")
 load("@tine//distribution:defs.bzl", "distribution")
 load("@tine//image:defs.bzl", "image")
-load("@tine//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("@tine//platforms:architecture.bzl", "architecture")
 load("@tine//tests:defs.bzl", "tests")
 
 # This example serves two audiences, so it declares a key for each and picks: the tokens
@@ -278,7 +278,7 @@ box.sh_test(
     box = "@tine//tools:dev.box",
     test = "release-artifacts.sh",
     args = ["$(location :release)", "$(location :image[roothash])"]
-    + architecture.select({name: [spellings.systemd] for name, spellings in ARCHITECTURES.items()})
+    + architecture.select({name: [spellings.systemd] for name, spellings in architecture.ARCHITECTURES.items()})
     # Each package system publishes its package database in its own file format, and the release's
     # description names the package system.
     + distribution.select({

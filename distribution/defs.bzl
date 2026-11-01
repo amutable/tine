@@ -18,8 +18,8 @@ load("@catalog//:releases.bzl", _CATALOG_RELEASES = "RELEASES")
 load("@prelude//:rules.bzl", "constraint_value")
 load("@prelude//cfg/exec_platform:marker.bzl", "get_exec_platform_marker")
 load("//box:runtime.bzl", "BoxInfo")
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
-load("//platforms:defs.bzl", "check_unmarked")
+load("//platforms:architecture.bzl", "architecture")
+load("//platforms:defs.bzl", "platform")
 
 # The families that tine declares releases for. Each one is a value of `tine//distribution:family`.
 FAMILIES = ["arch", "debian", "fedora"]
@@ -95,6 +95,10 @@ def _box_host_impl(ctx: AnalysisContext) -> list[Provider]:
     default = ctx.attrs.default[ConfigurationInfo].constraints
     marker = ctx.attrs._exec_marker[ConstraintValueInfo]
     label = str(ctx.label.raw_target())
+
+    # Buck calls a transition with the keyword argument `platform`, so `configure` needs a parameter
+    # of that name. Inside `configure`, `platform` then refers to the parameter, not to the namespace.
+    check_unmarked = platform.check_unmarked
 
     def configure(platform: PlatformInfo) -> PlatformInfo:
         check_unmarked(platform, marker)
@@ -443,7 +447,7 @@ def serves(name: str, architectures: list[str], in_box: bool = False) -> Select:
     unserved = select_incompatible("{} serves {} only".format(name, ", ".join(architectures)))
     if in_box and architecture.host() not in architectures:
         return select({"DEFAULT": unserved})
-    return architecture.select({arch: [] if arch in architectures else unserved for arch in ARCHITECTURES})
+    return architecture.select({arch: [] if arch in architectures else unserved for arch in architecture.ARCHITECTURES})
 
 def _distribution_alias_impl(ctx: AnalysisContext) -> list[Provider]:
     test = ctx.attrs.actual.get(ExternalRunnerTestInfo)
@@ -485,11 +489,14 @@ def alias(
     )
 
 distribution = struct(
+    FAMILIES = FAMILIES,
+    TOOLS_BOX_ATTR = TOOLS_BOX_ATTR,
     alias = alias,
     aliases = aliases,
     attrs = attributes,
     box_host = box_host,
     default_release = default_release,
+    default_package_manager = default_package_manager,
     select = by_distribution,
     serves = serves,
     compatibility = compatibility,

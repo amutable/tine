@@ -3,7 +3,7 @@
 
 """Verify a repository's packages as a closure selects them."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load(":system.bzl", "PackageSystemInfo")
 
@@ -30,7 +30,7 @@ def _build_keyring(
     actions.run(
         cmd_args(
             box_run(box = box, exe = system.keyring),
-            spec_args(actions, name + ".spec.json", {"keys": keys, "out": keyring.as_output(), "time": time}),
+            specs.args(actions, name + ".spec.json", {"keys": keys, "out": keyring.as_output(), "time": time}),
         ),
         category = "keyring",
         identifier = name,
@@ -134,7 +134,7 @@ def verify_packages(
     actions.run(
         cmd_args(
             verifier.verify,
-            spec_args(
+            specs.args(
                 actions,
                 name + "." + id + ".verify.spec.json",
                 {

@@ -4,9 +4,8 @@
 """Rust source builds against a vendored, hash-pinned crate tree."""
 
 load("//box:defs.bzl", "box")
-load("//box:test.bzl", "box_python_test")
 load("//distribution:defs.bzl", "distribution")
-load("//python:defs.bzl", "tine_python_binary")
+load("//python:defs.bzl", "python")
 
 # The box that cargo.package() builds in unless a project names its own. A package that links against
 # a C library adds the library's development package with cargo.package(buildroot_packages = ...).
@@ -39,7 +38,7 @@ box.new(
 )
 
 # The project's source artifacts in, its workspace root and resolved lock out.
-tine_python_binary(
+python.binary(
     name = "lock",
     main = "lock.py",
     visibility = ["PUBLIC"],
@@ -47,7 +46,7 @@ tine_python_binary(
 )
 
 # The downloaded crates in, the directory cargo builds against out.
-tine_python_binary(
+python.binary(
     name = "vendor",
     main = "vendor.py",
     visibility = ["PUBLIC"],
@@ -55,7 +54,7 @@ tine_python_binary(
 )
 
 # Runs inside the box: the source tree and its vendored crates in, the declared binaries out.
-tine_python_binary(
+python.binary(
     name = "build",
     main = "build.py",
     visibility = ["PUBLIC"],
@@ -67,7 +66,7 @@ tine_python_binary(
     ],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = [

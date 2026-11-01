@@ -3,13 +3,13 @@
 
 """Logical filesystem images built as ordered overlay deltas."""
 
-load("//:specs.bzl", "executable", "spec_args", "spec_argument")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
-load("//distribution:defs.bzl", "TOOLS_BOX_ATTR", "default_package_manager", "distribution")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
+load("//distribution:defs.bzl", "distribution")
 load("//package:install.bzl", "resolve_packages")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//package:system.bzl", "PackageSystemInfo")
-load("//platforms:architecture.bzl", "ARCHITECTURES", "architecture")
+load("//platforms:architecture.bzl", "architecture")
 load(":sign.bzl", "SigningAccess", "SigningKeyInfo", "external_signing_execution", "key_source_arguments", "merge_signing_access")
 
 ImageToolsInfo = provider(
@@ -139,7 +139,7 @@ ImageInfo = provider(
 def _image_command(
     ctx: AnalysisContext,
     *,
-    box: Dependency,
+    box_dep: Dependency,
     layers: list[Artifact],
     tmpfiles: list[str],
     exe: Dependency,
@@ -149,13 +149,13 @@ def _image_command(
     signing_access: SigningAccess | None = None,
 ) -> cmd_args:
     return cmd_args(
-        box_run(
-            box = box[BoxInfo],
+        box.run(
+            box = box_dep[box.Info],
             exe = exe,
             ro_binds = signing_access.ro_binds if signing_access else {},
             setenv = signing_access.setenv if signing_access else {},
         ),
-        spec_args(
+        specs.args(
             ctx.actions,
             spec_path(identifier, driver),
             {"lower": layers, "tmpfiles": tmpfiles} | spec,
@@ -181,7 +181,7 @@ def terminal_image_command(
         ctx,
         signing_access = signing_access,
         driver = driver,
-        box = image.box,
+        box_dep = image.box,
         exe = exe,
         identifier = identifier,
         layers = image.layers,
@@ -389,7 +389,7 @@ def sign_systemd_boot(key: SigningKeyInfo, arch: str) -> list[LayerOperation]:
     Sign before anything seals /usr, e.g. a verity partition; architecture.md explains why the signed
     binary must live in the image's own /usr. The key material never enters the image.
     """
-    binary = "/buildroot/usr/lib/systemd/boot/efi/systemd-boot{}.efi".format(ARCHITECTURES[arch].efi)
+    binary = "/buildroot/usr/lib/systemd/boot/efi/systemd-boot{}.efi".format(architecture.ARCHITECTURES[arch].efi)
     return [
         # systemd-sbsign lives outside PATH in the box.
         run(
@@ -450,12 +450,12 @@ def _encode_operation(operation: LayerOperation, python: Dependency) -> LayerOpe
         return operation
 
     # -B: the script and its imports are project sources, which no build may write bytecode into.
-    prefix = [executable(python), "-B"] if operation[0] == "python" else []
+    prefix = [specs.executable(python), "-B"] if operation[0] == "python" else []
 
     # A box argument is a plain string, an artifact, or a resolved $(location) macro.
     return (
         "run",
-        prefix + [spec_argument(argument) for argument in operation[1]],
+        prefix + [specs.argument(argument) for argument in operation[1]],
         operation[2],
         operation[3],
     )
@@ -466,23 +466,23 @@ def _install_specs(
     available: dict[str, list[str]] | None,
 ) -> list[str]:
     """Resolve a layer's requested packages and symbolic sets into one deduplicated request."""
-    specs = list(packages)
+    requested = list(packages)
     for name in package_sets:
         if available == None:
             fail("image: package_sets requires an image with a package manager")
         members = available.get(name)
         if members == None:
             fail("image: unknown package set {!r}".format(name))
-        specs += members
-    for spec in specs:
+        requested += members
+    for spec in requested:
         if not spec:
             fail("image: package names must not be empty")
-    return sorted({spec: None for spec in specs})
+    return sorted({spec: None for spec in requested})
 
 def _declare_pkgdb(
     ctx: AnalysisContext,
     *,
-    box: Dependency,
+    box_dep: Dependency,
     layers: list[Artifact],
     tmpfiles: list[str],
     package_manager: Dependency,
@@ -493,7 +493,7 @@ def _declare_pkgdb(
     cmd = _image_command(
         ctx,
         driver = "pkgdb",
-        box = box,
+        box_dep = box_dep,
         exe = system.pkgdb,
         identifier = identifier,
         layers = layers,
@@ -507,7 +507,7 @@ def _declare_manifest(
     ctx: AnalysisContext,
     *,
     tools: ImageToolsInfo,
-    box: Dependency,
+    box_dep: Dependency,
     layers: list[Artifact],
     tmpfiles: list[str],
     identifier: str | None,
@@ -518,7 +518,7 @@ def _declare_manifest(
     cmd = _image_command(
         ctx,
         driver = "manifest",
-        box = box,
+        box_dep = box_dep,
         exe = tools.manifest,
         identifier = identifier,
         layers = layers,
@@ -532,7 +532,7 @@ def _declare_sbom(
     ctx: AnalysisContext,
     *,
     tools: ImageToolsInfo,
-    box: Dependency,
+    box_dep: Dependency,
     layers: list[Artifact],
     tmpfiles: list[str],
     source_name: str,
@@ -544,7 +544,7 @@ def _declare_sbom(
     cmd = _image_command(
         ctx,
         driver = "sbom",
-        box = box,
+        box_dep = box_dep,
         exe = tools.sbom,
         identifier = identifier,
         layers = layers,
@@ -553,7 +553,7 @@ def _declare_sbom(
             "source_name": source_name,
             "source_version": version,
             "spdx": spdx.as_output(),
-            "syft": executable(tools.syft),
+            "syft": specs.executable(tools.syft),
         },
         tmpfiles = tmpfiles,
     )
@@ -571,7 +571,7 @@ def declare_image(
     package_sets: list[str] = [],
     identifier: str | None = None,
     parent: ImageInfo | None = None,
-    box: Dependency | None = None,
+    box_dep: Dependency | None = None,
     package_manager: Dependency | None = None,
     tmpfiles: list[str] = [],
     install_docs: bool = True,
@@ -585,7 +585,7 @@ def declare_image(
     The layer installs `packages` and `package_sets` as one request before its operations run, so
     every operation sees the packages this layer adds. `keys` names the signing keys this layer's
     operations use, so that the action can reach one held outside the build. An initial image runs in
-    `box`, and a derived image runs in the box of its parent.
+    `box_dep`, and a derived image runs in the box of its parent.
     """
     # Every image rule's version reaches its layers through here, which makes this the one place
     # that has to catch one no declaration macro resolved.
@@ -593,13 +593,13 @@ def declare_image(
     if parent != None:
         if package_manager != None:
             fail("image: parent cannot be combined with package_manager")
-        box = parent.box
+        box_dep = parent.box
         package_manager = parent.package_manager
         layers = parent.layers
         tmpfiles = parent.tmpfiles + tmpfiles
         parent_install_specs = parent.install_specs
     else:
-        if box == None:
+        if box_dep == None:
             fail("image: an image without a parent requires a box")
         layers = []
         parent_install_specs = []
@@ -619,7 +619,7 @@ def declare_image(
             closure = resolve_packages(
                 ctx,
                 package_manager,
-                box,
+                box_dep,
                 install_specs,
                 layers,
                 identifier = identifier,
@@ -641,19 +641,19 @@ def declare_image(
             spec["install"] = {
                 "arch": architecture.spelling(package_manager_info.arch, system.arch_schema),
                 "docs": install_docs,
-                "installer": executable(system.install),
+                "installer": specs.executable(system.install),
                 "langs": install_langs,
                 "packages_dir": closure,
             }
         signing_access = merge_signing_access(keys)
         cmd = cmd_args(
-            box_run(
-                box = box[BoxInfo],
+            box.run(
+                box = box_dep[box.Info],
                 exe = tools.layer,
                 ro_binds = signing_access.ro_binds,
                 setenv = signing_access.setenv,
             ),
-            spec_args(ctx.actions, spec_path(identifier, "layer"), spec),
+            specs.args(ctx.actions, spec_path(identifier, "layer"), spec),
         )
         ctx.actions.run(cmd, category = "image", identifier = identifier or "layer", **external_signing_execution(signing_access))
 
@@ -666,20 +666,20 @@ def declare_image(
     if package_manager != None:
         pkgdb = _declare_pkgdb(
             ctx,
-            box = box,
+            box_dep = box_dep,
             identifier = identifier,
             layers = layers,
             package_manager = package_manager,
             tmpfiles = tmpfiles,
         )
     return ImageInfo(
-        box = box,
+        box = box_dep,
         install_specs = install_specs,
         layers = layers,
         manifest = _declare_manifest(
             ctx,
             tools = tools,
-            box = box,
+            box_dep = box_dep,
             identifier = identifier,
             layers = layers,
             tmpfiles = tmpfiles,
@@ -689,7 +689,7 @@ def declare_image(
         sbom = _declare_sbom(
             ctx,
             tools = tools,
-            box = box,
+            box_dep = box_dep,
             identifier = identifier,
             layers = layers,
             source_name = source_name or ctx.label.name,
@@ -781,14 +781,14 @@ IMAGE_ATTRS = {
         doc = "deferred tmpfiles.d lines for paths, modes, and xattrs; ownership is ignored",
     ),
     "version": attrs.string(default = "0", doc = "SBOM source version"),
-    "_box": TOOLS_BOX_ATTR,
+    "_box": distribution.TOOLS_BOX_ATTR,
 } | IMAGE_TOOLS_ATTR
 
 def _image_impl(ctx: AnalysisContext) -> list[Provider]:
     image = declare_image(
         ctx,
         tools = ctx.attrs._tools[ImageToolsInfo],
-        box = ctx.attrs._box,
+        box_dep = ctx.attrs._box,
         install_docs = ctx.attrs.install_docs,
         install_langs = ctx.attrs.install_langs,
         ops = ctx.attrs.ops,
@@ -840,7 +840,7 @@ def initial_package_manager(package_manager: str | Select | None, parent: str | 
     """
     if package_manager != None or parent != None:
         return package_manager
-    return default_package_manager(distro)
+    return distribution.default_package_manager(distro)
 
 def layer(
     name: str,

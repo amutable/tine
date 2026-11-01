@@ -11,7 +11,7 @@ PKCS#11 key (https://p11-glue.github.io/p11-glue/p11-kit/manual/remoting.html) d
 Do not load image.bzl here: it consumes the provider, so that would close a load cycle.
 """
 
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//box:defs.bzl", "box")
 load("//project:defs.bzl", "project")
 
 # Reads a certificate through the same OpenSSL provider the signing tools load the key with, so a
@@ -139,7 +139,7 @@ def _signing_key_impl(ctx: AnalysisContext) -> list[Provider]:
     certificate = pair.project("signing.crt")
     ctx.actions.run(
         cmd_args(
-            box_run(box = ctx.attrs._box[BoxInfo]),
+            box.run(box = ctx.attrs._box[box.Info]),
             "sh",
             "-c",
             """set -eu
@@ -178,7 +178,7 @@ exec ukify genkey --secureboot-certificate-common-name "$2" \
 generate_signing_key = rule(
     impl = _signing_key_impl,
     attrs = {
-        "_box": attrs.exec_dep(providers = [BoxInfo], default = "tine//distribution:tools.box"),
+        "_box": attrs.exec_dep(providers = [box.Info], default = "tine//distribution:tools.box"),
     },
     doc = """Mint a development signing key pair as a build artifact.
 
@@ -275,7 +275,7 @@ def _extract_certificate(ctx: AnalysisContext, key: SigningKeyInfo) -> Artifact:
     access = merge_signing_access([key])
     ctx.actions.run(
         cmd_args(
-            box_run(box = ctx.attrs._box[BoxInfo], ro_binds = access.ro_binds, setenv = access.setenv),
+            box.run(box = ctx.attrs._box[box.Info], ro_binds = access.ro_binds, setenv = access.setenv),
             "sh",
             "-c",
             """set -eu
@@ -379,7 +379,7 @@ _pkcs11_signing_key = rule(
         "section": attrs.string(doc = "the build configuration section the coordinates came from"),
         "socket": attrs.option(attrs.string(), default = None, doc = "host path of the p11-kit server socket"),
         "token": attrs.option(attrs.string(), default = None, doc = "the token label"),
-        "_box": attrs.exec_dep(providers = [BoxInfo], default = "tine//distribution:tools.box"),
+        "_box": attrs.exec_dep(providers = [box.Info], default = "tine//distribution:tools.box"),
     },
     doc = """Address a key held by a PKCS#11 token reachable over a p11-kit server socket.
 

@@ -3,59 +3,59 @@
 
 """Native package systems, repositories, releases, managers, and buildroots."""
 
-load("//box:test.bzl", "box_python_test")
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
+load("//box:defs.bzl", "box")
+load("//python:defs.bzl", "python")
 
-tine_python_library(
+python.library(
     name = "href",
     srcs = ["href.py"],
     visibility = ["PUBLIC"],
     deps = ["//:util"],
 )
 
-tine_python_library(
+python.library(
     name = "builder",
     srcs = ["builder.py"],
     visibility = ["PUBLIC"],
     deps = ["//:util", "//rootfs:rootfs"],
 )
 
-tine_python_library(
+python.library(
     name = "extractor",
     srcs = ["extractor.py"],
     visibility = ["PUBLIC"],
     deps = ["//:specs", "//:util", "//rootfs:rootfs"],
 )
 
-tine_python_library(
+python.library(
     name = "installer",
     srcs = ["installer.py"],
     deps = ["//:specs", "//:util", "//rootfs:rootfs"],
     visibility = ["PUBLIC"],
 )
 
-tine_python_library(
+python.library(
     name = "snapshotter",
     srcs = ["snapshotter.py"],
     deps = ["//:specs", "//:util"],
     visibility = ["PUBLIC"],
 )
 
-tine_python_library(
+python.library(
     name = "subpackage",
     srcs = ["subpackage.py"],
     deps = ["//:util"],
     visibility = ["PUBLIC"],
 )
 
-tine_python_library(
+python.library(
     name = "transaction",
     srcs = ["transaction.py"],
     deps = [":snapshotter", "//:util"],
     visibility = ["PUBLIC"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     # installer_test runs systemd-tmpfiles, which only the tools box contains.
     box = "tine//distribution:tools.box",
@@ -65,9 +65,9 @@ box_python_test(
 
 # The driver runs in the box with network access. It reads a source checkout's packaging pin and writes the
 # tree of the pinned commit.
-tine_python_binary(name = "packaging", main = "packaging.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
+python.binary(name = "packaging", main = "packaging.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
 
-box_python_test(
+box.python_test(
     name = "packaging-test",
     # The test creates git repositories, and the dev box contains git.
     box = "tine//tools:dev.box",

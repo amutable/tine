@@ -3,81 +3,81 @@
 
 """The RPM native package system and its driver bundle."""
 
-load("//box:test.bzl", "box_python_test")
+load("//box:defs.bzl", "box")
 load("//package:system.bzl", "package_system")
-load("//python:defs.bzl", "tine_python_binary", "tine_python_library")
+load("//python:defs.bzl", "python")
 
 # The drivers that import libdnf5, createrepo_c or rpm are type-checked against the dev box.
 _BOX = "tine//tools:dev.box"
 
-tine_python_library(name = "rpmfile", srcs = ["rpmfile.py"], deps = ["//:util"])
+python.library(name = "rpmfile", srcs = ["rpmfile.py"], deps = ["//:util"])
 
-tine_python_binary(
+python.binary(
     name = "extract",
     main = "extract.py",
     deps = [":rpmfile", "//archive:cpio", "//package:extractor"],
 )
 
-tine_python_library(name = "macros", srcs = ["macros.py"], boxes = [_BOX])
+python.library(name = "macros", srcs = ["macros.py"], boxes = [_BOX])
 
-tine_python_binary(name = "install", main = "install.py", boxes = [_BOX], deps = [":macros", "//:util", "//package:installer"])
+python.binary(name = "install", main = "install.py", boxes = [_BOX], deps = [":macros", "//:util", "//package:installer"])
 
 # The capture driver implements the terminal-image contract, so it takes that library.
-tine_python_binary(name = "pkgdb", main = "pkgdb.py", deps = ["//:specs", "//:util", "//image:finalize"])
+python.binary(name = "pkgdb", main = "pkgdb.py", deps = ["//:specs", "//:util", "//image:finalize"])
 
-tine_python_binary(
+python.binary(
     name = "createrepo",
     main = "createrepo.py",
     boxes = [_BOX],
     deps = ["//:specs", "//:util"],
 )
 
-tine_python_binary(
+python.binary(
     name = "plan",
     main = "plan.py",
     boxes = [_BOX],
     deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
 )
 
-tine_python_binary(name = "build", main = "build.py", deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"])
+python.binary(name = "build", main = "build.py", deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"])
 
-box_python_test(
+box.python_test(
     name = "build-test",
     box = _BOX,
     srcs = ["build.py", "build_test.py"],
     deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"],
 )
 
-tine_python_binary(
+python.binary(
     name = "snapshot",
     deps = ["//:util", "//package:href", "//package:snapshotter"],
     main = "snapshot.py",
 )
 
-tine_python_library(name = "rpmkeys", srcs = ["rpmkeys.py"])
+python.library(name = "rpmkeys", srcs = ["rpmkeys.py"])
 
-tine_python_binary(
+python.binary(
     name = "keyring",
     main = "keyring.py",
     boxes = [_BOX],
     deps = [":rpmkeys", "//:specs", "//:util"],
 )
 
-tine_python_binary(
+python.binary(
     name = "verify",
     main = "verify.py",
     boxes = [_BOX],
     deps = [":rpmkeys", "//:specs", "//:util"],
 )
 
-box_python_test(
+box.python_test(
     name = "plan-test",
     box = _BOX,
     srcs = ["createrepo.py", "plan.py", "plan_test.py"],
     deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = _BOX,
     srcs = ["keyring.py", "rpmkeys.py", "verify.py", "verify_test.py"],

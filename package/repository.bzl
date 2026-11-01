@@ -3,11 +3,11 @@
 
 """Native package repositories, universes, dynamic transaction selection, and repository configuration for a consumer's box."""
 
-load("//:specs.bzl", "spec_args")
+load("//:specs.bzl", "specs")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load("//distribution:defs.bzl", "distribution")
 load("//platforms:architecture.bzl", "architecture")
-load("//platforms:defs.bzl", "architecture_transition")
+load("//platforms:defs.bzl", "platform")
 load(":system.bzl", "PackageSystemInfo")
 load(":verify.bzl", "Verifier", "repository_verifier", "verify_packages")
 
@@ -29,26 +29,26 @@ PackagePoolValueInfo = provider(
     fields = {"packages": provider_field(dict[str, PackageArtifactInfo])},
 )
 
-def _snapshot_subtarget(architecture: str) -> str:
+def _snapshot_subtarget(arch: str) -> str:
     """The subtarget that takes a repository's metadata for one architecture.
 
     Keep in sync with `_snapshot` in tools/catalog.py, which names it to refresh a lock.
     """
-    return "snapshot." + architecture
+    return "snapshot." + arch
 
-def _repository_lock_path(name: str, architecture: str) -> str:
+def _repository_lock_path(name: str, arch: str) -> str:
     """Where one architecture's committed metadata lock lives, relative to the catalog package.
 
     Keep in sync with `_repository_lock_path` in tools/catalog.py, which writes it.
     """
-    return "snapshot/repo/{}.{}.json".format(name, architecture)
+    return "snapshot/repo/{}.{}.json".format(name, arch)
 
-def box_lock_path(name: str, architecture: str) -> str:
+def box_lock_path(name: str, arch: str) -> str:
     """Where one architecture's committed box transaction lives, relative to the catalog package.
 
     Keep in sync with `_box_lock_path` in tools/catalog.py, which writes it.
     """
-    return "snapshot/box/{}.{}.json".format(name, architecture)
+    return "snapshot/box/{}.{}.json".format(name, arch)
 
 def snapshot_data(snapshot: ArtifactValue, id: str) -> dict:
     """Read one repository's committed snapshot."""
@@ -378,7 +378,7 @@ _REMOTE_REPOSITORY_ATTRS = {
 # A box lock, the box and an image reach a repository in configurations that also differ in other
 # constraints, such as the image's distribution. `architecture_transition` configures the repository for
 # its architecture alone, so all of them share one configured repository and download each file once.
-remote_repository = rule(impl = _remote_repository_impl, attrs = _REMOTE_REPOSITORY_ATTRS, cfg = architecture_transition)
+remote_repository = rule(impl = _remote_repository_impl, attrs = _REMOTE_REPOSITORY_ATTRS, cfg = platform.architecture_transition)
 
 LocalPackageInfo = provider(
     doc = "Built native packages and their native package system.",
@@ -599,26 +599,26 @@ def remote_repository_base(
         fail("remote_repository_base: {} are supplied by the neutral spec".format(reserved))
 
     # per-architecture specs/subtargets so that refresh-catalog can produce all locks from a single build
-    specs = {
-        architecture: ctx.actions.write_json(
-            "{}.snapshot.spec.json".format(architecture),
+    snapshot_specs = {
+        served_arch: ctx.actions.write_json(
+            "{}.snapshot.spec.json".format(served_arch),
             dict(
                 snapshot_spec,
-                arch = arch_spelling(architecture, system),
-                baseurl = expand_baseurl(baseurl, architecture, system),
+                arch = arch_spelling(served_arch, system),
+                baseurl = expand_baseurl(baseurl, served_arch, system),
                 id = rid,
             ),
             has_content_based_path = False,
         )
-        for architecture in architectures
+        for served_arch in architectures
     }
 
-    def snapshot(architecture: str) -> list[Provider]:
-        return [DefaultInfo(), RunInfo(args = cmd_args(system.snapshot[RunInfo], "--spec", specs[architecture]))]
+    def snapshot(served_arch: str) -> list[Provider]:
+        return [DefaultInfo(), RunInfo(args = cmd_args(system.snapshot[RunInfo], "--spec", snapshot_specs[served_arch]))]
 
-    sub_targets = {_snapshot_subtarget(architecture): snapshot(architecture) for architecture in specs}
-    sub_targets.update({_manifest_subtarget(architecture): [DefaultInfo(default_output = spec)] for architecture, spec in specs.items()})
-    sub_targets["manifest"] = [DefaultInfo(default_output = specs[arch])]
+    sub_targets = {_snapshot_subtarget(served_arch): snapshot(served_arch) for served_arch in snapshot_specs}
+    sub_targets.update({_manifest_subtarget(served_arch): [DefaultInfo(default_output = spec)] for served_arch, spec in snapshot_specs.items()})
+    sub_targets["manifest"] = [DefaultInfo(default_output = snapshot_specs[arch])]
     sub_targets["snapshot"] = snapshot(arch)
     return [
         DefaultInfo(default_output = repo_dir, sub_targets = sub_targets),
@@ -902,7 +902,7 @@ def _materialize_local_repository_impl(ctx: AnalysisContext) -> list[Provider]:
     repo = ctx.actions.declare_output("repo", dir = True, has_content_based_path = False)
     index = cmd_args(
         box_run(box = ctx.attrs.box[BoxInfo], exe = system.index),
-        spec_args(
+        specs.args(
             ctx.actions,
             "index.spec.json",
             {

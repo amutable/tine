@@ -7,7 +7,7 @@ load("//:tine.lock.json", _pins = "value")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//http:defs.bzl", "http")
-load("//python:defs.bzl", "box_python_binary", "tine_python_binary")
+load("//python:defs.bzl", "python")
 
 _RELEASE = "catalog//:default.release"
 
@@ -138,7 +138,7 @@ box.new(
 )
 
 # Runtime driver for the source-tree commands below.
-tine_python_binary(
+python.binary(
     name = "dev",
     main = "dev.py",
     deps = ["//:util"],
@@ -158,7 +158,7 @@ box.python_test(
     deps = ["//:util"],
 )
 
-tine_python_binary(
+python.binary(
     name = "catalog",
     main = "catalog.py",
     deps = ["//:util"],
@@ -175,7 +175,7 @@ box.python_test(
 # PUBLIC: CI's automatic changes (.github/workflows/bump.yml, used by consuming project as well). A
 # runner invokes it as a plain script with the host python, before Buck has fetched anything;
 # this target is what type checks it.
-tine_python_binary(
+python.binary(
     name = "bot-pr",
     main = "bot_pr.py",
     visibility = ["PUBLIC"],
@@ -202,7 +202,7 @@ box.new(
     release = _RELEASE,
 )
 
-box_python_binary(
+python.binary(
     name = "setup-deploy-key-driver",
     box = ":deploy-key.box",
     main = "setup_deploy_key.py",

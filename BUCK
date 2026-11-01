@@ -4,8 +4,8 @@
 """Shared tine Python support, and the toolchain Buck2 looks up as `toolchains//`."""
 
 load("@prelude//toolchains:python.bzl", "python_bootstrap_toolchain")
-load("//box:test.bzl", "box_python_test")
-load("//python:defs.bzl", "tine_python_library")
+load("//box:defs.bzl", "box")
+load("//python:defs.bzl", "python")
 
 # Declared here rather than in a `toolchains` cell of its own: Buck2 forbids nesting a cell inside an
 # external cell, so declaring it here is what lets a consuming project pull tine in as one.
@@ -28,20 +28,20 @@ export_file(
     visibility = ["//bin/..."],
 )
 
-tine_python_library(
+python.library(
     name = "util",
     srcs = ["util.py"],
     visibility = ["PUBLIC"],
 )
 
-box_python_test(
+box.python_test(
     name = "test",
     box = "//tools:dev.box",
     srcs = ["util_test.py"],
     deps = [":util"],
 )
 
-tine_python_library(
+python.library(
     name = "specs",
     srcs = ["specs.py"],
     visibility = ["PUBLIC"],

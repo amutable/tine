@@ -34,8 +34,9 @@ _tool = rule(
         "path": attrs.option(attrs.string(), default = None),
         "src": attrs.source(allow_directory = True),
         "strip_prefix": attrs.option(attrs.string(), default = None),
-        # Only set for compressed downloads: an unconditional dep would cycle, since the decompressor
-        # is a tine_python_binary and the bootstrap interpreter is itself an http_tool.
+        # The decompressor is a python.binary, and the bootstrap interpreter that runs it is an
+        # http_tool. A dep on the decompressor in every http_tool would make the interpreter depend on
+        # itself, so only a compressed download sets `unzstd`.
         "unzstd": attrs.option(attrs.exec_dep(providers = [RunInfo]), default = None),
     },
 )

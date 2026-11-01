@@ -3,8 +3,8 @@
 
 """Build a DDI, a GPT disk image, from partition definitions with systemd-repart."""
 
-load("//:specs.bzl", "spec_args")
-load("//box:runtime.bzl", "BoxInfo", "box_run")
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load(
     ":image.bzl",
     "GPT_LABEL_LIMIT",
@@ -502,7 +502,7 @@ def declare_disk_conversion(
     *,
     tools: ImageToolsInfo,
     disk: DdiInfo,
-    box: Dependency,
+    box_dep: Dependency,
     format: str,
     virtual_size: str | None,
     basename: str,
@@ -514,8 +514,8 @@ def declare_disk_conversion(
     """
     out = declare_out(ctx, format, basename + "." + format)
     cmd = cmd_args(
-        box_run(box = box[BoxInfo], exe = tools.convert),
-        spec_args(
+        box.run(box = box_dep[box.Info], exe = tools.convert),
+        specs.args(
             ctx.actions,
             spec_path(format, "convert"),
             {
