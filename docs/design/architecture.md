@@ -727,6 +727,10 @@ The build currently uses `--nocheck`. Automatically generated debuginfo/debugsou
 directory output but are tolerated rather than exposed as declared sub-targets. Successful build scratch is
 discarded; failed scratch remains available for diagnosis.
 
+A hand-written `rpm.package()` can name the distribution of its buildroot's release with `distro`. The
+target is then incompatible with an architecture that the release does not serve. An imported package
+names none, and gets no per-release aliases either.
+
 #### Limitations
 
 - The imported self-host dependency graph is inferred from stored BuildRequires/Provides/file metadata; it
