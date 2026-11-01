@@ -80,11 +80,13 @@ class BuildRpm(unittest.TestCase):
 
         with (
             contextlib.chdir(self.project),
-            mock.patch.object(build.rootfs, "rootfs", return_value=contextlib.nullcontext()) as mounted,
+            mock.patch.object(
+                build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()
+            ) as mounted,
             mock.patch.object(build.subprocess, "run", side_effect=run) as process,
             # Patch the module wrapper first so TemporaryDirectory still uses the real rmtree.
-            mock.patch.object(build, "shutil", mock.Mock(wraps=shutil)),
-            mock.patch.object(build.shutil, "rmtree") as remove,
+            mock.patch.object(build.builder, "shutil", mock.Mock(wraps=shutil)),
+            mock.patch.object(build.builder.shutil, "rmtree") as remove,
             mock.patch.object(tempfile, "tempdir", str(self.scratch)),
         ):
             self.assertEqual(build.build_rpm(spec), 0)
@@ -107,7 +109,7 @@ class BuildRpm(unittest.TestCase):
         self.assertIsNone(cwd)
         self.assertEqual(environment["SOURCE_DATE_EPOCH"], "1234567890")
         self.assertNotIn("_annotated_build", command)
-        self.assertEqual(binds, [(topdir, "/build")])
+        self.assertEqual(binds, [(topdir, Path("/build"))])
         self.assertEqual((topdir / "SOURCES" / "auxiliary").read_text(), "packaging input\n")
         frozen = (topdir / "SPECS" / "example.spec").read_text()
         self.assertTrue(frozen.startswith("%global autorelease 7%{?dist}\n%global autochangelog %{nil}\n"))
@@ -136,7 +138,7 @@ class BuildRpm(unittest.TestCase):
         self.assertNotIn("debug_package %{nil}", command)
         self.assertNotIn("-ba", command)
         self.assertEqual(command[-1], "/build/SPECS/example.spec")
-        self.assertEqual(binds, [(topdir, "/build")])
+        self.assertEqual(binds, [(topdir, Path("/build"))])
         self.assertEqual(cwd, Path("/build/CHECKOUT"))
         self.assertEqual(list((topdir / "CHECKOUT").iterdir()), [])
         self.assertEqual((topdir / "SOURCES" / "auxiliary").read_text(), "packaging input\n")
@@ -293,7 +295,7 @@ class BuildRpm(unittest.TestCase):
         self.assertIn("_vpath_builddir /build/BUILD", command)
         self.assertIn("local_option yes", command)
         self.assertLess(command.index("debug_package %{nil}"), command.index("local_option yes"))
-        self.assertEqual(binds, [(topdir, "/build")])
+        self.assertEqual(binds, [(topdir, Path("/build"))])
         self.assertEqual((build_dir / "cached-object").read_text(), "keep\n")
         self.assertFalse((out / "stale.rpm").exists())
         self.assertFalse((subpackages / "stale.rpm").exists())
@@ -313,7 +315,7 @@ class BuildRpm(unittest.TestCase):
         self.assertIn("_vpath_builddir /build/BUILD", command)
         self.assertNotIn("local_option yes", command)
         self.assertIsNone(cwd)
-        self.assertEqual(binds, [(topdir, "/build")])
+        self.assertEqual(binds, [(topdir, Path("/build"))])
 
     def test_source_writes_are_discarded_and_build_state_survives_failure(self) -> None:
         source = self.scratch / "checkout"
@@ -347,7 +349,7 @@ class BuildRpm(unittest.TestCase):
 
                 with (
                     contextlib.chdir(self.project),
-                    mock.patch.object(build.rootfs, "rootfs", return_value=contextlib.nullcontext()),
+                    mock.patch.object(build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()),
                     mock.patch.object(build.subprocess, "run", side_effect=run),
                     mock.patch.object(tempfile, "tempdir", str(case)),
                 ):
@@ -419,9 +421,9 @@ class BuildRpm(unittest.TestCase):
 
                     with (
                         contextlib.chdir(self.project),
-                        mock.patch.object(build.rootfs, "rootfs", return_value=mounted()),
+                        mock.patch.object(build.builder.rootfs, "rootfs", return_value=mounted()),
                         mock.patch.object(build.subprocess, "run", side_effect=run),
-                        mock.patch.object(build.shutil, "rmtree") as remove,
+                        mock.patch.object(build.builder.shutil, "rmtree") as remove,
                         mock.patch.object(tempfile, "tempdir", str(case)),
                     ):
                         spec = self.specification(build_dir=build_dir)
