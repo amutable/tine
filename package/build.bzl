@@ -60,6 +60,7 @@ def package_build(
     ctx: AnalysisContext,
     *,
     owner: str,
+    package_system: Dependency,
     base: BuildrootInfo,
     build_requires: list[str],
     buildroot_packages: list[Dependency],
@@ -70,16 +71,23 @@ def package_build(
     category: str,
     spec: dict[str, typing.Any],
 ) -> list[Provider]:
-    """Install `build_requires` over `base`, and run the `build` driver of its package system on the result.
+    """Install `build_requires` over `base`, and run the `build` driver of `package_system` on the result.
 
     `spec` contains the fields of the driver spec that the calling rule owns. `packages` names the output
     directory of the packages. A dev build keeps its build directory between runs if `keep_build_dir` is
     set. `owner` starts a failure message.
     """
-    package_system = base.package_manager[PackageManagerInfo].package_system
+    installs = base.package_manager[PackageManagerInfo].package_system
+    if installs.label.raw_target() != package_system.label.raw_target():
+        fail(
+            "{}: the package manager {} of the buildroot installs packages of {}, not {}".format(
+                owner,
+                base.package_manager.label.raw_target(),
+                installs.label.raw_target(),
+                package_system.label.raw_target(),
+            ),
+        )
     system = package_system[PackageSystemInfo]
-    if system.build == None:
-        fail("{}: package system {} builds no packages".format(owner, package_system.label))
     reserved = [name for name in ("build", "buildroot") if name in subpackages]
     if reserved:
         fail("{}: subpackages {} have the names of built-in sub-targets".format(owner, reserved))

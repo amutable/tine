@@ -8,6 +8,7 @@ load("//package:build.bzl", "PACKAGE_BUILD_ATTRS", "package_build", "package_bui
 load("//package:buildroot.bzl", "BuildrootInfo")
 load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "RepositoryPin", "declare_remote_repository")
+load("//package:system.bzl", "PackageSystemInfo")
 
 PACKAGE_SYSTEM = "@tine//package_system/rpm:package_system"
 
@@ -63,6 +64,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     return package_build(
         ctx,
         owner = "rpm_package",
+        package_system = ctx.attrs._package_system,
         base = base_buildroot,
         build_requires = ctx.attrs.build_requires,
         buildroot_packages = ctx.attrs.buildroot_packages,
@@ -109,6 +111,7 @@ _rpm_package = rule(
             doc = "extra rpmbuild CLI options (--with=..., --without=..., --define=...)",
         ),
         "spec": attrs.option(attrs.source(), default = None, doc = "the rpm spec file (derived from `package` by the macro)"),
+        "_package_system": attrs.dep(providers = [PackageSystemInfo], default = PACKAGE_SYSTEM),
     },
     supports_incoming_transition = True,
 )
