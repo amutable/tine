@@ -38,54 +38,54 @@
   },
   "python3": {
     "repository": "astral-sh/python-build-standalone",
-    "release": "20261021",
+    "release": "20261026",
     "platforms": {
       "arm64": {
-        "artifact": "cpython-3.14.9+20261021-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        "sha256": "847895ba727440b012207bb0192282d7e182eb991ae5c7bb5c35c6a12a99e732",
-        "size": 58711403,
+        "artifact": "cpython-3.14.10+20261026-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        "sha256": "dcc31ce7b9ddbbffac160da7fff0cc069054f43eca52382a7d0eebf94e985b88",
+        "size": 58805984,
         "strip_prefix": "python"
       },
       "x86_64": {
-        "artifact": "cpython-3.14.9+20261021-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        "sha256": "dfa4c5a40c47f338f41658017be550c72247c391e6bfb1fa4da03ebc8451abdf",
-        "size": 76270309,
+        "artifact": "cpython-3.14.10+20261026-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        "sha256": "1b38024924eb7f4cf0cab45d7b871d1f1991354190fccd2625ac7529a43786e2",
+        "size": 76564514,
         "strip_prefix": "python"
       }
     }
   },
   "ruff": {
     "repository": "astral-sh/ruff",
-    "release": "0.17.2",
+    "release": "0.17.3",
     "platforms": {
       "arm64": {
         "artifact": "ruff-aarch64-unknown-linux-musl.tar.gz",
-        "sha256": "ba1a3a43f8afc7bda55f8be2c600a1c8966390c3de17526bb1e6c5609c2e9fa0",
-        "size": 9550115,
+        "sha256": "650d5991fea0baf8a5ee17672a3b20c45ac238ac85fa09077d66ef0cec31cdcf",
+        "size": 9574296,
         "strip_prefix": "ruff-aarch64-unknown-linux-musl"
       },
       "x86_64": {
         "artifact": "ruff-x86_64-unknown-linux-musl.tar.gz",
-        "sha256": "d6407f429ef15e558cbe980d30a67f27d02e3d2f72780be141ee006b2fdf7df3",
-        "size": 10398533,
+        "sha256": "85e76bbb60e708a22624b31efb227e8bdaa6978177b93c146d352de4caf37ba1",
+        "size": 10407681,
         "strip_prefix": "ruff-x86_64-unknown-linux-musl"
       }
     }
   },
   "ty": {
     "repository": "astral-sh/ty",
-    "release": "0.0.92",
+    "release": "0.0.95",
     "platforms": {
       "arm64": {
         "artifact": "ty-aarch64-unknown-linux-musl.tar.gz",
-        "sha256": "ad762b522fbb78f4340f186342761f71ae9f33fd250931106ef81a7e1442f71e",
-        "size": 13211501,
+        "sha256": "22426a63cfd160dfefba127afc96fba884b54fdaa14e625ee6ec34072b799a30",
+        "size": 13382669,
         "strip_prefix": "ty-aarch64-unknown-linux-musl"
       },
       "x86_64": {
         "artifact": "ty-x86_64-unknown-linux-musl.tar.gz",
-        "sha256": "dc5415e1c0bf1f6f7093f04cba7dda201b25fe41bad091c0de63764264dac98c",
-        "size": 14392419,
+        "sha256": "1b48fee7b7829cb1776a1fbb7efc17d0ffd5995f28af92fa67b94aa64c8576f3",
+        "size": 14564898,
         "strip_prefix": "ty-x86_64-unknown-linux-musl"
       }
     }
@@ -164,19 +164,19 @@
   },
   "gh": {
     "repository": "cli/cli",
-    "release": "v2.103.0",
+    "release": "v2.103.3",
     "platforms": {
       "arm64": {
-        "artifact": "gh_2.103.0_linux_arm64.tar.gz",
-        "sha256": "7f322df34e624d14f5ec0c4acb121fd6dfa14392fdbbd1066aa8e0a05ac3721e",
-        "size": 13658228,
-        "strip_prefix": "gh_2.103.0_linux_arm64"
+        "artifact": "gh_2.103.3_linux_arm64.tar.gz",
+        "sha256": "ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63",
+        "size": 13661485,
+        "strip_prefix": "gh_2.103.3_linux_arm64"
       },
       "x86_64": {
-        "artifact": "gh_2.103.0_linux_amd64.tar.gz",
-        "sha256": "fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786",
-        "size": 15030338,
-        "strip_prefix": "gh_2.103.0_linux_amd64"
+        "artifact": "gh_2.103.3_linux_amd64.tar.gz",
+        "sha256": "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d",
+        "size": 15031972,
+        "strip_prefix": "gh_2.103.3_linux_amd64"
       }
     }
   }
