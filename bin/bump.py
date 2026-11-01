@@ -274,6 +274,13 @@ def _replace_release(text: str, previous: str, tag: str) -> str:
     return text
 
 
+def _move_strip_prefix(entry: dict[str, Any], description: str, previous: str, tag: str) -> None:
+    """Move the release in the platform entry's `strip_prefix`, if any, from `previous` to `tag`."""
+    if "strip_prefix" in entry:
+        prefix = _string(entry["strip_prefix"], f"strip_prefix for {description}")
+        entry["strip_prefix"] = _replace_release(prefix, previous, tag)
+
+
 def _bump_url(name: str, spec: dict[str, Any]) -> tuple[str, str] | None:
     """Resolve the newest release in the pin's index and rewrite its per-platform pins.
 
@@ -309,9 +316,7 @@ def _bump_url(name: str, spec: dict[str, Any]) -> tuple[str, str] | None:
         entry["artifact"] = new_artifact
         entry["sha256"] = digest
         entry["size"] = size
-        if "strip_prefix" in entry:
-            prefix = _string(entry["strip_prefix"], f"strip_prefix for {name} platform {arch}")
-            entry["strip_prefix"] = _replace_release(prefix, previous, tag)
+        _move_strip_prefix(entry, f"{name} platform {arch}", previous, tag)
     spec["release"] = tag
     if not changed:
         print(f"{name}: {tag} is up to date")
