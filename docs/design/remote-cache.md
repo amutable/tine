@@ -325,7 +325,7 @@ command and the platform properties. That probe is the *only* way it decides whe
 it may upload; it ignores the `update_enabled` capability which a RE-API server sends.
 A shim that refuses uploading would cause `WARN ... Cache upload for <digest> failed` noise on readers
 (i.e. developer builds). To avoid that, tell Buck2 via configuration: `tine` writes `[tine] cache-uploads`
-from the `[cache]` settings, and `platforms/defs.bzl` gates the executor's `allow_cache_uploads` on it.
+from the `[cache]` settings, and `platform/defs.bzl` gates the executor's `allow_cache_uploads` on it.
 
 Buck2 fails an action outright when the cache it was configured with does not answer, rather than
 treating it as a miss. So `tine buck` builds the shim with `--no-remote-cache`, in the foreground so that

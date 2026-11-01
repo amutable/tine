@@ -3,7 +3,7 @@
 
 """Package a logical image as an extension DDI or as a portable service DDI."""
 
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(
     ":ddi.bzl",
     "declare_ddi",

@@ -6,8 +6,8 @@
 load("//:specs.bzl", "specs")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
 load("//distribution:defs.bzl", "distribution")
-load("//platforms:architecture.bzl", "architecture")
-load("//platforms:defs.bzl", "platform")
+load("//platform:architecture.bzl", "architecture")
+load("//platform:defs.bzl", "platform")
 load(":system.bzl", "PackageSystemInfo")
 load(":verify.bzl", "Verifier", "repository_verifier", "verify_packages")
 

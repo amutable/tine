@@ -35,7 +35,7 @@ def _architecture_transition_impl(platform: PlatformInfo, refs: struct) -> Platf
 # configurations contain.
 architecture_transition = transition(
     impl = _architecture_transition_impl,
-    refs = {name: "tine//platforms:" + name for name in architecture.ARCHITECTURES}
+    refs = {name: "tine//platform:" + name for name in architecture.ARCHITECTURES}
     | {"cpu": "config//cpu/constraints:cpu", "exec_marker": get_exec_platform_marker()},
 )
 

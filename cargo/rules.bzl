@@ -6,7 +6,7 @@
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load("//project:defs.bzl", "project")
 load(":vendor.bzl", "VENDOR_ATTRS", "assemble_vendor")
 

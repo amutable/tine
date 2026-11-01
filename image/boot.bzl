@@ -4,7 +4,7 @@
 """Unified kernel images, and the boot artifacts extracted from a completed logical image."""
 
 load("//kmod:initrd_modules.toml", _INITRD_MODULES = "value")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":archive.bzl", "ImageArchiveInfo")
 load(
     ":ddi.bzl",

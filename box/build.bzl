@@ -18,7 +18,7 @@ load(
 )
 load("//package:solver.bzl", "solve_command", "solver_cache")
 load("//package:system.bzl", "PackageSystemInfo")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":runtime.bzl", "BoxInfo", "box_run")
 
 _REPOSITORY_PRIORITY = 99

@@ -4,7 +4,7 @@
 """Amazon Machine Images: a bootable disk with what EC2 needs to register it."""
 
 load("//box:defs.bzl", "box")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":publish.bzl", "PublishedFile", "PublishedInfo")
 
 # What `RegisterImage` accepts in an image name besides letters and digits.

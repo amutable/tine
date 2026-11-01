@@ -6,7 +6,7 @@
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:manager.bzl", "PackageManagerInfo")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":ami.bzl", "declare_ami")
 load(
     ":archive.bzl",

@@ -18,8 +18,8 @@ load("@catalog//:releases.bzl", _CATALOG_RELEASES = "RELEASES")
 load("@prelude//:rules.bzl", "constraint_value")
 load("@prelude//cfg/exec_platform:marker.bzl", "get_exec_platform_marker")
 load("//box:runtime.bzl", "BoxInfo")
-load("//platforms:architecture.bzl", "architecture")
-load("//platforms:defs.bzl", "platform")
+load("//platform:architecture.bzl", "architecture")
+load("//platform:defs.bzl", "platform")
 
 # The families that tine declares releases for. Each one is a value of `tine//distribution:family`.
 FAMILIES = ["arch", "debian", "fedora"]
@@ -82,7 +82,7 @@ _distribution = rule(
     impl = _distribution_impl,
     attrs = {
         "architectures": attrs.list(attrs.dep(providers = [ConfigurationInfo]), doc = "the cpu configuration of each architecture the distribution serves"),
-        "base": attrs.dep(providers = [PlatformInfo], default = "tine//platforms:default"),
+        "base": attrs.dep(providers = [PlatformInfo], default = "tine//platform:default"),
         "constraint": attrs.dep(providers = [ConstraintValueInfo]),
         "family": attrs.dep(providers = [ConstraintValueInfo]),
     },
@@ -126,7 +126,7 @@ def _box_host_impl(ctx: AnalysisContext) -> list[Provider]:
 box_host = rule(
     impl = _box_host_impl,
     attrs = {
-        "base": attrs.dep(providers = [PlatformInfo], default = "tine//platforms:default"),
+        "base": attrs.dep(providers = [PlatformInfo], default = "tine//platform:default"),
         "default": attrs.dep(providers = [ConfigurationInfo], default = "catalog//:default.distribution"),
         "distribution": attrs.option(attrs.dep(providers = [ConfigurationInfo]), default = None),
         "_exec_marker": attrs.dep(providers = [ConstraintValueInfo], default = get_exec_platform_marker()),
@@ -175,7 +175,7 @@ def new(name: str, architectures: list[str], visibility: list[str] | None = None
     for arch in architectures:
         box_host(
             name = "{}.{}".format(name, arch),
-            base = "tine//platforms:" + arch,
+            base = "tine//platform:" + arch,
             distribution = ":" + name,
             visibility = visibility,
         )

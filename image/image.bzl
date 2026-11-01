@@ -9,7 +9,7 @@ load("//distribution:defs.bzl", "distribution")
 load("//package:install.bzl", "resolve_packages")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//package:system.bzl", "PackageSystemInfo")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":sign.bzl", "SigningAccess", "SigningKeyInfo", "external_signing_execution", "key_source_arguments", "merge_signing_access")
 
 ImageToolsInfo = provider(

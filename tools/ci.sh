@@ -217,7 +217,7 @@ platforms=(catalog//:debian.testing.distribution)
 # analysis for arm64 fails on catalog//:default.release, because Arch serves x86_64 only. The run with
 # the default boxes analyzes the other architecture.
 if [ -z "${TINE_BOX:-}" ]; then
-    platforms=("tine//platforms:$other" "${platforms[@]}")
+    platforms=("tine//platform:$other" "${platforms[@]}")
 fi
 for platform in "${platforms[@]}"; do
     group "graph-${platform##*:}" -- "${buck[@]}" bxl --target-platforms "$platform" tine//tools/graph.bxl:analyze -- --pattern "$pattern"

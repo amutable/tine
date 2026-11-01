@@ -25,7 +25,7 @@ jobs:
       # first thing worth knowing.
       fail-fast: false
       matrix:
-        # architecture is tine's name for it, as in platforms/architecture.bzl. box names the release
+        # architecture is tine's name for it, as in platform/architecture.bzl. box names the release
         # whose boxes the run builds with, and an empty box keeps the catalog's default. A run with
         # another release's boxes only builds and tests what depends on the default boxes. Only a run
         # with the default boxes checks the digests in examples/image/expected.json. Arch serves x86_64

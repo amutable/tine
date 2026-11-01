@@ -4,7 +4,7 @@
 """Native package managers, and the repository configuration that their consumers run in a box."""
 
 load("//distribution:defs.bzl", "distribution")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":local_packages.bzl", "LocalPackageUniverseInfo")
 load(":release.bzl", "OsReleaseInfo")
 load(

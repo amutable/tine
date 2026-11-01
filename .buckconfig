@@ -23,10 +23,10 @@ fbsource = none
 prelude = bundled
 
 [parser]
-target_platform_detector_spec = target:tine//...->tine//platforms:default target:catalog//...->tine//platforms:default
+target_platform_detector_spec = target:tine//...->tine//platform:default target:catalog//...->tine//platform:default
 
 [build]
-execution_platforms = tine//platforms:default
+execution_platforms = tine//platform:default
 
 [project]
 # Completion can start Buck before the generated .buckconfig.local exists.

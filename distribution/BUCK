@@ -5,7 +5,7 @@
 
 load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
 load("//box:defs.bzl", "box")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":defs.bzl", "distribution")
 
 constraint_setting(
