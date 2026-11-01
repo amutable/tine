@@ -129,6 +129,9 @@ class BuildRpm(unittest.TestCase):
         self.assertIn("-bb", command)
         self.assertIn("--noprep", command)
         self.assertIn("--build-in-place", command)
+        prefix_map = "-fdebug-prefix-map=/build/CHECKOUT=%{builddir}/%{NAME}-%{VERSION}"
+        for lang in ("cflags", "cxxflags", "fflags"):
+            self.assertIn(f"_distro_extra_{lang} {prefix_map}", command)
         self.assertIn("common_option yes", command)
         self.assertIn("local_option yes", command)
         self.assertNotIn("_binary_payload w.ufdio", command)

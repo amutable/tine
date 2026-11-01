@@ -97,6 +97,31 @@ box.sh_test(
     ],
 )
 
+# hello-meson builds the same checkout with meson. ninja runs the compiler in the meson build directory, and
+# the compiler then records the real path of the checkout. The test checks that the debugsource package still
+# contains hello.c.
+rpm.package(
+    name = "hello-meson",
+    distro = _DISTRO,
+    package = "hello",
+    buildroot = _BUILDROOT,
+    build_requires = ["gcc", "meson"],
+    in_place_spec = "rpm/hello-meson.spec",
+    release = "1",
+    source_date_epoch = 1754006400,
+    source_tree = ":hello.source",
+    subpackages = ["hello"],
+)
+
+box.sh_test(
+    name = "hello-meson-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = 'rpm -qpl "$1"/hello-debugsource-*.rpm | grep -E "/hello\\.c$" > /dev/null',
+    args = ["$(location :hello-meson)"],
+)
+
 # hello-pinned builds the same checkout with the spec and sources of the dist-git commit that
 # rpm/packaging.json pins for fedora. The pin names a bundle in the project, so the fetch needs no network.
 # The pinned spec doesn't produce hello-imported-only. The build reports the missing subpackage and doesn't
