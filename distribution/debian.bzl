@@ -9,7 +9,7 @@ load("//package:manager.bzl", "package_manager")
 load("//package:release.bzl", "os_release")
 load("//package:repository.bzl", "repository_universe")
 load("//package_system/deb:rules.bzl", "ARCHIVE_MIRROR", "PACKAGE_SYSTEM", "deb_remote_repository")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 
 # The signing keys of the archive, under the names that ftp-master serves them as. Print the
 # fingerprint of a downloaded key with:

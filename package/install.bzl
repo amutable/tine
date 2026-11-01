@@ -5,7 +5,7 @@
 
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":local_packages.bzl", "LocalPackageUniverseInfo", "select_local_packages")
 load(":manager.bzl", "PackageManagerInfo", "configure_repositories")
 load(

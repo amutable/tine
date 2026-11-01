@@ -49,7 +49,7 @@ def _package_system_impl(ctx: AnalysisContext) -> list[Provider]:
 package_system = rule(
     impl = _package_system_impl,
     attrs = {
-        "arch_schema": attrs.string(doc = "the platforms/architecture.bzl schema this system names architectures in"),
+        "arch_schema": attrs.string(doc = "the platform/architecture.bzl schema this system names architectures in"),
         "build": attrs.option(
             attrs.exec_dep(providers = [RunInfo]),
             default = None,

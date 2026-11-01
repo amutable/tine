@@ -5,7 +5,7 @@
 
 # Explicit loads keep Starlark type checking precise.
 load("@prelude//:rules.bzl", "http_archive", "http_file")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 
 def _tool_impl(ctx: AnalysisContext) -> list[Provider]:
     src = ctx.attrs.src

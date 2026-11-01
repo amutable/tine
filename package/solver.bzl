@@ -5,7 +5,7 @@
 
 load("//:specs.bzl", "specs")
 load("//box:runtime.bzl", "BoxInfo", "box_run")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":repository.bzl", "ConfiguredPackageRepositoryInfo", "encode_repositories")
 load(":system.bzl", "PackageSystemInfo")
 

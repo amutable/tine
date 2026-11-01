@@ -21,7 +21,7 @@ docs/user/images.md), so a consumer can read roles rather than match on a naming
 load("//distribution:defs.bzl", "distribution")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//package:system.bzl", "PackageSystemInfo")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":ddi.bzl", "DdiInfo", "PartitionInfo")
 load(":image.bzl", "ImageInfo", "image_metadata_subtargets")
 

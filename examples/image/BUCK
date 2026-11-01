@@ -13,7 +13,7 @@ image rule declares for itself.
 load("@tine//box:defs.bzl", "box")
 load("@tine//distribution:defs.bzl", "distribution")
 load("@tine//image:defs.bzl", "image")
-load("@tine//platforms:architecture.bzl", "architecture")
+load("@tine//platform:architecture.bzl", "architecture")
 load("@tine//python:defs.bzl", "python")
 load("@tine//tests:defs.bzl", "tests")
 load(":expected.json", _expected = "value")

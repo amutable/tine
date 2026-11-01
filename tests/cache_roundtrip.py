@@ -47,7 +47,7 @@ SERVED = {
 ACTION = re.compile(r"(?P<target>\S+) \(\S+\) \((?P<category>\w+)\)")
 ISOLATION = "cache-roundtrip"
 # The platform whose executor decides whether Buck offers the shim an upload at all.
-PLATFORM = "tine//platforms:default"
+PLATFORM = "tine//platform:default"
 BUCKET = "tine-cache"
 # `tine.LOCAL_SETTINGS`, which this cannot import without dragging the whole launcher in.
 LOCAL_SETTINGS = "tine.local.toml"

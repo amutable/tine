@@ -2107,11 +2107,11 @@ fbsource = none
 prelude = bundled
 
 [parser]
-target_platform_detector_spec = target:tine//...->tine//platforms:default \\
-    target:catalog//...->tine//platforms:default
+target_platform_detector_spec = target:tine//...->tine//platform:default \\
+    target:catalog//...->tine//platform:default
 
 [build]
-execution_platforms = tine//platforms:default
+execution_platforms = tine//platform:default
 
 [custom]
 continued = one, \\
@@ -2150,7 +2150,7 @@ class TestRenderProjectBuckconfig(unittest.TestCase):
         # This cell's platform, not the prelude's: that is what gives the project the shared cache.
         self.assertEqual(
             detector,
-            [f"target:{cell}//...->tine//platforms:default" for cell in ("root", "tine", "catalog")],
+            [f"target:{cell}//...->tine//platform:default" for cell in ("root", "tine", "catalog")],
         )
 
     def test_a_project_without_a_catalog_gets_tine_s(self) -> None:
@@ -2166,7 +2166,7 @@ class TestRenderProjectBuckconfig(unittest.TestCase):
 
     def test_the_project_runs_actions_on_the_cell_s_platform(self) -> None:
         # Copied rather than rewritten, and it is what gives the project the shared cache.
-        self.assertEqual(self.config()["build"]["execution_platforms"], "tine//platforms:default")
+        self.assertEqual(self.config()["build"]["execution_platforms"], "tine//platform:default")
 
     def test_defaults_and_continued_values_are_copied(self) -> None:
         written = self.written()

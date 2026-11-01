@@ -5,7 +5,7 @@
 
 load("@prelude//:native.bzl", "native")
 load("//package:local_packages.bzl", "local_packages")
-load("//platforms:architecture.bzl", "architecture")
+load("//platform:architecture.bzl", "architecture")
 load(":rules.bzl", "rpm_package")
 
 # Keep these records aligned with the importer's generated schema.
