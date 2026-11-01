@@ -42,7 +42,11 @@ PACKAGE_BUILD_ATTRS = {
         default = None,
         doc = "the distro whose entry of the in_place_packaging file the build uses",
     ),
-    "source_date_epoch": attrs.int(doc = "the SOURCE_DATE_EPOCH of the build"),
+    "source_date_epoch": attrs.option(
+        attrs.int(),
+        default = None,
+        doc = "the SOURCE_DATE_EPOCH of the build, or None to take it from the package's changelog where the recipe has one",
+    ),
     "source_tree": attrs.option(
         attrs.source(allow_directory = True),
         default = None,
