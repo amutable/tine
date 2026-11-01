@@ -243,8 +243,8 @@ The providers have deliberately narrow roles:
   paths that database occupies in an installed root, the file suffix a selected package is named with,
   and whether its planner reuses prebuilt repository metadata. The builder and the indexer are
   optional, and a system whose repository metadata is already what its resolver reads declines the
-  cache instead of leaving it on. A package build declared against a manager whose system has no
-  builder is refused by name, and so is a local repository of a system with no indexer.
+  cache instead of leaving it on. A package build declared against a buildroot of another package
+  system is refused by name, and so is a local repository of a system with no indexer.
 - `PackageRepositoryInfo` represents one repository and binds it to a package system. Its target name is
   the repository ID; remote declarations also expose their pinned directory and base URL. Priority is
   configuration policy, not an intrinsic repository property. A repository is not inherently owned by an

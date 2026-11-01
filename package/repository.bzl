@@ -401,12 +401,12 @@ def _local_repository_impl(ctx: AnalysisContext) -> list[Provider]:
     package_dirs = []
     for package in packages:
         info = package[LocalPackageInfo]
-        if info.package_system.label != context.package_system.label:
+        if info.package_system.label.raw_target() != context.package_system.label.raw_target():
             fail(
                 "local_repository: package {} uses package system {}, expected {}".format(
                     package.label,
-                    info.package_system.label,
-                    context.package_system.label,
+                    info.package_system.label.raw_target(),
+                    context.package_system.label.raw_target(),
                 ),
             )
         package_dirs.append(info.packages)

@@ -82,13 +82,13 @@ def package_buildroot(
     extra_packages = []
     for dependency in buildroot_packages:
         info = dependency[LocalPackageInfo]
-        if info.package_system.label != package_system.label:
+        if info.package_system.label.raw_target() != package_system.label.raw_target():
             fail(
                 "{}: buildroot dependency {} uses package system {}, expected {}".format(
                     owner,
                     dependency.label,
-                    info.package_system.label,
-                    package_system.label,
+                    info.package_system.label.raw_target(),
+                    package_system.label.raw_target(),
                 ),
             )
         extra_packages.append(info.packages)
