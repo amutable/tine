@@ -8,10 +8,10 @@
 # Boxes with a resolver can derive their transaction during the build; refresh the catalog to freeze
 # one as a retained lock. Signing keys are fetched once, when a repository first declares them.
 
-load("@tine//distribution:arch.bzl", "arch_release", "arch_signing_keys")
-load("@tine//distribution:debian.bzl", "debian_release", "debian_signing_keys")
+load("@tine//distribution:arch.bzl", "arch")
+load("@tine//distribution:debian.bzl", "debian")
 load("@tine//distribution:defs.bzl", "distribution")
-load("@tine//distribution:fedora.bzl", "fedora_release", "fedora_signing_keys")
+load("@tine//distribution:fedora.bzl", "fedora")
 load("@tine//go:defs.bzl", "go")
 
 # What the mirror serves, and so what a box of this release keeps a committed lock for. A box only
@@ -27,34 +27,34 @@ _DEBIAN_ARCHITECTURES = ["x86_64", "arm64"]
 
 # Pinned rpmrepo compose snapshot: packages never vanish underneath committed pins.
 # refresh-catalog --advance enumerates the mirror and moves the snapshot pin to the newest compose.
-fedora_release(
+fedora.release(
     name = "fedora.rawhide",
     version = "rawhide",
     architectures = _FEDORA_ARCHITECTURES,
     rpmrepo_mirror = "https://rpmrepo-gateway.amutable.workers.dev/v2/mirror/public/f46",
     rpmrepo_snapshot = "f46-$basearch-rawhide-20261031",
     # should be at most two; drop the previous version after the regular mass rebuild is done
-    signing_keys = fedora_signing_keys("46", "45"),
+    signing_keys = fedora.signing_keys("46", "45"),
     visibility = ["PUBLIC"],
 )
 
 # Arch has no numbered releases, so the catalog pins a day in the Arch Linux Archive: its dated
 # trees serve databases that never change under a committed pin, which a rolling mirror cannot.
 # refresh-catalog --advance moves every repository sharing this pin to the newest complete day.
-arch_release(
+arch.release(
     name = "arch.rolling",
     architectures = _ARCH_ARCHITECTURES,
     archive_snapshot = "2026/10/31",
-    signing_keys = arch_signing_keys(),
+    signing_keys = arch.signing_keys(),
     visibility = ["PUBLIC"],
 )
 
-debian_release(
+debian.release(
     name = "debian.testing",
     architectures = _DEBIAN_ARCHITECTURES,
     archive_snapshot = "20261031T202858Z",
     # The archive signs a Release with its current key and with the previous key.
-    signing_keys = debian_signing_keys("archive-key-12", "archive-key-13"),
+    signing_keys = debian.signing_keys("archive-key-12", "archive-key-13"),
     visibility = ["PUBLIC"],
 )
 

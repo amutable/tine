@@ -21,7 +21,7 @@ _DEBIAN_SIGNING_KEYS = {
     "archive-key-13": "04B54C3CDCA79751B16BC6B5225629DF75B188BD",
 }
 
-def debian_signing_keys(*names) -> dict[str, str]:
+def _signing_keys(*names) -> dict[str, str]:
     """Return the `signing_keys` attribute for the named archive keys."""
     for name in names:
         if name not in _DEBIAN_SIGNING_KEYS:
@@ -32,7 +32,7 @@ def _package_sets(arch: str, overrides: dict[str, list[str]]) -> dict[str, list[
     """Return the package sets for one architecture, with the overrides of the caller applied.
 
     The kernel package of Debian has the architecture in its name, for example `linux-image-amd64`.
-    So the `bootable` set differs per architecture, and `debian_release()` selects the sets by
+    So the `bootable` set differs per architecture, and `debian.release()` selects the sets by
     architecture.
     """
     sets = dict(_DEBIAN_PACKAGE_SETS)
@@ -111,7 +111,7 @@ def _check_name(name: str) -> None:
     if not name.startswith("debian.") or name.count(".") != 1:
         fail("debian release name must be 'debian.<suite>': {}".format(name))
 
-def debian_release(
+def _release(
     name: str,
     architectures: list[str],
     signing_keys: dict[str, str],
@@ -128,7 +128,7 @@ def debian_release(
 ) -> None:
     """Declare the targets of a Debian release: repositories, release, distribution and package manager.
 
-    `signing_keys` are the archive keys, normally from `debian_signing_keys(...)`. At least one
+    `signing_keys` are the archive keys, normally from `debian.signing_keys(...)`. At least one
     archive key must have signed the Release of the suite. The caller passes the keys explicitly,
     so that a reviewer sees which keys a release trusts.
 
@@ -141,12 +141,12 @@ def debian_release(
     suite = suite or name.removeprefix("debian.")
     unknown = [component for component in repository_urls if component not in _COMPONENTS]
     if unknown:
-        fail("debian_release: unknown repository components {}".format(sorted(unknown)))
+        fail("debian.release: unknown repository components {}".format(sorted(unknown)))
     if (archive_snapshot == None) == (not repository_urls):
-        fail("debian_release: takes archive_snapshot or repository_urls, not both or neither: {}".format(name))
+        fail("debian.release: takes archive_snapshot or repository_urls, not both or neither: {}".format(name))
     if repository_urls and sorted(repository_urls) != sorted(_COMPONENTS):
         fail(
-            "debian_release: repository_urls must cover every component {}: {}".format(
+            "debian.release: repository_urls must cover every component {}: {}".format(
                 sorted(_COMPONENTS),
                 name,
             ),
@@ -203,3 +203,8 @@ def debian_release(
         repository_priorities = repository_priorities,
         visibility = visibility,
     )
+
+debian = struct(
+    release = _release,
+    signing_keys = _signing_keys,
+)

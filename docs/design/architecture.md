@@ -679,7 +679,7 @@ scrubs libdnf5 and ldconfig bookkeeping. Documentation and language filtering ar
 `_install_langs`. A locally built package keeps the `<directory>/<file>` location convention that maps it
 back to the input directory it came from.
 
-The default catalog declares Fedora Rawhide from the `fedora_release()` bundle, which also declares the
+The default catalog declares Fedora Rawhide from the `fedora.release()` bundle, which also declares the
 release's root box. Another Fedora release gets a root box of its own. It offers no CentOS Stream release:
 nothing publishes immutable CentOS Stream composes, so its pinned metadata stops resolving the moment the
 mirror advances, which is not a repository this can pin.
@@ -821,7 +821,7 @@ file list.
 
 alpm needs no prebuilt solver cache. A repository database is the metadata pacman reads directly,
 not a format to convert in advance, so this package system declares `solver_cache = False` and no
-cache target is created for it. There is no package builder either: `arch_release()` defines a
+cache target is created for it. There is no package builder either: `arch.release()` defines a
 `buildroot` package set, but no `makepkg` rule consumes it, so `PackageSystemInfo.build` is unset.
 
 `arch.rolling.box` is the one that made this second package system prove itself. It is a root box:

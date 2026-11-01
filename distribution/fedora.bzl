@@ -23,7 +23,7 @@ _FEDORA_SIGNING_KEYS = {
     "47": "B2E766FA50CA6FA2D5ED06FC09D879E09488FB64",
 }
 
-def fedora_signing_keys(*versions) -> dict[str, str]:
+def _signing_keys(*versions) -> dict[str, str]:
     """The `signing_keys` for a repository signed with the named Fedora releases' keys."""
     for version in versions:
         if version not in _FEDORA_SIGNING_KEYS:
@@ -84,7 +84,7 @@ def _check_name(name: str, family: str, version: str) -> None:
     if name != expected:
         fail("{} release name must be {!r}".format(family, expected))
 
-def fedora_release(
+def _release(
     name: str,
     version: str,
     architectures: list[str],
@@ -162,3 +162,8 @@ def fedora_release(
         package_set = "buildroot",
         visibility = visibility,
     )
+
+fedora = struct(
+    release = _release,
+    signing_keys = _signing_keys,
+)
