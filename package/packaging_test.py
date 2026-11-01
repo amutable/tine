@@ -53,11 +53,11 @@ class CheckOut(unittest.TestCase):
     def check_out(self, pin: object) -> None:
         self.check_out_pins({"fedora": pin, "centos": self.pin(self.other) | {"branch": "c10s"}})
 
-    def check_out_pins(self, pins: object) -> None:
+    def check_out_pins(self, pins: object, subdir: str | None = None) -> None:
         path = self.scratch / "checkout" / "packaging.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(pins))
-        packaging.check_out(path, "fedora", self.out)
+        packaging.check_out(path, "fedora", self.out, subdir)
 
     def pin(self, commit: str) -> dict[str, str]:
         return {"url": self.upstream.as_uri(), "branch": "rawhide", "commit": commit}
@@ -108,6 +108,22 @@ class CheckOut(unittest.TestCase):
         git(self.upstream, "commit", "--quiet", "--message", "symlink")
         with self.assertRaisesRegex(SystemExit, "contains symlinks at the top of its tree: escape.patch"):
             self.check_out(self.pin(git(self.upstream, "rev-parse", "HEAD")))
+
+    def test_a_subdirectory_is_checked_out_alone(self) -> None:
+        git(self.upstream, "switch", "--quiet", "rawhide")
+        (self.upstream / "debian").mkdir()
+        (self.upstream / "debian" / "rules").write_text("rules\n")
+        git(self.upstream, "add", ".")
+        git(self.upstream, "commit", "--quiet", "--message", "debian")
+        pin = self.pin(git(self.upstream, "rev-parse", "HEAD"))
+        with contextlib.chdir(self.scratch):
+            self.check_out_pins({"fedora": pin | {"url": "rpms/hello"}}, subdir="debian")
+        self.assertEqual([path.name for path in self.out.iterdir()], ["debian"])
+        self.assertEqual((self.out / "debian" / "rules").read_text(), "rules\n")
+
+    def test_a_missing_subdirectory_fails(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "contains no directory debian"):
+            self.check_out_pins({"fedora": self.pin(self.first)}, subdir="debian")
 
     def test_a_missing_branch_names_the_pin(self) -> None:
         with self.assertRaisesRegex(SystemExit, "packaging.json: cannot fetch branch f41"):
