@@ -126,6 +126,17 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
             mode = ["-bb", "--noprep", "--build-in-place"]
             options += spec["in_place_rpmbuild_options"]
             cwd = builder.CHROOT_TOPDIR / builder.CHECKOUT
+            # rpm runs an in-place build in %{builddir}/%{NAME}-%{VERSION}, a symlink to the checkout.
+            # find-debuginfo collects the sources under the path of the symlink only. A compiler that ninja
+            # or make -C starts in a subdirectory records the real path of the checkout instead. The
+            # debugsource package then has no files, and rpmbuild fails. rpm expands the flags when it parses
+            # the spec, before it defines %{buildsubdir}. The map therefore names the symlink with the macros
+            # that rpm uses to create it. Fedora appends the _distro_extra_* macros to %{build_cflags},
+            # %{build_cxxflags} and %{build_fflags} only. A compiler that a spec runs with %{optflags} or
+            # $RPM_OPT_FLAGS still records the real path. rustc records the real path as well.
+            prefix_map = f"-fdebug-prefix-map={cwd}=%{{builddir}}/%{{NAME}}-%{{VERSION}}"
+            for lang in ("cflags", "cxxflags", "fflags"):
+                defines += ["--define", f"_distro_extra_{lang} {prefix_map}"]
         rc = subprocess.run(
             [
                 "/usr/bin/rpmbuild",
