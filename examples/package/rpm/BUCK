@@ -23,6 +23,7 @@ git.checkout(name = "hello.source")
 # source-tree fixture to check release and dev compression through real RPM headers.
 rpm.package(
     name = "hello-archive",
+    distro = _DISTRO,
     package = "hello",
     spec = "hello/hello.spec",
     buildroot = _BUILDROOT,
@@ -44,6 +45,7 @@ box.sh_test(
 # user's root config.
 rpm.package(
     name = "hello-dev",
+    distro = _DISTRO,
     package = "hello",
     buildroot = _BUILDROOT,
     build_requires = ["gcc"],
@@ -72,6 +74,7 @@ box.sh_test(
 # Like the archive build, and unlike the two dev builds, it reaches the shared cache.
 rpm.package(
     name = "hello-tree",
+    distro = _DISTRO,
     package = "hello",
     buildroot = _BUILDROOT,
     build_requires = ["gcc"],
@@ -100,6 +103,7 @@ box.sh_test(
 # fail.
 rpm.package(
     name = "hello-pinned",
+    distro = _DISTRO,
     package = "hello",
     buildroot = _BUILDROOT,
     build_requires = ["gcc"],

@@ -3,6 +3,7 @@
 
 """RPM repositories and package-build rules."""
 
+load("//distribution:defs.bzl", "distribution")
 load("//package:build.bzl", "PACKAGE_BUILD_ATTRS", "package_build", "package_build_source")
 load("//package:buildroot.bzl", "BuildrootInfo")
 load("//package:packaging.bzl", "pinned_packaging")
@@ -109,6 +110,7 @@ _rpm_package = rule(
         ),
         "spec": attrs.option(attrs.source(), default = None, doc = "the rpm spec file (derived from `package` by the macro)"),
     },
+    supports_incoming_transition = True,
 )
 
 def rpm_package(
@@ -121,9 +123,16 @@ def rpm_package(
     in_place_rpmbuild_options: list[str] | None = None,
     in_place_spec: str | None = None,
     source_tree: str | None = None,
+    distro: str | None = None,
+    visibility: list[str] | None = None,
+    target_compatible_with: list[str] | Select | None = None,
     **kwargs,
 ) -> None:
-    """Build an RPM from archives or a prepared Git tree, with a local checkout override."""
+    """Build an RPM from archives or a prepared Git tree, with a local checkout override.
+
+    `distro` names the distribution of the buildroot's release. The target is then incompatible with an
+    architecture that the release does not serve.
+    """
     source_tree, configured_dev = package_build_source(
         "rpm_package",
         name,
@@ -136,6 +145,13 @@ def rpm_package(
     )
     if spec == None and (source_tree == None or (in_place_spec == None and in_place_packaging == None)):
         spec = package + ".spec"
+
+    # Without `distro`, distribution.distributed() would declare an alias for every release of the catalog,
+    # and each alias would build the package on the buildroot of one release for another one. An imported
+    # package names no distribution.
+    distributed = {"target_compatible_with": target_compatible_with, "visibility": visibility}
+    if distro != None:
+        distributed = distribution.distributed(name, distro, visibility, target_compatible_with)
     _rpm_package(
         name = name,
         package = package,
@@ -146,5 +162,5 @@ def rpm_package(
         in_place_packaging_distro = in_place_packaging_distro,
         in_place_rpmbuild_options = in_place_rpmbuild_options,
         in_place_spec = in_place_spec,
-        **kwargs,
+        **(distributed | kwargs),
     )
