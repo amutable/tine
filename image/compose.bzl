@@ -54,18 +54,13 @@ load(
     "LayerOperationTree",  # @unused Used as a type.
     "VERSION_PATTERN",
     "check_name",
-    "copy",
     "declare_image",
     "flatten_operations",
     "generated",
     "image_providers",
     "initial_package_manager",
-    "install_systemd_boot",
-    "merge_os_release",
-    "remove",
+    "ops",
     "sign_systemd_boot",
-    "symlink",
-    "write_file",
 )
 load(":publish.bzl", "PublishedFile", "PublishedInfo", "published_metadata_subtargets")
 load(
@@ -85,7 +80,7 @@ InitrdInfo = provider(
 # As of systemd 262, systemd-imds-early-network.service only writes a .network file, but doesn't start
 # networkd. The IMDS generator pulls the unit in only on a cloud it detects in the hardware database, so
 # networkd runs nowhere else, and `systemd.imds.network=off` opts out. mkosi does that via a preset call.
-_IMDS_NETWORKD = write_file(
+_IMDS_NETWORKD = ops.write_file(
     "/usr/lib/systemd/system/systemd-imds-early-network.service.d/tine-networkd.conf",
     "[Unit]\nWants=systemd-networkd.service\n",
 )
@@ -96,7 +91,7 @@ _IMDS_NETWORKD = write_file(
 # This is the rule of amazon-ec2-utils, 70-ec2-nvme-devices.rules: unlike `nvme_core.io_timeout` on the
 # kernel command line, it leaves the timeout of every other NVMe disk alone. The root volume keeps the
 # timeout set here after switching root.
-_EBS_IO_TIMEOUT = write_file(
+_EBS_IO_TIMEOUT = ops.write_file(
     "/usr/lib/udev/rules.d/70-ebs-io-timeout.rules",
     'KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTRS{model}=="Amazon Elastic Block Store", ATTR{queue/io_timeout}="4294967295"\n',
 )
@@ -106,8 +101,8 @@ _EBS_IO_TIMEOUT = write_file(
 # /etc/resolv.conf files. The caller's operations run after _PORTABLE_MOUNT_POINTS, so an operation
 # that writes /etc/machine-id or /etc/resolv.conf replaces the empty file.
 _PORTABLE_MOUNT_POINTS = [
-    write_file("/etc/machine-id"),
-    write_file("/etc/resolv.conf"),
+    ops.write_file("/etc/machine-id"),
+    ops.write_file("/etc/resolv.conf"),
 ]
 
 def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -120,8 +115,8 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
         install_langs = ctx.attrs.install_langs,
         ops = generated(
             [
-                symlink("/usr/lib/systemd/systemd", "/init"),
-                symlink("/etc/os-release", "/etc/initrd-release"),
+                ops.symlink("/usr/lib/systemd/systemd", "/init"),
+                ops.symlink("/etc/os-release", "/etc/initrd-release"),
                 _IMDS_NETWORKD,
                 _EBS_IO_TIMEOUT,
             ]
@@ -133,10 +128,10 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
         # messages or resolves service names, so the initrd does not need the catalogs or
         # /etc/services.
         + [
-            remove("/usr/lib/udev/hwdb.d"),
-            remove("/usr/lib/systemd/catalog"),
-            remove("/var/lib/systemd/catalog"),
-            remove("/etc/services"),
+            ops.remove("/usr/lib/udev/hwdb.d"),
+            ops.remove("/usr/lib/systemd/catalog"),
+            ops.remove("/var/lib/systemd/catalog"),
+            ops.remove("/etc/services"),
         ],
         package_manager = ctx.attrs.package_manager,
         # Each release lists the packages of its "initrd" package set, so the initrd names the set
@@ -364,7 +359,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     # signing joins it for the same reason (a key change must not re-run the caller's operations):
     # it must precede the verity partitions below so that the booted /usr carries the signed
     # binary (see sign_systemd_boot).
-    identity_ops = [merge_os_release({"IMAGE_ID": image_id, "IMAGE_VERSION": version})]
+    identity_ops = [ops.merge_os_release({"IMAGE_ID": image_id, "IMAGE_VERSION": version})]
     if secure_boot_key != None:
         identity_ops += sign_systemd_boot(secure_boot_key, ctx.attrs.arch)
     identity = declare_image(
@@ -452,7 +447,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             tools = tools,
             identifier = "esp",
             keys = [secure_boot_key],
-            ops = [copy(uki.ukis, "/boot/EFI/Linux")] + install_systemd_boot(secure_boot_key),
+            ops = [ops.copy(uki.ukis, "/boot/EFI/Linux")] + ops.install_systemd_boot(secure_boot_key),
             parent = identity,
             version = version,
         )
