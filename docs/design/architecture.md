@@ -746,8 +746,9 @@ names none, and gets no per-release aliases either.
 - Debuginfo/debugsource outputs are not first-class declared sub-targets.
 - The bootstrap extractor supports the pinned v4/newc payload form, not RPM v6 metadata.
 
-Entry points: `package_system/rpm/{rules,catalog,generated}.bzl` and
-`package_system/rpm/{snapshot,plan,install,pkgdb,createrepo,build,extract,rpmfile}.py`.
+Entry points: `package_system/rpm/{rules,catalog,generated}.bzl`,
+`package_system/rpm/{snapshot,plan,install,pkgdb,createrepo,build,extract,rpmfile}.py` and
+`package_system/rpm/rpmbuild.py`.
 
 ### The alpm package system
 
