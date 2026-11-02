@@ -54,7 +54,13 @@ in `build_requires`.
 
 Declare the spec of a dist-git repository in the `sub_targets` of its [`git.fetch()`](git.md), and pass that
 sub-target as `spec`. Pass the fetch itself in `srcs`. The build takes every file at the top of a directory
-in `srcs`, and installs the BuildRequires of the spec:
+in `srcs`, and installs the BuildRequires of the spec. Fedora and CentOS keep the source archives out of the
+repository, in a lookaside cache that the `sources` file of the repository indexes by digest.
+`rpm.lookaside()` downloads the archives that the `sources` file lists, and fails if a digest differs.
+`package` is the name of the dist-git repository, which the URL of each archive contains. Declare `sources`
+in `sub_targets` as well, and pass the output of `rpm.lookaside()` in the `srcs` of the package. When you
+move the `git.fetch()` to another commit, the build downloads only the archives whose lines in `sources`
+changed:
 
 ```starlark
 load("@tine//git:defs.bzl", "git")
@@ -64,14 +70,21 @@ git.fetch(
     name = "hello.git",
     repo = "https://src.fedoraproject.org/rpms/hello.git",
     rev = "2621a97179dd5182d127a98a50759a637a4fa334",
-    sub_targets = ["hello.spec"],
+    sub_targets = ["hello.spec", "sources"],
+)
+
+rpm.lookaside(
+    name = "hello.archives",
+    package = "hello",
+    sources = ":hello.git[sources]",
+    url = "https://src.fedoraproject.org/repo/pkgs/rpms",
 )
 
 rpm.package(
     name = "hello",
     package = "hello",
     spec = ":hello.git[hello.spec]",
-    srcs = [":hello.git"],
+    srcs = [":hello.git", ":hello.archives"],
     buildroot = "catalog//:fedora.rawhide.buildroot",
     release = "1",
     source_date_epoch = 1754006400,
@@ -79,8 +92,10 @@ rpm.package(
 )
 ```
 
-Fedora and CentOS keep the source archives out of the repository, in a lookaside cache. Add them to `srcs`
-as well.
+CentOS Stream serves its archives at `https://sources.stream.centos.org/sources/rpms`.
+`rpm.lookaside()` fails on a `sources` file that lists an MD5 digest, as the `sources` files of old packages
+do. A packager of the package can upload the archive again with `fedpkg new-sources`, which lists its
+SHA-512 digest.
 
 The build fails if two files of `srcs` have the same name and different contents, or if the top of a
 directory in `srcs` contains a symlink. For a spec in a subdirectory of the repository, such as `rpm/`,

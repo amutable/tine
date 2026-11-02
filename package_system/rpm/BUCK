@@ -106,6 +106,14 @@ python.test(
     deps = ["//:specs", "//:util"],
 )
 
+python.binary(name = "lookaside", main = "lookaside.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
+
+python.test(
+    name = "lookaside-test",
+    srcs = ["lookaside.py", "lookaside_test.py"],
+    deps = ["//:specs", "//:util"],
+)
+
 package_system(
     name = "package_system",
     arch_schema = "rpm",

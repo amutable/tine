@@ -36,6 +36,13 @@ def fail(message: str) -> NoReturn:
     sys.exit(f"tine: {message}")
 
 
+def reject_symlinks(path: Path, what: str) -> None:
+    """Fail if `path` or one of its parents is a symlink, with a message that names it as `what`."""
+    for component in (path, *path.parents):
+        if component.is_symlink():
+            fail(f"{what} is a symlink: {component}")
+
+
 def object_table(value: object, description: str) -> dict[str, object]:
     """Require a TOML table with string keys."""
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
