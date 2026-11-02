@@ -716,11 +716,10 @@ An `rpm_package` action:
 
 1. obtains the shared base root from its `BuildrootInfo`;
 2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream. A
-   source-tree build of a hand-written `rpm.package()` with `in_place_spec` or `in_place_packaging` also
-   installs the BuildRequires of its spec. Analysis cannot read the contents of a spec, so an action stages
-   the spec as the build does and runs `rpmbuild -bd` with the build's options in the base root and the
-   delta. It writes the BuildRequires that are missing, and a second delta installs them. That delta is
-   empty when the spec needs nothing more;
+   hand-written `rpm.package()` also installs the BuildRequires of the spec that it builds. Analysis cannot
+   read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
+   the build's options in the base root and the delta. It writes the BuildRequires that are missing, and a
+   second delta installs them. That delta is empty when the spec needs nothing more;
 3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
    or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
    directory under a mount rather than the mounted tree, so each directory mount below the source tree,
@@ -1596,8 +1595,10 @@ future remote workers. Bazel's broader language-rule ecosystem mattered less tha
 for a package-heavy repository.
 
 Buck cannot add ordinary target dependencies discovered from an action output. Dynamic actions may select
-among declared inputs but cannot turn newly discovered BuildRequires into a new static graph. Therefore
-dependency discovery/import must produce committed or analysis-time lock data before normal builds.
+among declared inputs but cannot turn newly discovered BuildRequires into a new static graph. An action can
+still install BuildRequires that an earlier action discovers, as the BuildRequires query of a hand-written
+`rpm.package()` does. A BuildRequires on a package that the project builds needs committed or analysis-time
+lock data before normal builds.
 
 ### Commit repository snapshots and selectively freeze boxes
 

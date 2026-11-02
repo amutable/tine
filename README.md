@@ -207,6 +207,7 @@ User guides:
   itself embeds in the executables
 - [Fetching project sources](docs/user/git.md): pinning an external project, or use a local checkout
   for development
+- [Building RPM packages](docs/user/rpm.md): building a package from a spec, its build dependencies
 - [Maintaining packages](docs/user/importer.md): importing and updating packages from upstream
   distributions, local modifications, branch curation
 - [Development boxes](docs/user/box.md): pinned interactive development environments
