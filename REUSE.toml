@@ -11,6 +11,8 @@ path = [
     "examples/image/from-source.txt",
     "examples/image/marker.txt",
     "examples/image/tree/**",
+    "examples/package/rpm/extra-sources/distgit-extra",
+    "examples/package/rpm/hello-distgit/local-note",
     "examples/package/rpm/hello-packaging.bundle",
     "examples/package/rpm/hello.source/rpm/packaging-marker",
     "examples/package/rpm/hello.source/rpm/packaging.json",

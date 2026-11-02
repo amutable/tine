@@ -17,6 +17,10 @@ _BUILDROOT = "catalog//:fedora.rawhide.buildroot"
 # box contains it only when it builds from a Fedora release.
 _CHECK_BOX = "catalog//:fedora.rawhide.box"
 
+# `_CONTAINS` fails unless the rpm in its first argument contains /usr/share/tine-package/<marker> for each
+# further argument.
+_CONTAINS = 'files=$(rpm -qpl "$1") || exit 1; shift; for marker; do echo "$files" | grep -qx "/usr/share/tine-package/$marker" || { echo "missing $marker"; exit 1; }; done'
+
 git.checkout(name = "hello.source")
 
 # rpm.branch() derives buildroot_packages from the BuildRequires of every architecture. A package can then
@@ -192,6 +196,38 @@ box.sh_test(
         "$(location :hello-pinned)",
         "$(location :hello-pinned[hello])",
     ],
+)
+
+# The committed directory hello-distgit replaces the fetch of the dist-git repository, so the revision is a
+# placeholder and the build needs no network.
+git.fetch(
+    name = "hello-distgit.git",
+    repo = "https://src.fedoraproject.org/rpms/hello.git",
+    rev = "1111111111111111111111111111111111111111",
+    sub_targets = ["hello.spec"],
+)
+
+# hello-distgit builds the spec of the dist-git repository with a Source file from the repository and one from
+# srcs.
+rpm.package(
+    name = "hello-distgit",
+    distro = _DISTRO,
+    package = "hello",
+    spec = ":hello-distgit.git[hello.spec]",
+    srcs = ["extra-sources", ":hello-distgit.git"],
+    buildroot = _BUILDROOT,
+    release = "1",
+    source_date_epoch = 1754006400,
+    subpackages = ["hello"],
+)
+
+box.sh_test(
+    name = "hello-distgit-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = _CONTAINS,
+    args = ["$(location :hello-distgit[hello])", "local-note", "distgit-extra"],
 )
 
 # A derived package manager adds the locally built hello to the release's repositories. Fedora's

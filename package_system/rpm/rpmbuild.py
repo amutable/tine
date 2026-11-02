@@ -3,6 +3,7 @@
 
 """Stage an RPM spec in an rpmbuild tree, and assemble the arguments that rpmbuild parses it with."""
 
+import filecmp
 from pathlib import Path
 from typing import NamedTuple, TypedDict
 
@@ -72,7 +73,14 @@ def source_files(paths: list[str]) -> list[Path]:
         if links := sorted(file.name for file in path.iterdir() if file.is_symlink()):
             util.fail(f"rpmbuild: {path} contains symlinks at its top level: {', '.join(links)}")
         files += sorted(file for file in path.iterdir() if file.is_file())
-    return files
+    chosen: dict[str, Path] = {}
+    for file in files:
+        other = chosen.setdefault(file.name, file)
+        # Overlapping directories and files in srcs can name the same source. rpmbuild finds a source
+        # by its file name, so only two different files with one name are an error.
+        if other != file and not filecmp.cmp(other, file, shallow=False):
+            util.fail(f"rpmbuild: {other} and {file} are different sources with the name {file.name}")
+    return list(chosen.values())
 
 
 def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:

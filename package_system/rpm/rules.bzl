@@ -163,6 +163,11 @@ _rpm_package = rule(
             doc = "extra rpmbuild CLI options (--with=..., --without=..., --define=...)",
         ),
         "spec": attrs.option(attrs.source(), default = None, doc = "the rpm spec file (derived from `package` by the macro)"),
+        "srcs": attrs.list(
+            attrs.source(allow_directory = True),
+            default = [],
+            doc = "the Source and Patch files of the spec, or directories whose top-level files are such files",
+        ),
         "_buildrequires": attrs.exec_dep(providers = [RunInfo], default = "tine//package_system/rpm:buildrequires"),
         "_package_system": attrs.dep(providers = [PackageSystemInfo], default = PACKAGE_SYSTEM),
     },

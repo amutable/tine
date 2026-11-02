@@ -92,6 +92,23 @@ class Stage(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "RPM spec is a symlink"):
             self.stage(spec_file=linked)
 
+    def test_identical_sources_with_one_name_are_copied_once(self) -> None:
+        # rpmbuild finds a source by its file name. A directory and a file in srcs can both contain the same
+        # source. Stage two identical files with one name, and check that SOURCES contains one copy.
+        other = self.scratch / "other"
+        other.mkdir()
+        (other / "source").write_text("source input\n")
+        self.stage(sources=[self.source, other])
+        self.assertEqual([path.name for path in (self.topdir / "SOURCES").iterdir()], ["source"])
+
+    def test_different_sources_with_one_name_fail(self) -> None:
+        # Two different files with one name fail to stage, because rpmbuild could only find one of them.
+        other = self.scratch / "other"
+        other.mkdir()
+        (other / "source").write_text("something else\n")
+        with self.assertRaisesRegex(SystemExit, "are different sources with the name source"):
+            self.stage(sources=[self.source, other])
+
 
 if __name__ == "__main__":
     unittest.main()
