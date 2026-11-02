@@ -12,9 +12,10 @@ import os
 import shutil
 import struct
 import zlib
+from collections import Counter
 from collections.abc import Buffer
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, NamedTuple
 
 import util
 
@@ -38,6 +39,90 @@ def payload_offset(data: Buffer) -> int:
     with memoryview(data) as view:
         signature = _header_end(view, LEAD)
         return _header_end(view, signature + (-signature % 8))  # the signature header is padded to 8
+
+
+class File(NamedTuple):
+    """A file that the header of an rpm lists."""
+
+    name: str
+    mode: int
+    size: int
+    # `links` counts the files of the header with the device and inode of this one.
+    links: int
+
+
+_FILESIZES = 1028
+_FILEMODES = 1030
+_FILEDEVICES = 1095
+_FILEINODES = 1096
+_DIRINDEXES = 1116
+_BASENAMES = 1117
+_DIRNAMES = 1118
+_LONGFILESIZES = 5008
+_PAYLOADALIGNMENT = 5125
+
+# The struct format of each integer type of a header tag: int16, int32 and int64.
+_INTEGERS = {3: ">H", 4: ">I", 5: ">Q"}
+_STRING_ARRAY = 8
+
+
+def _tags(view: memoryview, off: int) -> tuple[dict[int, list[int]], dict[int, list[str]]]:
+    """Return the values of the integer tags and of the string array tags of the header at `off`."""
+    nindex, nbytes = struct.unpack(">II", view[off + 8 : off + 16])
+    store = off + 16 + 16 * nindex
+    if len(view) < store + nbytes:
+        util.fail(f"truncated rpm header at {off}")
+    integers: dict[int, list[int]] = {}
+    strings: dict[int, list[str]] = {}
+    for entry in range(off + 16, store, 16):
+        tag, kind, start, count = struct.unpack(">IIII", view[entry : entry + 16])
+        if kind in _INTEGERS:
+            end = start + struct.calcsize(_INTEGERS[kind]) * count
+            if end > nbytes:
+                util.fail(f"the rpm header tag {tag} ends after the header")
+            data = bytes(view[store + start : store + end])
+            integers[tag] = [value for (value,) in struct.iter_unpack(_INTEGERS[kind], data)]
+        elif kind == _STRING_ARRAY:
+            # Each string ends with a NUL. split() returns one more element than the store has NULs.
+            values = bytes(view[store + start : store + nbytes]).split(b"\0", count)
+            if len(values) <= count:
+                util.fail(f"the rpm header tag {tag} ends after the header")
+            strings[tag] = [value.decode() for value in values[:count]]
+    return integers, strings
+
+
+def files(rpm_path: Path) -> tuple[list[File], int]:
+    """Return the files that the header of the rpm at `rpm_path` lists, and the alignment of their data."""
+    with rpm_path.open("rb") as rpm:
+        # mmap can't map an empty file.
+        if not os.fstat(rpm.fileno()).st_size:
+            util.fail(f"{rpm_path} is empty")
+        with mmap.mmap(rpm.fileno(), 0, access=mmap.ACCESS_READ) as data, memoryview(data) as view:
+            signature = _header_end(view, LEAD)
+            header = signature + (-signature % 8)
+            _header_end(view, header)
+            try:
+                integers, strings = _tags(view, header)
+            except UnicodeDecodeError as error:
+                util.fail(f"{rpm_path}: the rpm header contains a name that isn't UTF-8: {error}")
+    basenames = strings.get(_BASENAMES, [])
+    dirnames = strings.get(_DIRNAMES, [])
+    indexes = integers.get(_DIRINDEXES, [])
+    modes = integers.get(_FILEMODES, [])
+    # rpm lists the sizes in LONGFILESIZES instead of FILESIZES when the rpm uses format 6, or when a file
+    # has 4 GiB or more.
+    sizes = integers.get(_LONGFILESIZES) or integers.get(_FILESIZES, [])
+    inodes = list(zip(integers.get(_FILEDEVICES, []), integers.get(_FILEINODES, []), strict=False))
+    links = Counter(inodes)
+    if any(len(values) != len(basenames) for values in (indexes, modes, sizes, inodes)):
+        util.fail(f"{rpm_path}: the file tags of the rpm header have different lengths")
+    if any(index >= len(dirnames) for index in indexes):
+        util.fail(f"{rpm_path}: the rpm header names a directory that it doesn't list")
+    listed = [
+        File(name=dirnames[index] + basename, mode=mode, size=size, links=links[inode])
+        for basename, index, mode, size, inode in zip(basenames, indexes, modes, sizes, inodes, strict=True)
+    ]
+    return listed, integers.get(_PAYLOADALIGNMENT, [0])[0]
 
 
 def write_payload(rpm_path: Path, output: BinaryIO) -> None:

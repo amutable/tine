@@ -642,12 +642,12 @@ build, because it has no target that a committed lock could belong to.
 ### Execution isolation and target roots
 
 Build actions run through `box.run()` and `box/sandbox.py`. The action of `rpm.lookaside()` that reads a
-`sources` file runs tine's Python outside a box, because it needs no tools of a box. The sandbox mounts
-the box's userspace read-only over an otherwise isolated namespace, supplies API and temporary filesystems,
-clears the host environment, disables network by default, and gives build actions unprivileged fakeroot
-behavior. A build action runs as root, and its sync calls succeed without doing anything. When the sandbox
-maps only one user ID, for example when tine runs as an unprivileged user, the action's chown calls also
-succeed without doing anything.
+`sources` file and the action of `rpm.srpm()` run tine's Python outside a box, because they need no tools of
+a box. The sandbox mounts the box's userspace read-only over an otherwise isolated namespace, supplies API
+and temporary filesystems, clears the host environment, disables network by default, and gives build
+actions unprivileged fakeroot behavior. A build action runs as root, and its sync calls succeed without
+doing anything. When the sandbox maps only one user ID, for example when tine runs as an unprivileged user,
+the action's chown calls also succeed without doing anything.
 
 The project is mounted at `/tine/project` and the action runs there, rather than at the path it is checked
 out under. A checkout is then free to live anywhere, including under a directory the box populates
@@ -812,8 +812,9 @@ An `rpm_package` action:
    file of a dist-git repository in one action, with tine's Python outside a box. A dynamic action then
    downloads each archive with Buck's `download_file`, which checks its SHA-512 digest. A download depends
    only on the line of its archive in `sources`, so the build downloads nothing again while that line stays
-   the same. The output directory of `rpm.lookaside()` goes in the `srcs` of the package. The project is
-   read-only until the driver exits;
+   the same. The output directory of `rpm.lookaside()` goes in the `srcs` of the package. `rpm.srpm()`
+   unpacks a source RPM into a directory for `srcs`, with a driver that fails on any entry that is not a
+   regular file with a plain name. The project is read-only until the build driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -847,7 +848,7 @@ names none, and gets no per-release aliases either.
 
 Entry points: `package_system/rpm/{rules,catalog,generated}.bzl`,
 `package_system/rpm/{snapshot,plan,install,pkgdb,createrepo,build,extract,rpmfile}.py` and
-`package_system/rpm/{rpmbuild,buildrequires,lookaside}.py`.
+`package_system/rpm/{rpmbuild,buildrequires,lookaside,srpm}.py`.
 
 ### The alpm package system
 

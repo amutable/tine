@@ -239,6 +239,28 @@ _rpm_package = rule(
     supports_incoming_transition = True,
 )
 
+def _rpm_srpm_impl(ctx: AnalysisContext) -> list[Provider]:
+    tree = ctx.actions.declare_output("srpm", dir = True)
+    ctx.actions.run(
+        cmd_args(
+            # The driver needs nothing but the Python of tine, which also reads zstd payloads.
+            ctx.attrs._srpm[RunInfo],
+            specs.args(ctx.actions, "srpm.spec.json", {"out": tree.as_output(), "srpm": ctx.attrs.srpm}),
+        ),
+        category = "rpm_unpack_srpm",
+    )
+    return [DefaultInfo(default_output = tree, sub_targets = {path: [DefaultInfo(default_output = tree.project(path))] for path in ctx.attrs.sub_targets})]
+
+rpm_srpm = rule(
+    doc = "Unpack a source rpm into a directory, for the `spec` and `srcs` of an rpm_package.",
+    impl = _rpm_srpm_impl,
+    attrs = {
+        "srpm": attrs.source(doc = "the source rpm"),
+        "sub_targets": attrs.list(attrs.string(), default = [], doc = "files of the source rpm exposed as sub-targets, such as its spec"),
+        "_srpm": attrs.exec_dep(providers = [RunInfo], default = "tine//package_system/rpm:srpm"),
+    },
+)
+
 def rpm_package(
     name: str,
     package: str,

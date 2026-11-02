@@ -23,6 +23,19 @@ import rpmfile
 _EMPTY_HEADER = rpmfile.MAGIC + bytes(4) + struct.pack(">II", 0, 0)
 
 
+def _header(tags: dict[int, tuple[int, list[int] | list[str]]]) -> bytes:
+    """Return an rpm header with the type and the values of each tag in `tags`."""
+    index, store = b"", b""
+    for tag, (kind, values) in tags.items():
+        if kind == 8:
+            data = b"".join(str(value).encode() + b"\0" for value in values)
+        else:
+            data = b"".join(struct.pack({3: ">H", 4: ">I", 5: ">Q"}[kind], value) for value in values)
+        index += struct.pack(">IIII", tag, kind, len(store), len(values))
+        store += data
+    return rpmfile.MAGIC + bytes(4) + struct.pack(">II", len(tags), len(store)) + index + store
+
+
 class WritePayload(unittest.TestCase):
     @override
     def setUp(self) -> None:
@@ -71,6 +84,69 @@ class WritePayload(unittest.TestCase):
                 self.rpm.write_bytes(bytes(96) + _EMPTY_HEADER + _EMPTY_HEADER + payload)
                 with self.assertRaisesRegex(SystemExit, "cannot decompress the payload"):
                     self.write_payload()
+
+
+class Files(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.scratch = Path(
+            self.enterContext(tempfile.TemporaryDirectory(prefix="rpm-rpmfile-test.", dir="/var/tmp"))
+        )
+        self.rpm = self.scratch / "hello.src.rpm"
+
+    def files(self, tags: dict[int, tuple[int, list[int] | list[str]]]) -> tuple[list[rpmfile.File], int]:
+        main = _header(tags)
+        self.rpm.write_bytes(bytes(96) + _EMPTY_HEADER + main)
+        return rpmfile.files(self.rpm)
+
+    def test_the_files_of_a_format_6_header_are_listed(self) -> None:
+        # A format 6 rpm lists its file sizes in LONGFILESIZES and its payload alignment in
+        # PAYLOADALIGNMENT. Two of the three files share an inode. files() lists each file with its
+        # directory, mode, size and number of links.
+        listed, align = self.files(
+            {
+                1117: (8, ["hello.spec", "hello.tar.gz", "copy"]),
+                1118: (8, ["", "sub/"]),
+                1116: (4, [0, 1, 1]),
+                1030: (3, [0o100644, 0o100755, 0o100755]),
+                5008: (5, [5, 2**33, 2**33]),
+                1095: (4, [1, 1, 1]),
+                1096: (4, [10, 11, 11]),
+                5125: (4, [4096]),
+            }
+        )
+        self.assertEqual(
+            listed,
+            [
+                rpmfile.File(name="hello.spec", mode=0o100644, size=5, links=1),
+                rpmfile.File(name="sub/hello.tar.gz", mode=0o100755, size=2**33, links=2),
+                rpmfile.File(name="sub/copy", mode=0o100755, size=2**33, links=2),
+            ],
+        )
+        self.assertEqual(align, 4096)
+
+    def test_file_tags_of_different_lengths_fail(self) -> None:
+        # The header lists two names but one mode. files() must fail instead of pairing them wrongly.
+        with self.assertRaisesRegex(SystemExit, "different lengths"):
+            self.files(
+                {
+                    1117: (8, ["hello.spec", "other"]),
+                    1118: (8, [""]),
+                    1116: (4, [0, 0]),
+                    1030: (3, [0o100644]),
+                    1028: (4, [5, 5]),
+                    1095: (4, [1, 1]),
+                    1096: (4, [10, 11]),
+                }
+            )
+
+    def test_a_string_array_past_the_header_fails(self) -> None:
+        # The last name of the header has no NUL, so the string array runs past the end of the store.
+        main = bytearray(_header({1117: (8, ["hello.spec"])}))
+        main[-1:] = b"x"
+        self.rpm.write_bytes(bytes(96) + _EMPTY_HEADER + main)
+        with self.assertRaisesRegex(SystemExit, "ends after the header"):
+            rpmfile.files(self.rpm)
 
 
 if __name__ == "__main__":
