@@ -35,6 +35,7 @@ HASH = "SHA256"
 
 class SolveSpec(transaction.Spec):
     install: list[str]
+    install_files: list[str]
     lower: list[str]
     # The solve spec that all package systems share has `cache`. This driver ignores it, because
     # APT needs no prebuilt solver cache.
@@ -250,13 +251,12 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     spec = specs.load(SolveSpec, args.spec, prog="plan")
-    if not spec["install"]:
-        util.fail("plan: a solve needs at least one install spec")
+    install = transaction.install_specs(spec["install"], spec["install_files"])
     repositories = sorted(
         transaction.load_repositories(spec, absolute=True),
         key=lambda repository: repository.priority,
     )
-    resolved = solve(repositories, spec["install"], spec["lower"], spec["arch"])
+    resolved = solve(repositories, install, spec["lower"], spec["arch"]) if install else []
     transaction.write(Path(args.out), resolved, repositories)
 
 

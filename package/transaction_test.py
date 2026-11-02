@@ -14,6 +14,26 @@ import transaction
 FILES = [{"out": "InRelease", "sha256": "ab" * 32, "size": 3, "url": "https://mirror.invalid/InRelease"}]
 
 
+class TestInstallSpecs(unittest.TestCase):
+    def test_files_extend_the_listed_specs_without_duplicates(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            path = Path(scratch) / "requires.json"
+            path.write_text(json.dumps(["meson", "gcc", "jq"]))
+            self.assertEqual(
+                transaction.install_specs(["gcc", "make"], [str(path)]), ["gcc", "make", "meson", "jq"]
+            )
+
+    def test_an_empty_file_is_a_solve_with_nothing_to_install(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            path = Path(scratch) / "requires.json"
+            path.write_text("[]")
+            self.assertEqual(transaction.install_specs([], [str(path)]), [])
+
+    def test_a_solve_without_specs_or_files_fails(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "at least one install spec"):
+            transaction.install_specs([], [])
+
+
 class TestWrite(unittest.TestCase):
     def test_records_the_metadata_a_vouching_repository_was_resolved_against(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

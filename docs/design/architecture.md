@@ -604,7 +604,9 @@ Native package installation has three phases shared by buildroots and images:
 
 1. **Plan.** Run `PackageSystemInfo.plan` against each configured repository's materialized directory,
    effective priority, and solver cache. Weak dependencies are disabled. Existing lower layers are mounted
-   read-only so installed packages can satisfy an incremental request.
+   read-only so installed packages can satisfy an incremental request. A request lists its packages in the
+   analysis, or in JSON files that an earlier action writes, such as the BuildRequires query of an rpm
+   package. A request with no packages installs nothing and leaves its layer empty.
 2. **Select.** Use the resulting transaction to select package files from repository pools, verified after
    download if the repository declares signing keys, named with the package system's declared suffix so its
    installer finds them. A local repository is materialized by
@@ -713,8 +715,13 @@ and runtime package closures are still delegated to libdnf5 at buildroot-plan ti
 An `rpm_package` action:
 
 1. obtains the shared base root from its `BuildrootInfo`;
-2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream;
-3. overlays the base and delta, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
+2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream. A
+   source-tree build of a hand-written `rpm.package()` with `in_place_spec` or `in_place_packaging` also
+   installs the BuildRequires of its spec. Analysis cannot read the contents of a spec, so an action stages
+   the spec as the build does and runs `rpmbuild -bd` with the build's options in the base root and the
+   delta. It writes the BuildRequires that are missing, and a second delta installs them. That delta is
+   empty when the spec needs nothing more;
+3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
    or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
    directory under a mount rather than the mounted tree, so each directory mount below the source tree,
    such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
@@ -739,7 +746,12 @@ names none, and gets no per-release aliases either.
 #### Limitations
 
 - The imported self-host dependency graph is inferred from stored BuildRequires/Provides/file metadata; it
-  does not run RPM's dynamic BuildRequires protocol.
+  does not run RPM's dynamic BuildRequires protocol. The BuildRequires query runs `%generate_buildrequires`
+  only when the base root and the declared delta contain every static BuildRequires, and runs it once.
+- An imported package installs only its recorded BuildRequires, also for a spec from a checkout or a pin.
+  `rpm.branch()` derives `buildroot_packages` from them, and Buck cannot add a target dependency that an
+  action output discovers. A queried BuildRequires on a package of the branch would install it from
+  upstream.
 - Build cycles fall back to upstream RPMs for ordinary intra-SCC edges, so the package set is not a fully
   self-hosted fixed point.
 - Builds use `--nocheck`; package test policy is not implemented.

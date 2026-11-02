@@ -34,6 +34,7 @@ CACHEDIR = Path("/var/tmp/plan-cache")
 
 class SolveSpec(transaction.Spec):
     install: list[str]
+    install_files: list[str]
     lower: list[str]
     # Prebuilt repository caches (make-cache outputs) seeding this solve.
     cache: list[str]
@@ -238,10 +239,12 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     solve_spec = specs.load(SolveSpec, args.spec, prog="plan")
-    if not solve_spec["install"]:
-        fail("plan: a solve needs at least one install spec")
+    install = transaction.install_specs(solve_spec["install"], solve_spec["install_files"])
     repos = load_repositories(solve_spec)
     seeds = [Path(cache_dir).absolute() for cache_dir in solve_spec["cache"]]
+    if not install:
+        transaction.write(Path(args.out), [], repos)
+        return
 
     with ExitStack() as stack:
         installroot = None
@@ -250,7 +253,7 @@ def main(argv: list[str] | None = None) -> None:
             installroot = stack.enter_context(rootfs.rootfs("/installroot", lowers=solve_spec["lower"]))
         tx = plan(
             repos,
-            solve_spec["install"],
+            install,
             CACHEDIR,
             installroot,
             solve_spec["arch"],

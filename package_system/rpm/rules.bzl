@@ -3,9 +3,11 @@
 
 """RPM repositories and package-build rules."""
 
+load("//:specs.bzl", "specs")
+load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:build.bzl", "PACKAGE_BUILD_ATTRS", "package_build", "package_build_source")
-load("//package:buildroot.bzl", "BuildrootInfo")
+load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot", "recipe_delta")
 load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
@@ -40,6 +42,30 @@ def rpm_remote_repository(
         **kwargs,
     )
 
+def _query_buildrequires(
+    actions: AnalysisActions,
+    query: RunInfo,
+    parse: dict[str, typing.Any],
+    source_tree: Artifact | None,
+    lower: list[Artifact],
+) -> Artifact:
+    """Return a JSON list of the BuildRequires of the spec that `parse` describes and the layers `lower` lack."""
+    buildrequires = actions.declare_output("__tine/buildrequires.json")
+    actions.run(
+        cmd_args(
+            query,
+            specs.args(
+                actions,
+                "buildrequires.spec.json",
+                parse | {"lower": lower, "out": buildrequires.as_output(), "source_tree": source_tree},
+            ),
+        ),
+        # A dev build queries a source tree that changes with every edit, so no other build reuses the result.
+        allow_cache_upload = not parse["incremental"],
+        category = "rpm_buildrequires",
+    )
+    return buildrequires
+
 def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     base_buildroot = ctx.attrs.buildroot[BuildrootInfo]
     source_tree = ctx.attrs.source_tree
@@ -66,32 +92,46 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     elif in_place_spec != None:
         # The build takes the Source and Patch files from the directory of the spec in the source tree.
         sources = []
+    # The build and the BuildRequires query parse the spec with the same fields.
+    parse = {
+        "dist": ctx.attrs.dist,
+        "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if source_tree != None else [],
+        # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
+        "incremental": ctx.attrs.configured_dev,
+        "release": ctx.attrs.release,
+        "rpmbuild_options": ctx.attrs.rpmbuild_options,
+        "source_date_epoch": ctx.attrs.source_date_epoch,
+        "sources": sources,
+        "spec_file": spec_file,
+    }
+
+    stack = package_buildroot(ctx, "rpm_package", base_buildroot, ctx.attrs.build_requires, ctx.attrs.buildroot_packages)
+
+    # rpm.branch() derives the buildroot_packages of an imported package from its recorded BuildRequires. A
+    # BuildRequires that only the spec has would install a package of the branch from the repositories, so
+    # an imported package always installs the recorded BuildRequires instead.
+    if (pinned != None or in_place_spec != None) and not ctx.attrs.imported:
+        buildrequires = _query_buildrequires(
+            ctx.actions,
+            box.run(box = base_buildroot.box[box.Info], exe = ctx.attrs._buildrequires),
+            parse,
+            source_tree,
+            stack,
+        )
+        stack = stack + [recipe_delta(ctx, "rpm_package", base_buildroot, stack, ctx.attrs.buildroot_packages, buildrequires)]
 
     return package_build(
         ctx,
         owner = "rpm_package",
         package_system = ctx.attrs._package_system,
         base = base_buildroot,
-        build_requires = ctx.attrs.build_requires,
-        buildroot_packages = ctx.attrs.buildroot_packages,
+        stack = stack,
         configured_dev = ctx.attrs.configured_dev,
         keep_build_dir = True,
         packages = "rpms",
         subpackages = ctx.attrs.subpackages,
         category = "rpmbuild",
-        spec = {
-            "dist": ctx.attrs.dist,
-            "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if source_tree != None else [],
-            # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
-            "incremental": ctx.attrs.configured_dev,
-            "release": ctx.attrs.release,
-            "rpmbuild_options": ctx.attrs.rpmbuild_options,
-            "source_date_epoch": ctx.attrs.source_date_epoch,
-            "source_tree": source_tree,
-            "sources": sources,
-            "spec_file": spec_file,
-            "strict_subpackages": pinned == None,
-        },
+        spec = parse | {"source_tree": source_tree, "strict_subpackages": pinned == None},
     )
 
 _rpm_package = rule(
@@ -99,6 +139,10 @@ _rpm_package = rule(
     attrs = PACKAGE_BUILD_ATTRS
     | {
         "dist": attrs.string(default = ".aos"),
+        "imported": attrs.bool(
+            default = False,
+            doc = "whether build_requires are the BuildRequires that the importer recorded; the build then installs them without querying the spec",
+        ),
         "in_place_rpmbuild_options": attrs.list(
             attrs.string(),
             default = [],
@@ -119,6 +163,7 @@ _rpm_package = rule(
             doc = "extra rpmbuild CLI options (--with=..., --without=..., --define=...)",
         ),
         "spec": attrs.option(attrs.source(), default = None, doc = "the rpm spec file (derived from `package` by the macro)"),
+        "_buildrequires": attrs.exec_dep(providers = [RunInfo], default = "tine//package_system/rpm:buildrequires"),
         "_package_system": attrs.dep(providers = [PackageSystemInfo], default = PACKAGE_SYSTEM),
     },
     supports_incoming_transition = True,

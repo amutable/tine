@@ -82,6 +82,7 @@ def _declare_rpm_package(
         source_date_epoch = meta.source_date_epoch,
         subpackages = _by_architecture(meta, lambda rpm_arch: sorted(meta.binaries[rpm_arch])),
         build_requires = _by_architecture(meta, lambda rpm_arch: _build_requires(meta, rpm_arch)),
+        imported = True,
         buildroot_packages = buildroot_packages,
         in_place_packaging = in_place_packaging,
         in_place_packaging_distro = in_place_packaging_distro,

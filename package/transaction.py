@@ -142,6 +142,19 @@ def resolved_against(repositories: list[Repository]) -> list[TransactionMetadata
     return entries
 
 
+def install_specs(install: list[str], install_files: list[str]) -> list[str]:
+    """Return `install` followed by the install specs of the JSON lists `install_files`, without duplicates.
+
+    An empty result is a solve with nothing to install. A solve that names neither is an error.
+    """
+    if not install and not install_files:
+        fail("plan: a solve needs at least one install spec")
+    found = dict.fromkeys(install)
+    for path in install_files:
+        found |= dict.fromkeys(json.loads(Path(path).read_text()))
+    return list(found)
+
+
 def write(path: Path, packages: list[TransactionPackage], repositories: list[Repository]) -> None:
     """Order a transaction before writing it, so identical solves give identical bytes."""
     packages.sort(

@@ -26,6 +26,8 @@ files = set(query(package, "-l").splitlines())
 markers = "/usr/share/tine-package"
 # The spec comes out of the checkout as in a dev build, but none of the dev-only savings apply.
 assert f"{markers}/spec-from-checkout" in files, files
+# The build installs jq only because the spec lists it in BuildRequires, and %build runs jq.
+assert f"{markers}/built-with-jq" in files, files
 assert f"{markers}/profile-lto-enabled" in files, files
 assert f"{markers}/profile-annobin-enabled" in files, files
 assert list(rpms.glob("hello-debuginfo-*.rpm")), sorted(rpms.iterdir())

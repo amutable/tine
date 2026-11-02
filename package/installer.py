@@ -182,6 +182,13 @@ def run(
     if layered:
         if spec["work"] is None:
             fail(f"{prog}: lower needs a work overlay directory")
+        # The closure is empty when the lower layers contain every package of the layer, for example in
+        # the buildroot of a package whose spec needs nothing beyond the base root, or in a box layer
+        # that adds nothing to its parent. The layer then stays empty, and the package manager doesn't
+        # run. Buck still expects the work directory as an output.
+        if not any(packages_dir.iterdir()):
+            Path(spec["work"]).mkdir(parents=True, exist_ok=True)
+            return
         root = rootfs.rootfs(
             BUILDROOT,
             lowers=spec["lower"],
