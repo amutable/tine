@@ -748,7 +748,7 @@ names none, and gets no per-release aliases either.
 
 Entry points: `package_system/rpm/{rules,catalog,generated}.bzl`,
 `package_system/rpm/{snapshot,plan,install,pkgdb,createrepo,build,extract,rpmfile}.py` and
-`package_system/rpm/rpmbuild.py`.
+`package_system/rpm/{rpmbuild,buildrequires}.py`.
 
 ### The alpm package system
 

@@ -41,7 +41,7 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
     source_tree = spec["source_tree"]
     staged = rpmbuild.stage(topdir, spec, source_tree)
     env = os.environ | rpmbuild.environment(spec["source_date_epoch"])
-    with builder.buildroot(spec, topdir):
+    with builder.buildroot(spec["lower"], topdir):
         arguments = rpmbuild.arguments(staged, spec)
         mode = ["-ba"]
         cwd = staged.cwd

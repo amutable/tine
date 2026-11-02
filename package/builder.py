@@ -76,8 +76,8 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
     return rc
 
 
-def buildroot(spec: Spec, topdir: Path) -> AbstractContextManager[Path]:
-    """Chroot into the buildroot of `spec`, with topdir at `CHROOT_TOPDIR`."""
+def buildroot(lower: list[str], topdir: Path) -> AbstractContextManager[Path]:
+    """Chroot into the buildroot with the layers `lower`, with topdir at `CHROOT_TOPDIR`."""
     return rootfs.rootfs(
-        "/buildroot", lowers=spec["lower"], binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
+        "/buildroot", lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
     )
