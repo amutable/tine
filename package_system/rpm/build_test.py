@@ -41,24 +41,28 @@ class BuildRpm(unittest.TestCase):
         build_dir: Path | None = None,
         spec_file: Path | None = None,
         subpackages: list[str] | None = None,
-        packaging: Path | None = None,
+        sources: list[Path] | None = None,
+        strict_subpackages: bool = True,
     ) -> build.Spec:
         """Return a complete driver spec for one test build."""
         return build.Spec(
             build_dir=str(build_dir) if build_dir is not None else None,
             lower=["buildroot"],
             spec_file=str(spec_file or self.spec_file),
-            sources=[str(self.auxiliary)],
+            sources=[str(source) for source in sources] if sources is not None else [str(self.auxiliary)],
             dist=".test",
+            # rpm_package keeps the build directory of every dev build, and only of a dev build.
+            incremental=build_dir is not None,
             source_date_epoch=1234567890,
             release="7",
             out=str(self.project / "out"),
             subpackages=subpackages or [],
             subpackages_out=str(self.project / "subpackages-out"),
-            in_place_rpmbuild_options=["--define", "local_option yes"],
+            # The rule passes the in-place options only to a build with a source tree.
+            in_place_rpmbuild_options=["--define", "local_option yes"] if source_tree is not None else [],
             rpmbuild_options=["--define", "common_option yes"],
             source_tree=str(source_tree) if source_tree is not None else None,
-            packaging=str(packaging) if packaging is not None else None,
+            strict_subpackages=strict_subpackages,
         )
 
     def invoke(
@@ -190,7 +194,9 @@ class BuildRpm(unittest.TestCase):
 
     def test_pinned_packaging_replaces_the_declared_spec_and_sources(self) -> None:
         source, packaging = self.pinned_packaging()
-        specification = self.specification(source, spec_file=packaging / "example.spec", packaging=packaging)
+        specification = self.specification(
+            source, spec_file=packaging / "example.spec", sources=[packaging], strict_subpackages=False
+        )
 
         command, _cwd, _environment, topdir, _binds = self.invoke(specification)
 
@@ -216,7 +222,8 @@ class BuildRpm(unittest.TestCase):
         specification = self.specification(
             source,
             spec_file=packaging / "example.spec",
-            packaging=packaging,
+            sources=[packaging],
+            strict_subpackages=False,
             subpackages=["example", "example-imds"],
         )
 

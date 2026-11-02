@@ -47,9 +47,9 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     spec_file = ctx.attrs.spec
     if source_tree != None and in_place_spec != None:
         spec_file = source_tree.project(in_place_spec)
-    packaging = None
+    pinned = None
     if source_tree != None and ctx.attrs.in_place_packaging != None:
-        packaging = pinned_packaging(
+        pinned = pinned_packaging(
             ctx,
             base_buildroot,
             "git-core",
@@ -57,9 +57,15 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
             source_tree.project(ctx.attrs.in_place_packaging),
             ctx.attrs.in_place_packaging_distro,
         )
-        spec_file = packaging.project(ctx.attrs.package + ".spec")
+        spec_file = pinned.project(ctx.attrs.package + ".spec")
     if spec_file == None:
         fail("rpm_package: a regular build requires a spec file")
+    sources = ctx.attrs.srcs
+    if pinned != None:
+        sources = [pinned]
+    elif in_place_spec != None:
+        # The build takes the Source and Patch files from the directory of the spec in the source tree.
+        sources = []
 
     return package_build(
         ctx,
@@ -76,13 +82,15 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
         spec = {
             "dist": ctx.attrs.dist,
             "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if source_tree != None else [],
-            "packaging": packaging,
+            # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
+            "incremental": ctx.attrs.configured_dev,
             "release": ctx.attrs.release,
             "rpmbuild_options": ctx.attrs.rpmbuild_options,
             "source_date_epoch": ctx.attrs.source_date_epoch,
             "source_tree": source_tree,
-            "sources": ctx.attrs.srcs if in_place_spec == None and packaging == None else [],
+            "sources": sources,
             "spec_file": spec_file,
+            "strict_subpackages": pinned == None,
         },
     )
 

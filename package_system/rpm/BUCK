@@ -38,13 +38,21 @@ python.binary(
     deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
 )
 
-python.binary(name = "build", main = "build.py", deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"])
+python.library(name = "rpmbuild", srcs = ["rpmbuild.py"], deps = ["//:util", "//package:builder"])
+
+python.test(
+    name = "rpmbuild-test",
+    srcs = ["rpmbuild.py", "rpmbuild_test.py"],
+    deps = ["//:util", "//package:builder"],
+)
+
+python.binary(name = "build", main = "build.py", deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//package:subpackage"])
 
 python.test(
     name = "build-test",
     box = _BOX,
     srcs = ["build.py", "build_test.py"],
-    deps = ["//:specs", "//:util", "//package:builder", "//package:subpackage"],
+    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//package:subpackage"],
 )
 
 python.binary(
