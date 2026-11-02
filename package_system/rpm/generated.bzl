@@ -90,26 +90,6 @@ def _declare_rpm_package(
         rpmbuild_options = rpmbuild_options,
     )
 
-def rpm_package_json(
-    package: str,
-    buildroot: str,
-    meta: PackageMetadata,
-    buildroot_packages: list[str] = [],
-    in_place_rpmbuild_options: list[str] = [],
-    in_place_spec: str | None = None,
-    rpmbuild_options: list[str] = [],
-) -> None:
-    """Validate generated metadata and project it onto `rpm_package`."""
-    _declare_rpm_package(
-        package = package,
-        buildroot = buildroot,
-        meta = _parse_metadata(meta),
-        buildroot_packages = buildroot_packages,
-        in_place_rpmbuild_options = in_place_rpmbuild_options,
-        in_place_spec = in_place_spec,
-        rpmbuild_options = rpmbuild_options,
-    )
-
 def _cap(dep: str) -> str:
     """A BuildRequires/Provides capability with its version constraint stripped.
 
