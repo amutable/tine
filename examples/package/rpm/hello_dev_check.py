@@ -26,6 +26,8 @@ assert query(package, "--queryformat", "%{PAYLOADCOMPRESSOR}") == "(none)"
 files = set(query(package, "-l").splitlines())
 markers = "/usr/share/tine-package"
 assert f"{markers}/spec-from-checkout" in files, files
+# The build installs jq only because the spec lists it in BuildRequires, and %build runs jq.
+assert f"{markers}/built-with-jq" in files, files
 assert f"{markers}/profile-lto-disabled" in files, files
 assert f"{markers}/profile-annobin-disabled" in files, files
 assert not list(rpms.glob("hello-debuginfo-*.rpm")), sorted(rpms.iterdir())

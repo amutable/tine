@@ -34,6 +34,7 @@ from href import relative_href
 
 class SolveSpec(transaction.Spec):
     install: list[str]
+    install_files: list[str]
     lower: list[str]
     # Written by the neutral solve command, unread here: alpm prebuilds no repository metadata.
     cache: list[str]
@@ -100,9 +101,11 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     spec = specs.load(SolveSpec, args.spec, prog="plan")
-    if not spec["install"]:
-        fail("plan: a solve needs at least one install spec")
+    install = transaction.install_specs(spec["install"], spec["install_files"])
     repositories = load_repositories(spec)
+    if not install:
+        transaction.write(Path(args.out), [], repositories)
+        return
 
     with ExitStack() as stack:
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="plan.")))
@@ -118,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
         solver = stack.enter_context(alpm.Alpm(root, dbpath, spec["arch"]))
         for repository in repositories:
             solver.register(repository.id)
-        resolved = solver.resolve(spec["install"])
+        resolved = solver.resolve(install)
 
     transaction.write(Path(args.out), resolved_packages(repositories, resolved), repositories)
 

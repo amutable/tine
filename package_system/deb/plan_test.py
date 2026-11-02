@@ -59,6 +59,7 @@ class TestMain(unittest.TestCase):
                     "arch": "amd64",
                     "cache": [],
                     "install": ["bash"],
+                    "install_files": [],
                     "lower": ["lower"],
                     "repositories": [],
                 },
@@ -68,6 +69,28 @@ class TestMain(unittest.TestCase):
                 plan.main(["solve", "--spec", str(spec), "--out", str(out)])
 
             solve.assert_called_once_with([], ["bash"], ["lower"], "amd64")
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8")), [])
+
+    def test_an_empty_install_file_resolves_nothing(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            (root / "requires.json").write_text("[]")
+            spec = specs.write(
+                root / "solve.spec.json",
+                {
+                    "arch": "amd64",
+                    "cache": [],
+                    "install": [],
+                    "install_files": [str(root / "requires.json")],
+                    "lower": ["lower"],
+                    "repositories": [],
+                },
+            )
+            out = root / "transaction.json"
+            with mock.patch.object(plan, "solve") as solve:
+                plan.main(["solve", "--spec", str(spec), "--out", str(out)])
+
+            solve.assert_not_called()
             self.assertEqual(json.loads(out.read_text(encoding="utf-8")), [])
 
 

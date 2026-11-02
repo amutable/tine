@@ -7,7 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//git:defs.bzl", "git")
 load("//project:defs.bzl", "project")
-load(":buildroot.bzl", "BuildrootInfo", "package_buildroot")
+load(":buildroot.bzl", "BuildrootInfo")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
 load(":system.bzl", "PackageSystemInfo")
@@ -27,7 +27,7 @@ PACKAGE_BUILD_ATTRS = {
     "buildroot_packages": attrs.list(
         attrs.dep(providers = [LocalPackageInfo]),
         default = [],
-        doc = "our packages that the solve of build_requires prefers over upstream ones",
+        doc = "our packages that the solves of the BuildRequires prefer over upstream ones",
     ),
     "configured_dev": attrs.bool(
         doc = "whether project configuration selects this package for dev mode",
@@ -66,8 +66,7 @@ def package_build(
     owner: str,
     package_system: Dependency,
     base: BuildrootInfo,
-    build_requires: list[str],
-    buildroot_packages: list[Dependency],
+    stack: list[Artifact],
     configured_dev: bool,
     keep_build_dir: bool,
     packages: str,
@@ -75,7 +74,7 @@ def package_build(
     category: str,
     spec: dict[str, typing.Any],
 ) -> list[Provider]:
-    """Install `build_requires` over `base`, and run the `build` driver of `package_system` on the result.
+    """Run the `build` driver of `package_system` on the layer stack `stack` that `base` starts.
 
     `spec` contains the fields of the driver spec that the calling rule owns. `packages` names the output
     directory of the packages. A dev build keeps its build directory between runs if `keep_build_dir` is
@@ -95,7 +94,6 @@ def package_build(
     reserved = [name for name in ("build", "buildroot") if name in subpackages]
     if reserved:
         fail("{}: subpackages {} have the names of built-in sub-targets".format(owner, reserved))
-    stack = package_buildroot(ctx, owner, base, build_requires, buildroot_packages)
 
     out = project.kept_dir(ctx.actions, packages)
     build_dir = project.kept_dir(ctx.actions, _PRIVATE + "/build") if configured_dev and keep_build_dir else None
@@ -118,7 +116,6 @@ def package_build(
                 spec
                 | {
                     "build_dir": build_dir.as_output() if build_dir != None else None,
-                    # The base root is the lowest layer, and the layer of build_requires is above it.
                     "lower": stack,
                     "out": out.as_output(),
                     "subpackages": subpackages,

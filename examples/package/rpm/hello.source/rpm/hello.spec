@@ -7,6 +7,10 @@ Release: %autorelease
 Summary: Exercise dev-mode source-tree RPM package builds
 License: MPL-2.0
 BuildRequires: gcc
+# The base buildroot doesn't contain jq, and the BUCK file doesn't list it.
+%if "%(echo jq > generated-buildrequires && cat generated-buildrequires)" == "jq"
+BuildRequires: jq
+%endif
 Source1: packaging-marker
 
 %description
@@ -25,10 +29,12 @@ annobin=enabled
 printf '%s\n' "$lto" > %{_vpath_builddir}/lto
 printf '%s\n' "$annobin" > %{_vpath_builddir}/annobin
 %{__cc} %{build_cflags} %{build_ldflags} -o %{_vpath_builddir}/hello hello.c
+jq -n '"checkout"' > %{_vpath_builddir}/jq
 
 %install
 install -Dpm0755 %{_vpath_builddir}/hello %{buildroot}%{_bindir}/tine-package-hello
 install -Dpm0644 %{SOURCE1} %{buildroot}%{_datadir}/tine-package/spec-from-checkout
+install -Dpm0644 %{_vpath_builddir}/jq %{buildroot}%{_datadir}/tine-package/built-with-jq
 install -d %{buildroot}%{_datadir}/tine-package
 lto="$(cat %{_vpath_builddir}/lto)"
 annobin="$(cat %{_vpath_builddir}/annobin)"

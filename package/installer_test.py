@@ -53,6 +53,8 @@ class TestRun(unittest.TestCase):
                 target, lower = root / "target", root / "lower"
                 target.mkdir()
                 lower.mkdir()
+                (root / "packages").mkdir()
+                (root / "packages" / "systemd.rpm").write_text("")
                 spec = installer.InstallSpec(
                     arch="x86_64",
                     packages_dir=str(root / "packages"),
@@ -95,6 +97,8 @@ class TestRun(unittest.TestCase):
                 lower = root / "lower"
                 (lower / "etc").mkdir(parents=True)
                 (lower / "doomed").write_text("")
+                (root / "packages").mkdir()
+                (root / "packages" / "systemd.rpm").write_text("")
                 spec = installer.InstallSpec(
                     arch="x86_64",
                     packages_dir=str(root / "packages"),
@@ -124,6 +128,32 @@ class TestRun(unittest.TestCase):
                             installer.run("install", install, [])
                     else:
                         installer.run("install", install, [])
+
+    def test_an_empty_closure_leaves_the_layer_empty(self) -> None:
+        # A layered install with no packages to install must not run the package manager. Buck still
+        # expects the work directory as an output. Install an empty package directory over one lower
+        # layer, and check that the layer is empty and that the work directory exists.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            (root / "lower").mkdir()
+            (root / "packages").mkdir()
+            spec = installer.InstallSpec(
+                arch="x86_64",
+                packages_dir=str(root / "packages"),
+                target=str(root / "target"),
+                installroot=None,
+                lower=[str(root / "lower")],
+                work=str(root / "work"),
+                box_config=False,
+                langs=[],
+                docs=True,
+            )
+            install = mock.Mock()
+            with mock.patch.object(installer.specs, "parse", return_value=spec):
+                installer.run("install", install, [])
+            install.assert_not_called()
+            self.assertEqual(list((root / "target").iterdir()), [])
+            self.assertTrue((root / "work").is_dir())
 
     def test_fresh_root_mount_owns_capture_after_an_install_failure(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:

@@ -17,6 +17,7 @@ def solve_command(
     install: list[str],
     arch: str,
     output: OutputArtifact | None = None,
+    install_files: list[Artifact] = [],
     solver_caches: list[Artifact] = [],
     lowers: list[Artifact] = [],
     spec_name: str = "solve.spec.json",
@@ -24,7 +25,8 @@ def solve_command(
     """Construct a package solve command for one configured solver context.
 
     The transaction destination stays on the command line: the same command is published as a
-    run target, where the caller names the transaction it wants written.
+    run target, where the caller names the transaction it wants written. `install_files` are JSON lists
+    of install specs that the solve adds to `install`.
     """
     command = cmd_args(
         box_run(box = box, exe = system.plan),
@@ -36,6 +38,7 @@ def solve_command(
                 "arch": architecture.spelling(arch, system.arch_schema),
                 "cache": solver_caches,
                 "install": install,
+                "install_files": install_files,
                 "lower": lowers,
                 "repositories": encode_repositories(repositories),
             },

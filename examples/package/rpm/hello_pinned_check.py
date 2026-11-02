@@ -25,5 +25,7 @@ assert len(packages) == 1, packages
 files = set(query(package, "-l").splitlines())
 assert "/usr/share/tine-package/spec-from-pin" in files, files
 assert "/usr/share/tine-package/spec-from-checkout" not in files, files
+# The build installs jq only because the pinned spec lists it in BuildRequires, and %build runs jq.
+assert "/usr/share/tine-package/built-with-jq" in files, files
 assert query(subpackage, "--queryformat", "%{NAME}") == "hello"
 print(f"hello: pinned packaging, {len(files)} files")

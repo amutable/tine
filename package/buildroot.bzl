@@ -62,19 +62,7 @@ _buildroot = rule(
     },
 )
 
-def package_buildroot(
-    ctx: AnalysisContext,
-    owner: str,
-    base: BuildrootInfo,
-    build_requires: list[str],
-    buildroot_packages: list[Dependency],
-) -> list[Artifact]:
-    """Return the layer stack, bottom to top, that one package builds on.
-
-    The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
-    delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
-    `owner` starts a failure message.
-    """
+def _extra_packages(owner: str, base: BuildrootInfo, buildroot_packages: list[Dependency]) -> list[Artifact]:
     package_system = base.package_manager[PackageManagerInfo].package_system
     extra_packages = []
     for dependency in buildroot_packages:
@@ -89,6 +77,22 @@ def package_buildroot(
                 ),
             )
         extra_packages.append(info.packages)
+    return extra_packages
+
+def package_buildroot(
+    ctx: AnalysisContext,
+    owner: str,
+    base: BuildrootInfo,
+    build_requires: list[str],
+    buildroot_packages: list[Dependency],
+) -> list[Artifact]:
+    """Return the layer stack, bottom to top, that one package builds on.
+
+    The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
+    delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
+    `owner` starts a failure message.
+    """
+    extra_packages = _extra_packages(owner, base, buildroot_packages)
     stack = [base.root]
 
     # The packages of buildroot_packages are only candidates for the solve, so they install nothing on
@@ -106,6 +110,30 @@ def package_buildroot(
             extra_packages = extra_packages,
         ),
     ]
+
+def recipe_delta(
+    ctx: AnalysisContext,
+    owner: str,
+    base: BuildrootInfo,
+    stack: list[Artifact],
+    buildroot_packages: list[Dependency],
+    requires: Artifact,
+) -> Artifact:
+    """Return a delta over `stack` that installs the JSON list `requires` of build dependencies.
+
+    The solve of the delta prefers the packages of `buildroot_packages` over the repositories of the
+    package manager. `owner` starts a failure message.
+    """
+    return install_packages(
+        ctx,
+        base.package_manager,
+        base.box,
+        [],
+        stack = stack,
+        extra_packages = _extra_packages(owner, base, buildroot_packages),
+        install_files = [requires],
+        identifier = "recipe",
+    )
 
 def buildroot(name: str, **kwargs) -> None:
     if not name.endswith(".buildroot"):

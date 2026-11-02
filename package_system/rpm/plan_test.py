@@ -7,6 +7,7 @@ Builds throwaway packages and indexes them with the same driver a build uses, th
 libdnf5's actual resolution.
 """
 
+import json
 import subprocess
 import tempfile
 import unittest
@@ -125,6 +126,26 @@ class TestPlan(unittest.TestCase):
             self.solve(["widget"], old, new)
         self.assertIn("does not install", str(failure.exception))
         self.assertIn("widget, obsoleted by widget-keys-2-1.noarch", str(failure.exception))
+
+
+class TestMain(unittest.TestCase):
+    def test_an_empty_install_file_writes_an_empty_transaction(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            (root / "requires.json").write_text("[]")
+            spec = {
+                "arch": "x86_64",
+                "cache": [],
+                "install": [],
+                "install_files": [str(root / "requires.json")],
+                "lower": [],
+                "repositories": [],
+            }
+            (root / "solve.spec.json").write_text(json.dumps(spec))
+            plan.main(
+                ["solve", "--spec", str(root / "solve.spec.json"), "--out", str(root / "transaction.json")]
+            )
+            self.assertEqual(json.loads((root / "transaction.json").read_text()), [])
 
 
 if __name__ == "__main__":
