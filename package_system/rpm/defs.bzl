@@ -3,6 +3,7 @@
 
 """The public RPM package-system API, exported as the `rpm` namespace."""
 
+load("//package_system/rpm:generated.bzl", "rpm_branch")
 load(
     "//package_system/rpm:rules.bzl",
     "rpm_package",
@@ -10,6 +11,7 @@ load(
 )
 
 rpm = struct(
+    branch = rpm_branch,
     package = rpm_package,
     remote_repository = rpm_remote_repository,
 )

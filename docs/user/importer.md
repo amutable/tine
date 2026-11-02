@@ -139,9 +139,8 @@ introduce a proper tool verb for that cleanup, but that can wait until the need 
 ## Branch build curation (`_properties.json`)
 
 A `packages/`_distro_`/`_branch_`/` directory may carry a `_properties.json` alongside the per-package
-`srcpkg.json` files. It holds hand-authored, branch-level build curation. The importer folds it into the
-generated branch `BUCK`'s `rpm_branch(...)` call (`regenerate_buck`); never hand-edit the `@generated`
-`BUCK` itself.
+`srcpkg.json` files. It holds hand-authored, branch-level build curation. The generated branch `BUCK`
+loads it and passes its properties to `rpm.branch()`. Never edit the `@generated` `BUCK` by hand.
 
 ### Buildroot-only packages
 
@@ -155,10 +154,10 @@ when the BuildRequires cycle-breaking drops an edge (background in [packages.md]
 
 Add a package when another package fails to build because a `BuildRequires` it needs is all three of:
 (a) produced by one of our own packages, (b) never present in the seed/compose, and (c) inside a
-BuildRequires cycle, so the lock drops the edge to it. `rpm_branch` validates the list on every load,
-failing loudly if either invariant breaks: every entry must have a local provider (else the claim is
-simply wrong), and the kept edges must still form a DAG (else that cycle needs a staged bootstrap instead,
-not a kept edge).
+BuildRequires cycle, so the lock drops the edge to it. `rpm.branch()` checks the list every time Buck loads
+the branch. Loading fails when an entry has no local provider, because then the entry is wrong. Loading
+also fails when the kept edges form a cycle, because then that cycle needs a staged bootstrap instead of a
+kept edge.
 
 ### Seed-only packages
 
@@ -279,6 +278,6 @@ The buildroot still contains the imported BuildRequires. If the pinned spec requ
 imported spec does not, rpmbuild fails with `Failed build dependencies:` until the package is imported again
 at a commit with that BuildRequires.
 
-The branch's generated `BUCK` passes `in_place_packaging` to the build only if its `rpm_branch()` call has
+The branch's generated `BUCK` passes `in_place_packaging` to the build only if its `rpm.branch()` call has
 an `in_place_packaging` line and a `distro` line. `import`, and an `update` that takes new commits,
 regenerate the `BUCK` with both lines.

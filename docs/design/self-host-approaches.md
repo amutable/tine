@@ -264,7 +264,7 @@ under C a pinned gnupg2 is equivalent to verifying sources with a stage-1-grade 
 
 # Inspecting the cycle: the `scc` tool
 
-`rpm_branch` materializes each branch's raw BR graph as a `:_buildrequires_graph` target:
+`rpm.branch()` declares a `:_buildrequires_graph` target for each branch with its raw BR graph:
 requirer → provider edges, annotated with the capabilities that justify each edge, plus the
 strongly connected components. The `scc` dev command formats it:
 

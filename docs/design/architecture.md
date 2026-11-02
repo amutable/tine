@@ -695,7 +695,7 @@ The OS.git repository's `packages/` tree contains imported source-package metada
 files. The importer emits data; the Starlark in `package_system/rpm/generated.bzl` validates that data and
 creates targets.
 
-For each branch, `rpm_branch()` currently:
+For each branch, `rpm.branch()`:
 
 - combines common and the configured architecture's BuildRequires;
 - indexes each imported binary package's name, `Provides`, and file paths;

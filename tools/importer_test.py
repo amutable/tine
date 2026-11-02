@@ -837,7 +837,7 @@ class DownstreamPackages(PackagesTestCase):
         # The buck projection is generated: the per-branch BUCK loads this package's .json.
         buck = (self.monorepo / "packages/fedora/rawhide/BUCK").read_text()
         self.assertIn('load(":testpkg.json"', buck)
-        self.assertIn("rpm_branch(", buck)
+        self.assertIn("rpm.branch(", buck)
         # 1:1 commit correspondence: the upstream sha is preserved on main.
         self.assertEqual(self.imported_shas(rel, "main"), [sha])
 
@@ -1751,7 +1751,7 @@ class RegenerateBuck(unittest.TestCase):
         self.assertEqual(
             [line for line in lines if line.startswith("load(")],
             [
-                'load("@tine//package_system/rpm:generated.bzl", "rpm_branch")',
+                'load("@tine//package_system/rpm:defs.bzl", "rpm")',
                 'load(":_properties.json", _properties = "value")',
                 'load(":gcc.json", _gcc = "value")',
                 'load(":glibc-common.json", _glibc_common = "value")',

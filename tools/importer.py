@@ -1402,7 +1402,7 @@ def regenerate_buck(branchdir: Path) -> None:
 
     The buck2 package is the branch directory; each <pkg>/ subdir is a plain source tree (no
     nested BUCK), so the pristine dist-git checkouts stay untouched. buck2 loads each <pkg>.json
-    natively (as its `value`) and the branch hands them all to `rpm_branch`, which validates each
+    natively (as its `value`) and the branch hands them all to `rpm.branch`, which validates each
     and derives per-package build metadata (incl. the self-hosting buildroot deps) in buck — the
     importer emits only data, never resolution logic. All packages in a branch share one
     package buildroot, `//buildroots/<distro>:<branch>` by default (a cell-relative alias package
@@ -1418,7 +1418,7 @@ def regenerate_buck(branchdir: Path) -> None:
         local_loads[BRANCH_PROPERTIES] = f'load(":{BRANCH_PROPERTIES}", _properties = "value")'
 
     # all loads have to come first in Starlark; the local ones sorted by file name, like the formatter
-    loads = ['load("@tine//package_system/rpm:generated.bzl", "rpm_branch")']
+    loads = ['load("@tine//package_system/rpm:defs.bzl", "rpm")']
     loads += [local_loads[name] for name in sorted(local_loads)]
     # Add a stub for branches without _properties.json to keep the rest of the file
     # in the same shape
@@ -1430,7 +1430,7 @@ def regenerate_buck(branchdir: Path) -> None:
     lines += [
         "}",
         "",
-        "rpm_branch(",
+        "rpm.branch(",
         "    packages = PACKAGES,",
         f'    buildroot = _properties.get("buildroot", "//buildroots/{distro}:{branch}"),',
         '    buildroot_only_packages = _properties.get("buildroot_only_packages", []),',
