@@ -56,6 +56,21 @@ python.test(
 )
 
 python.binary(
+    name = "buildrequires",
+    main = "buildrequires.py",
+    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//rootfs:rootfs"],
+    visibility = ["PUBLIC"],
+)
+
+# The test queries specs with the rpmbuild of the dev box.
+python.test(
+    name = "buildrequires-test",
+    box = _BOX,
+    srcs = ["buildrequires.py", "buildrequires_test.py"],
+    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//rootfs:rootfs"],
+)
+
+python.binary(
     name = "snapshot",
     deps = ["//:util", "//package:href", "//package:snapshotter"],
     main = "snapshot.py",
