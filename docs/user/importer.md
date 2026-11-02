@@ -202,8 +202,8 @@ Buck ignores, and `%install` can copy them into the RPMs. See
 
 Three per-package maps in `_properties.json` can adapt the build to that checkout. `in_place_specs` selects
 an RPM spec by a path relative to the checkout root. The spec's directory also supplies its Source/Patch
-files and relative includes. `in_place_packaging` takes the spec and its Source/Patch files from a dist-git
-commit that the checkout pins; see [Taking the packaging from a pin in the
+files. rpm opens a relative `%include` from the checkout root. `in_place_packaging` takes the spec and its
+Source/Patch files from a dist-git commit that the checkout pins; see [Taking the packaging from a pin in the
 checkout](#taking-the-packaging-from-a-pin-in-the-checkout). A package cannot set both `in_place_specs` and
 `in_place_packaging`. `in_place_rpmbuild_options` adds CLI options after the common `rpmbuild_options` and
 any dev-mode defaults.

@@ -86,25 +86,23 @@ def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
     (topdir / builder.BUILD).mkdir(exist_ok=True)
     checkout = topdir / builder.CHECKOUT
     spec_file = Path(parse["spec_file"])
+    staged_spec = topdir / "SPECS" / spec_file.name
+    chroot_spec = builder.CHROOT_TOPDIR / "SPECS" / spec_file.name
     if source_tree is not None and spec_file.is_relative_to(source_tree):
         relative_spec = spec_file.relative_to(source_tree)
         if ".." in relative_spec.parts:
             util.fail(f"rpmbuild: RPM spec must stay within the source tree: {relative_spec}")
-        staged_spec = checkout / relative_spec
-        # The spec is frozen before the chroot. A spec symlink that escapes the checkout would otherwise
-        # make the freeze write to a file of the outer sandbox.
-        if not staged_spec.resolve().is_relative_to(checkout.resolve()):
+        source_spec = checkout / relative_spec
+        # stage() reads the spec outside the chroot. Without the check, a spec symlink that points out of
+        # the checkout would copy a file of the action sandbox into the build.
+        if not source_spec.resolve().is_relative_to(checkout.resolve()):
             util.fail(f"rpmbuild: RPM spec symlink escapes the source tree: {relative_spec}")
-        source_spec = staged_spec
-        chroot_spec = builder.CHROOT_TOPDIR / builder.CHECKOUT / relative_spec
-        sourcedir = chroot_spec.parent
+        sourcedir = builder.CHROOT_TOPDIR / builder.CHECKOUT / relative_spec.parent
     else:
         # The spec is read outside the chroot. A spec symlink in a fetched tree would read a file of the
         # project.
         reject_symlinks(spec_file, "RPM spec")
         source_spec = spec_file
-        staged_spec = topdir / "SPECS" / spec_file.name
-        chroot_spec = builder.CHROOT_TOPDIR / "SPECS" / spec_file.name
         sourcedir = None
         for s in source_files(parse["sources"]):
             # A spec may modify SOURCES, so it must not share the source artifact's inode.
@@ -113,8 +111,9 @@ def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
     if not source_spec.is_file():
         util.fail(f"rpmbuild: RPM spec does not exist: {spec_file}")
 
-    # The frozen rpmautospec macros let the spec parse without Git or rpmautospec. An in-place spec stays
-    # beside its auxiliary files in the disposable tree, so that its relative includes still resolve.
+    # The frozen rpmautospec macros let the spec parse without Git or rpmautospec. rpm opens an %include
+    # relative to its working directory, not to the spec. rpm therefore still finds the included files of
+    # an in-place spec when the frozen copy is in SPECS.
     staged_spec.write_text(
         f"%global autorelease {parse['release']}%{{?dist}}\n%global autochangelog %{{nil}}\n"
         + source_spec.read_text()

@@ -162,11 +162,15 @@ class BuildRpm(unittest.TestCase):
         specification = self.specification(source, spec_file=local_spec)
 
         def inspect(topdir: Path) -> None:
-            frozen = (topdir / "CHECKOUT" / "packaging" / "fedora" / "local.spec").read_text()
+            frozen = (topdir / "SPECS" / "local.spec").read_text()
             self.assertTrue(
                 frozen.startswith("%global autorelease 7%{?dist}\n%global autochangelog %{nil}\n")
             )
             self.assertIn("Name: from-checkout\n", frozen)
+            self.assertEqual(
+                (topdir / "CHECKOUT" / "packaging" / "fedora" / "local.spec").read_text(),
+                "Name: from-checkout\nSource1: helper\n",
+            )
             self.assertEqual(
                 (topdir / "CHECKOUT" / "packaging" / "fedora" / "helper").read_text(),
                 "checkout helper\n",
@@ -174,7 +178,7 @@ class BuildRpm(unittest.TestCase):
 
         command, cwd, _environment, topdir, _binds = self.invoke(specification, inspect)
 
-        self.assertEqual(command[-1], "/build/CHECKOUT/packaging/fedora/local.spec")
+        self.assertEqual(command[-1], "/build/SPECS/local.spec")
         self.assertIn("_sourcedir /build/CHECKOUT/packaging/fedora", command)
         self.assertEqual(cwd, Path("/build/CHECKOUT"))
         self.assertEqual(list((topdir / "CHECKOUT").iterdir()), [])
@@ -375,7 +379,7 @@ class BuildRpm(unittest.TestCase):
                 else:
                     self.assertEqual(list((topdir / "CHECKOUT").iterdir()), [])
 
-    def test_spec_symlink_cannot_write_outside_the_staged_checkout(self) -> None:
+    def test_spec_symlink_cannot_escape_the_staged_checkout(self) -> None:
         source = self.scratch / "checkout"
         source.mkdir()
         (source / "escape.spec").symlink_to(self.spec_file)
