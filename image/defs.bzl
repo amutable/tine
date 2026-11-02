@@ -44,21 +44,9 @@ load(
     "ImageInfo",
     "ImageInstallInfo",
     "ImageSbomInfo",
-    "copy",
-    "depmod",
-    "hwdb",
     "image_install",
-    "install_from",
-    "install_systemd_boot",
     "layer",
-    "locale_gen",
-    "merge_os_release",
-    "mkdir",
-    "python",
-    "remove",
-    "run",
-    "symlink",
-    "write_file",
+    "ops",
 )
 load(":publish.bzl", "PublishedFile", "PublishedInfo", "image_artifacts")
 load(
@@ -75,21 +63,7 @@ load(":vm.bzl", "image_vm")
 image = struct(
     # Logical images and the operations that build them.
     layer = layer,
-    ops = struct(
-        run = run,
-        python = python,
-        install_from = install_from,
-        mkdir = mkdir,
-        symlink = symlink,
-        write_file = write_file,
-        remove = remove,
-        copy = copy,
-        merge_os_release = merge_os_release,
-        install_systemd_boot = install_systemd_boot,
-        depmod = depmod,
-        hwdb = hwdb,
-        locale_gen = locale_gen,
-    ),
+    ops = ops,
     # Terminal outputs.
     directory = image_directory,
     uki = uki,

@@ -263,7 +263,7 @@ SelectableArtifact = str | Artifact | Select
 
 # Operations replayed by the layer driver.
 
-def run(cmd: list[SelectableArtifact] | Select, env: dict[str, Selectable] = {}, chroot: bool | Select = False) -> LayerOperation:
+def _run(cmd: list[SelectableArtifact] | Select, env: dict[str, Selectable] = {}, chroot: bool | Select = False) -> LayerOperation:
     """Run `cmd` against the image, either with the box's tooling or the image's own.
 
     By default the box supplies the userspace and the image is mounted at /buildroot. With
@@ -278,7 +278,7 @@ def run(cmd: list[SelectableArtifact] | Select, env: dict[str, Selectable] = {},
     """
     return ("run", cmd, _environment(env), chroot)
 
-def python(cmd: list[SelectableArtifact], env: dict[str, Selectable] = {}, chroot: bool | Select = False) -> LayerOperation:
+def _python(cmd: list[SelectableArtifact], env: dict[str, Selectable] = {}, chroot: bool | Select = False) -> LayerOperation:
     """Run a python script against the image, with the interpreter Buck already pins.
 
     `chroot` picks the image's view exactly as it does for `run`: mounted at /buildroot by default,
@@ -297,23 +297,23 @@ def python(cmd: list[SelectableArtifact], env: dict[str, Selectable] = {}, chroo
 def _environment(env: dict[str, Selectable]) -> dict[str, Selectable]:
     return {name: env[name] for name in sorted(env)}
 
-def mkdir(path: Selectable) -> LayerOperation:
+def _mkdir(path: Selectable) -> LayerOperation:
     """Create a directory in the image."""
     return ("mkdir", path)
 
-def symlink(target: Selectable, path: Selectable) -> LayerOperation:
+def _symlink(target: Selectable, path: Selectable) -> LayerOperation:
     """Create a symlink at `path` pointing at `target`."""
     return ("symlink", target, path)
 
-def write_file(path: Selectable, content: Selectable = "") -> LayerOperation:
+def _write_file(path: Selectable, content: Selectable = "") -> LayerOperation:
     """Write a file at `path` in the image holding exactly `content`."""
     return ("write_file", path, content)
 
-def remove(path: Selectable) -> LayerOperation:
+def _remove(path: Selectable) -> LayerOperation:
     """Remove every image path matching an absolute glob pattern."""
     return ("remove", path)
 
-def copy(source: SelectableArtifact | None, destination: Selectable) -> LayerOperation:
+def _copy(source: SelectableArtifact | None, destination: Selectable) -> LayerOperation:
     """Copy a declared artifact to an absolute path in the image.
 
     A `select()` may resolve `source` to `None`, in which case nothing is copied: that is how a
@@ -321,7 +321,7 @@ def copy(source: SelectableArtifact | None, destination: Selectable) -> LayerOpe
     """
     return ("copy", source, destination)
 
-def install_from(target: str) -> LayerOperation:
+def _install_from(target: str) -> LayerOperation:
     """Install what an `image_install()` target needs and apply the operations it attaches."""
     return ("install_from", target)
 
@@ -345,15 +345,15 @@ def expand_install_from(ops: list[typing.Any]) -> (list[str], list[typing.Any]):
             expanded.append(operation)
     return packages, expanded
 
-def merge_os_release(fields: dict[str, str]) -> LayerOperation:
+def _merge_os_release(fields: dict[str, str]) -> LayerOperation:
     """Merge quoted KEY="value" assignments into the image's /usr/lib/os-release."""
     return ("os_release", fields)
 
-def depmod() -> LayerOperation:
+def _depmod() -> LayerOperation:
     """Rebuild the module indexes for every kernel the image installs."""
     return ("depmod",)
 
-def hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
+def _hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
     """Compile the image's hwdb.d into the binary database udev reads.
 
     It lands in /usr, where the image ships it and nothing writable shadows it; `usr = False`
@@ -361,14 +361,14 @@ def hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
     """
     return ("hwdb", usr, strict)
 
-def locale_gen() -> LayerOperation:
+def _locale_gen() -> LayerOperation:
     """Generate the locales the image's /etc/locale.gen lists into the image's locale archive."""
     return ("locale_gen",)
 
 # Every generator, for the compositions: they declare a whole product rather than one layer, so they
 # generate the state its packages only describe instead of leaving that to their caller. Each is a
 # no-op on an image carrying none of what it acts on, so the same three fit every composition.
-_GENERATORS = [depmod(), hwdb(), locale_gen()]
+_GENERATORS = [_depmod(), _hwdb(), _locale_gen()]
 
 def generated(ops: list[LayerOperation], installs: list[str]) -> list[LayerOperation]:
     """Append the generators `ops` does not already place, which is what a composition ends with."""
@@ -392,7 +392,7 @@ def sign_systemd_boot(key: SigningKeyInfo, arch: str) -> list[LayerOperation]:
     binary = "/buildroot/usr/lib/systemd/boot/efi/systemd-boot{}.efi".format(architecture.ARCHITECTURES[arch].efi)
     return [
         # systemd-sbsign lives outside PATH in the box.
-        run(
+        _run(
             [
                 "/usr/lib/systemd/systemd-sbsign",
                 "sign",
@@ -409,7 +409,7 @@ def sign_systemd_boot(key: SigningKeyInfo, arch: str) -> list[LayerOperation]:
         ),
     ]
 
-def install_systemd_boot(key: SigningKeyInfo | None = None) -> list[LayerOperation]:
+def _install_systemd_boot(key: SigningKeyInfo | None = None) -> list[LayerOperation]:
     """Return operations that install systemd-boot into the image ESP staging paths.
 
     With a signing key, bootctl prefers the `.signed` binaries (see sign_systemd_boot) and
@@ -426,8 +426,8 @@ def install_systemd_boot(key: SigningKeyInfo | None = None) -> list[LayerOperati
             key.private_key,
         ] + key_source_arguments(key)
     return [
-        mkdir("/efi"),
-        run(
+        _mkdir("/efi"),
+        _run(
             [
                 "bootctl",
                 "install",
@@ -442,8 +442,24 @@ def install_systemd_boot(key: SigningKeyInfo | None = None) -> list[LayerOperati
                 "SYSTEMD_XBOOTLDR_PATH": "/boot",
             },
         ),
-        remove("/efi/loader/random-seed"),
+        _remove("/efi/loader/random-seed"),
     ]
+
+ops = struct(
+    run = _run,
+    python = _python,
+    install_from = _install_from,
+    mkdir = _mkdir,
+    symlink = _symlink,
+    write_file = _write_file,
+    remove = _remove,
+    copy = _copy,
+    merge_os_release = _merge_os_release,
+    install_systemd_boot = _install_systemd_boot,
+    depmod = _depmod,
+    hwdb = _hwdb,
+    locale_gen = _locale_gen,
+)
 
 def _encode_operation(operation: LayerOperation, python: Dependency) -> LayerOperation:
     if operation[0] not in ("run", "python"):
@@ -886,7 +902,7 @@ _image_install = rule(
 )
 
 def image_install(name: str, ops: list[LayerOperationTree] = [], packages: list[str] = [], **kwargs) -> None:
-    """Attach packages and install operations to a target, applied by `install_from()` in an image.
+    """Attach packages and install operations to a target for `image.ops.install_from()`.
 
     An image installing this target adds its packages to its own install request, so a reusable
     target declares what it needs rather than leaving it to every caller.
