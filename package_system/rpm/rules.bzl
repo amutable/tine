@@ -67,6 +67,53 @@ def _query_buildrequires(
     )
     return buildrequires
 
+def _download_archives_impl(actions: AnalysisActions, archives: OutputArtifact, listed: ArtifactValue) -> list[Provider]:
+    downloaded = {}
+    for archive in listed.read_json():
+        out = actions.declare_output("__tine/lookaside-archives", archive["name"])
+        actions.download_file(out.as_output(), archive["url"], sha512 = archive["sha512"])
+        downloaded[archive["name"]] = out
+    actions.copied_dir(archives, downloaded)
+    return []
+
+_download_archives = dynamic_actions(
+    impl = _download_archives_impl,
+    attrs = {
+        "archives": dynattrs.output(),
+        "listed": dynattrs.artifact_value(),
+    },
+)
+
+def _rpm_lookaside_impl(ctx: AnalysisContext) -> list[Provider]:
+    # Buck runs one download per archive, and a download depends on the line of the archive in `sources`
+    # only. A commit that leaves `sources` unchanged therefore downloads nothing.
+    listed = ctx.actions.declare_output("__tine/lookaside.json")
+    ctx.actions.run(
+        cmd_args(
+            ctx.attrs._lookaside[RunInfo],
+            specs.args(
+                ctx.actions,
+                "lookaside.spec.json",
+                {"base": ctx.attrs.url, "out": listed.as_output(), "package": ctx.attrs.package, "sources": ctx.attrs.sources},
+            ),
+        ),
+        category = "rpm_lookaside",
+    )
+    archives = ctx.actions.declare_output("__tine/lookaside", dir = True)
+    ctx.actions.dynamic_output_new(_download_archives(archives = archives.as_output(), listed = listed))
+    return [DefaultInfo(default_output = archives)]
+
+rpm_lookaside = rule(
+    doc = "Download the archives that the `sources` file of a dist-git repository lists, for the `srcs` of an rpm_package.",
+    impl = _rpm_lookaside_impl,
+    attrs = {
+        "package": attrs.string(doc = "the name of the dist-git repository, which the URL of each archive contains"),
+        "sources": attrs.source(doc = "the `sources` file of the dist-git repository"),
+        "url": attrs.string(doc = "the URL of the lookaside cache"),
+        "_lookaside": attrs.exec_dep(providers = [RunInfo], default = "tine//package_system/rpm:lookaside"),
+    },
+)
+
 def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     base_buildroot = ctx.attrs.buildroot[BuildrootInfo]
     tree = ctx.attrs.source_tree

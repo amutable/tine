@@ -52,12 +52,6 @@ class Staged(NamedTuple):
     cwd: Path | None
 
 
-def reject_symlinks(path: Path, what: str) -> None:
-    for component in (path, *path.parents):
-        if component.is_symlink():
-            util.fail(f"rpmbuild: {what} is a symlink: {component}")
-
-
 def source_files(paths: list[str]) -> list[Path]:
     """Return the Source and Patch files of `paths`, with each directory replaced by its top-level files.
 
@@ -69,7 +63,7 @@ def source_files(paths: list[str]) -> list[Path]:
         # The copy into SOURCES follows symlinks, and it runs outside the chroot where the project is
         # readable. A symlink in a fetched or unpacked tree, or a sub-target of one, would put a file of
         # the project into the package.
-        reject_symlinks(path, "the source")
+        util.reject_symlinks(path, "rpmbuild: the source")
         if not path.is_dir():
             files.append(path)
             continue
@@ -113,7 +107,7 @@ def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
     else:
         # The spec is read outside the chroot. A spec symlink in a fetched tree would read a file of the
         # project.
-        reject_symlinks(spec_file, "RPM spec")
+        util.reject_symlinks(spec_file, "rpmbuild: RPM spec")
         source_spec = spec_file
         sourcedir = None
         for s in source_files(parse["sources"]):
