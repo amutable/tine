@@ -9,6 +9,7 @@ load(
     "rpm_lookaside",
     "rpm_package",
     "rpm_remote_repository",
+    "rpm_srpm",
 )
 
 rpm = struct(
@@ -16,4 +17,5 @@ rpm = struct(
     lookaside = rpm_lookaside,
     package = rpm_package,
     remote_repository = rpm_remote_repository,
+    srpm = rpm_srpm,
 )

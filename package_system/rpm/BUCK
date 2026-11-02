@@ -116,6 +116,20 @@ python.test(
     deps = ["//:specs", "//:util"],
 )
 
+# The driver unpacks a source rpm, which comes from outside the project.
+python.binary(
+    name = "srpm",
+    main = "srpm.py",
+    deps = [":rpmfile", "//:specs", "//:util", "//archive:cpio"],
+    visibility = ["PUBLIC"],
+)
+
+python.test(
+    name = "srpm-test",
+    srcs = ["srpm.py", "srpm_test.py"],
+    deps = [":rpmfile", "//:specs", "//:util", "//archive:cpio"],
+)
+
 package_system(
     name = "package_system",
     arch_schema = "rpm",

@@ -198,6 +198,39 @@ box.sh_test(
     ],
 )
 
+rpm.srpm(
+    name = "hello.srpm",
+    srpm = "hello.src.rpm",
+    sub_targets = ["hello.spec"],
+)
+
+# hello-srpm rebuilds hello.src.rpm. The spec in the source rpm installs a Source file from it, and the spec
+# lists jq in BuildRequires. The base buildroot doesn't contain jq, and the BUCK file doesn't list it. The
+# header of the source rpm also lists a BuildRequires that no repository provides, and the spec doesn't.
+# hello.src.rpm uses the rpm format 6, whose payload has stripped cpio headers.
+rpm.package(
+    name = "hello-srpm",
+    distro = _DISTRO,
+    package = "hello",
+    spec = ":hello.srpm[hello.spec]",
+    srcs = [":hello.srpm"],
+    buildroot = _BUILDROOT,
+    release = "1",
+    source_date_epoch = 1754006400,
+    subpackages = ["hello"],
+)
+
+box.sh_test(
+    name = "hello-srpm-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = _CONTAINS,
+    # The package contains built-with-jq only if the build installed jq, which only the spec in the source
+    # rpm lists in BuildRequires.
+    args = ["$(location :hello-srpm[hello])", "srpm-marker", "built-with-jq"],
+)
+
 # The committed directory hello-distgit replaces the fetch of the dist-git repository, so the revision is a
 # placeholder and the build needs no network.
 git.fetch(
