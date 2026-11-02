@@ -11,6 +11,8 @@ _BOX = "tine//tools:dev.box"
 
 python.library(name = "rpmfile", srcs = ["rpmfile.py"], deps = ["//:util"])
 
+python.test(name = "rpmfile-test", srcs = ["rpmfile_test.py"], deps = [":rpmfile"])
+
 python.binary(
     name = "extract",
     main = "extract.py",
