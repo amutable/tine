@@ -118,3 +118,40 @@ fails if the spec reads a missing file, for example a Source that `%install` cop
 
 A package of an imported branch skips the check. It installs the BuildRequires that the importer recorded
 in `build_requires`.
+
+## Building a package from a dist-git repository
+
+Declare the spec of a dist-git repository in the `sub_targets` of its [`git.fetch()`](git.md), and pass that
+sub-target as `spec`. Pass the fetch itself in `srcs`. The build takes every file at the top of a directory
+in `srcs`, and installs the BuildRequires of the spec:
+
+```starlark
+load("@tine//git:defs.bzl", "git")
+load("@tine//package_system/rpm:defs.bzl", "rpm")
+
+git.fetch(
+    name = "hello.git",
+    repo = "https://src.fedoraproject.org/rpms/hello.git",
+    rev = "2621a97179dd5182d127a98a50759a637a4fa334",
+    sub_targets = ["hello.spec"],
+)
+
+rpm.package(
+    name = "hello",
+    package = "hello",
+    spec = ":hello.git[hello.spec]",
+    srcs = [":hello.git"],
+    buildroot = "catalog//:fedora.rawhide.buildroot",
+    release = "1",
+    source_date_epoch = 1754006400,
+    subpackages = ["hello"],
+)
+```
+
+Fedora and CentOS keep the source archives out of the repository, in a lookaside cache. Add them to `srcs`
+as well.
+
+The build fails if two files of `srcs` have the same name and different contents, or if the top of a
+directory in `srcs` contains a symlink. For a spec in a subdirectory of the repository, such as `rpm/`,
+declare `rpm/hello.spec` and `rpm` in `sub_targets`, and pass `":hello.git[rpm/hello.spec]"` as `spec` and
+`":hello.git[rpm]"` in `srcs`.

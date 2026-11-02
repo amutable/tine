@@ -806,7 +806,8 @@ An `rpm_package` action:
    the source tree, such as a `tine mount`, gets a volatile overlay of its own. The driver discovers
    directory mounts with `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a
    separate action first fetches the dist-git commit that the tree pins, and the build takes its spec and
-   Source/Patch files from that commit. The project is read-only until the driver exits;
+   Source/Patch files from that commit. A directory in `srcs`, such as a `git.fetch()` of a dist-git
+   repository, contributes the files at its top level. The project is read-only until the driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
