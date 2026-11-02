@@ -64,6 +64,28 @@ box.sh_test(
     args = ["$(source hello_archive_check.py)", "$(location :hello-archive)"],
 )
 
+rpm.package(
+    name = "hello-parse-helper",
+    distro = _DISTRO,
+    package = "hello",
+    spec = "hello/hello.spec",
+    build_requires = ["jq"],
+    buildroot = _BUILDROOT,
+    release = "1",
+    rpmbuild_options = ["--define=version_override %(jq -nr '\"1\"')"],
+    source_date_epoch = 1754006400,
+    subpackages = ["hello"],
+)
+
+box.sh_test(
+    name = "hello-parse-helper-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = 'python3 "$@"',
+    args = ["$(source hello_archive_check.py)", "$(location :hello-parse-helper)"],
+)
+
 # The explicit override keeps this source-tree fixture in dev mode without depending on the
 # user's root config.
 rpm.package(

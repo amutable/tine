@@ -110,7 +110,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     # rpm.branch() derives the buildroot_packages of an imported package from its recorded BuildRequires. A
     # BuildRequires that only the spec has would install a package of the branch from the repositories, so
     # an imported package always installs the recorded BuildRequires instead.
-    if (pinned != None or in_place_spec != None) and not ctx.attrs.imported:
+    if not ctx.attrs.imported:
         buildrequires = _query_buildrequires(
             ctx.actions,
             box.run(box = base_buildroot.box[box.Info], exe = ctx.attrs._buildrequires),
