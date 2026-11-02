@@ -35,6 +35,9 @@ for expected in "$image.raw" "$image.qcow2" "$image.efi" "$image.vmlinuz" "$imag
     "artifacts_$arch.json" "$usr" "$usr_verity"; do
     grep -qx "$expected" <<< "$names" || fail "$expected is missing"
 done
+# systemd-sysupdate ignores symlinks in a source directory. The release must contain only regular files.
+irregular=$(find "$directory" -mindepth 1 ! -type f -printf '%P\n')
+[ -z "$irregular" ] || fail "these entries are not regular files: $irregular"
 # Its listing is published, because what it carries is on the disk; the partition itself is not.
 if grep '\.raw$' <<< "$names" | grep -q esp; then
     fail "the ESP partition must not be published"

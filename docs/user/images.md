@@ -731,8 +731,8 @@ and for a disk `[initrd][sbom]` covers what only early boot has.
 A scanner then reads a release without unpacking anything in it, and a release that lists no view builds
 none.
 
-`image.artifacts` gathers those contributions into one directory of symlinks, which is a release as a
-consumer sees it:
+`image.artifacts` copies those contributions into one directory, which is a release as a consumer sees
+it:
 
 ```Starlark
 image.artifacts(

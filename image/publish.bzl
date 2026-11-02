@@ -119,8 +119,10 @@ def _assemble_impl(
     actions.write_json(description, {"arch": arch, "files": entries}, pretty = True)
     release = {name: file.artifact for name, file in files.items()} | {description_name: description}
 
-    # Symlinks, not copies: a release is mostly disk images, and every one of them already exists.
-    actions.symlinked_dir(directory, release)
+    # systemd-sysupdate skips symlinks when it lists a transfer's source directory. It finds no files
+    # to update from in a release of symlinks. Buck copies files with copy_file_range, which shares
+    # the blocks of the disk images on btrfs and XFS instead of duplicating them.
+    actions.copied_dir(directory, release)
     return []
 
 _assemble = dynamic_actions(
