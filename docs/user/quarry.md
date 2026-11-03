@@ -12,6 +12,8 @@ which serves only files that the repository's signed targets list. `quarry.relea
 publishes the release imports them into its repository and signs them with its own keys, so the
 build holds no signing key.
 
+`examples/image-secureboot` publishes its `release` this way.
+
 ## Declaring a release
 
 ```Starlark

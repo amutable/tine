@@ -20,6 +20,7 @@ load("@tine//box:defs.bzl", "box")
 load("@tine//distribution:defs.bzl", "distribution")
 load("@tine//image:defs.bzl", "image")
 load("@tine//platform:architecture.bzl", "architecture")
+load("@tine//quarry:defs.bzl", "quarry")
 load("@tine//tests:defs.bzl", "tests")
 
 # This example serves two audiences, so it declares a key for each and picks: the tokens
@@ -151,13 +152,21 @@ image.sysext(
     verity_key = _SIGNING,
 )
 
+# The sysupdate definitions of the release, which its test compares with what the targets inline.
+export_file(
+    name = "sysupdate.d",
+    src = "sysupdate.d",
+)
+
 # Everything a release of this example publishes, gathered under the names it publishes them
 # under: the disk and its qcow2 encoding, the UKI, the kernel and initrd a direct kernel boot
 # needs, the signed extension, the /usr partitions an update transfers, and the SBOMs and
 # package database. Each name comes from the target that built the artifact, so nothing here
-# decides what anything is called.
-image.artifacts(
+# decides what anything is called. The release carries the TUF targets that quarry updates a machine
+# from, with the definition that updates the extension; :vm boots the disk and the extension.
+quarry.release(
     name = "release",
+    transfers = {"sysupdate.d": ":sysupdate.d"},
     targets = [
         ":demo-ext",
         ":demo-ext[sbom]",
@@ -277,7 +286,7 @@ box.sh_test(
     labels = ["image"],
     box = "@tine//tools:dev.box",
     test = "release-artifacts.sh",
-    args = ["$(location :release)", "$(location :image[roothash])"]
+    args = ["$(location :release.files)", "$(location :image[roothash])"]
     + architecture.select({name: [spellings.systemd] for name, spellings in architecture.ARCHITECTURES.items()})
     # Each package system publishes its package database in its own file format, and the release's
     # description names the package system.
@@ -286,6 +295,17 @@ box.sh_test(
         "debian": ["tar.zst", "deb"],
         "fedora": ["sqlite", "rpm"],
     }),
+)
+
+box.sh_test(
+    name = "release-targets-test",
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    test = "release-targets.sh",
+    args = ["$(location :release)"]
+    + architecture.select({name: [spellings.systemd] for name, spellings in architecture.ARCHITECTURES.items()})
+    + ["$(location :sysupdate.d)"],
+    target_compatible_with = quarry.compatible_with(),
 )
 
 # The disk's own listing is the union of its partitions': what an installation of it leaves behind,
