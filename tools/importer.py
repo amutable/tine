@@ -1424,6 +1424,10 @@ def regenerate_buck(branchdir: Path) -> None:
     if not has_properties:
         loads.append("_properties = {}")
 
+    # The BUCK passes every property of _properties.json to rpm.branch(), over the defaults, and
+    # rpm.branch() fails on a property that it doesn't know. A new property then needs no new line in the
+    # BUCK of an existing branch.
+    defaults = {"buildroot": f"//buildroots/{distro}:{branch}"}
     lines = ["# @generated -- do not edit (regenerated on import/update).", *loads, "", "PACKAGES = {"]
     lines += [f'    "{p}": {_load_symbol(p)},' for p in pkgs]
     lines += [
@@ -1431,14 +1435,8 @@ def regenerate_buck(branchdir: Path) -> None:
         "",
         "rpm.branch(",
         "    packages = PACKAGES,",
-        f'    buildroot = _properties.get("buildroot", "//buildroots/{distro}:{branch}"),',
-        '    buildroot_only_packages = _properties.get("buildroot_only_packages", []),',
         f'    distro = "{distro}",',
-        '    in_place_packaging = _properties.get("in_place_packaging", {}),',
-        '    in_place_rpmbuild_options = _properties.get("in_place_rpmbuild_options", {}),',
-        '    in_place_specs = _properties.get("in_place_specs", {}),',
-        '    seed_only_packages = _properties.get("seed_only_packages", []),',
-        '    rpmbuild_options = _properties.get("rpmbuild_options", {}),',
+        f"    **({json.dumps(defaults, sort_keys=True)} | _properties)",
         ")",
     ]
     (branchdir / "BUCK").write_text("\n".join(lines) + "\n")
