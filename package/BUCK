@@ -58,8 +58,8 @@ python.test(
     name = "test",
     # installer_test runs systemd-tmpfiles, which only the tools box contains.
     box = "tine//distribution:tools.box",
-    srcs = ["installer_test.py", "transaction_test.py"],
-    deps = [":installer", ":transaction"],
+    srcs = ["installer_test.py", "snapshotter_test.py", "transaction_test.py"],
+    deps = [":installer", ":snapshotter", ":transaction"],
 )
 
 # The driver runs in the box with network access. It reads a source checkout's packaging pin and writes the

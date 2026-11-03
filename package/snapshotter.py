@@ -12,6 +12,7 @@ invocation happen here and a driver is left with its own metadata format.
 
 import argparse
 import hashlib
+import http.client
 import json
 import sys
 from collections.abc import Callable, Mapping
@@ -122,6 +123,11 @@ def checksum(rid: str, what: str, value: str | None) -> str:
     return digest
 
 
+# A server that stops sending would otherwise block a download forever. The timeout applies to each read,
+# so a slow but steady download finishes.
+_TIMEOUT = 60
+
+
 def download(
     rid: str,
     what: str,
@@ -143,13 +149,20 @@ def download(
         output.truncate()
         digest = hashlib.sha256()
         total = 0
-        with urlopen(url, agent=AGENT) as response:
-            while chunk := response.read(1024 * 1024):
-                total += len(chunk)
-                if size is not None and total > size:
-                    fail(f"{rid}: {what} is larger than the stated {size} bytes")
-                digest.update(chunk)
-                output.write(chunk)
+        with urlopen(url, agent=AGENT, timeout=_TIMEOUT) as response:
+            try:
+                while chunk := response.read(1024 * 1024):
+                    total += len(chunk)
+                    if size is not None and total > size:
+                        fail(f"{rid}: {what} is larger than the stated {size} bytes")
+                    digest.update(chunk)
+                    output.write(chunk)
+            except http.client.IncompleteRead as error:
+                raise ConnectionError(f"the transfer ended early: {error}") from error
+            # When the server closes the connection before the end of the Content-Length, http.client
+            # returns the short body without an error. `length` then contains the number of missing bytes.
+            if getattr(response, "length", None):
+                raise ConnectionError(f"the transfer ended {response.length} bytes early")
         if size is not None and total != size:
             fail(f"{rid}: {what} is {total} bytes, not the stated {size}")
         if sha256 is not None and digest.hexdigest() != sha256:
