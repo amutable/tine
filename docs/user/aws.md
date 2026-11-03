@@ -91,6 +91,8 @@ This prints the new AMI ID. Options:
   the AMI after the given number of days, at most 3650. Other accounts then no longer find it unless
   they ask for deprecated AMIs, but can still launch it by its ID. It stays in EC2 until
   someone actually deregisters it.
+- `--tag KEY=VALUE`: tag the AMI and its snapshot with this, besides the `Name` tag that both get from the
+  image name. Repeat it for more tags. Tags set at creation can scope IAM policies.
 
 ### Importing from a release
 

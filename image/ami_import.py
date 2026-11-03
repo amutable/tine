@@ -119,8 +119,13 @@ class Aws:
         return json.loads(out) if out.strip() else {}
 
 
-def upload(aws: Aws, disk: Path, name: str, jobs: int) -> str:
-    """Write the non-zero blocks of `disk` into a new snapshot and return its ID once completed."""
+def ec2_tags(tags: dict[str, str]) -> list[dict[str, str]]:
+    """`tags` as the list of Key/Value pairs that EC2 takes."""
+    return [{"Key": key, "Value": value} for key, value in tags.items()]
+
+
+def upload(aws: Aws, disk: Path, tags: dict[str, str], jobs: int) -> str:
+    """Write the non-zero blocks of `disk` into a new snapshot with `tags`; return its ID once completed."""
     # An encrypted snapshot reads back garbage, not zeros, for blocks never written; skipping zero
     # blocks is only correct for an unencrypted one, and the account default would encrypt it.
     if aws("ec2", "get-ebs-encryption-by-default")["EbsEncryptionByDefault"]:
@@ -133,8 +138,9 @@ def upload(aws: Aws, disk: Path, name: str, jobs: int) -> str:
             "start-snapshot",
             f"--volume-size={size}",
             "--no-encrypted",
-            f"--description={name}",
-            f"--tags=Key=Name,Value={name}",
+            f"--description={tags['Name']}",
+            # JSON rather than the CLI's shorthand to support values containing a comma
+            f"--tags={json.dumps(ec2_tags(tags))}",
             # minutes until EBS cancels it should this die before completing it
             "--timeout=60",
         )["SnapshotId"]
@@ -180,13 +186,13 @@ def upload(aws: Aws, disk: Path, name: str, jobs: int) -> str:
     return snapshot
 
 
-def register(aws: Aws, parameters: dict[str, Any], name: str, snapshot: str, tpm: bool) -> str:
-    """Register the image with `parameters`, booting `snapshot`, and return its ID."""
+def register(aws: Aws, parameters: dict[str, Any], tags: dict[str, str], snapshot: str, tpm: bool) -> str:
+    """Register the image with `parameters` and `tags`, booting `snapshot`, and return its ID."""
     if not tpm:
         del parameters["TpmSupport"]
-    parameters["Name"] = name
+    parameters["Name"] = tags["Name"]
     parameters["BlockDeviceMappings"][0]["Ebs"]["SnapshotId"] = snapshot
-    parameters["TagSpecifications"] = [{"ResourceType": "image", "Tags": [{"Key": "Name", "Value": name}]}]
+    parameters["TagSpecifications"] = [{"ResourceType": "image", "Tags": ec2_tags(tags)}]
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
         json.dump(parameters, f)
         f.flush()
@@ -199,6 +205,16 @@ def deprecate_days(value: str) -> int:
     if not 1 <= days <= DEPRECATE_DAYS_MAX:
         raise argparse.ArgumentTypeError(f"{days} is not between 1 and {DEPRECATE_DAYS_MAX} days")
     return days
+
+
+def tag(value: str) -> tuple[str, str]:
+    """A `--tag` KEY=VALUE, as its key and value."""
+    key, separator, tag_value = value.partition("=")
+    if not key or not separator:
+        raise argparse.ArgumentTypeError(f"{value!r} is not KEY=VALUE")
+    if key == "Name":
+        raise argparse.ArgumentTypeError("the Name tag is the image name; pass --name instead")
+    return key, tag_value
 
 
 def deprecation_time(now: datetime.datetime, days: int) -> str:
@@ -225,6 +241,15 @@ def main() -> None:
         metavar="DAYS",
         help="deprecate the image this many days after registering it",
     )
+    parser.add_argument(
+        "--tag",
+        dest="tags",
+        type=tag,
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="tag the image and its snapshot with this, besides their Name; repeatable",
+    )
     args = parser.parse_args()
 
     aws = Aws(args.region)
@@ -234,8 +259,9 @@ def main() -> None:
     if aws("ec2", "describe-images", "--owners=self", f"--filters=Name=name,Values={name}")["Images"]:
         sys.exit(f"ami-import: an image named {name!r} exists already; pass another --name")
 
-    snapshot = upload(aws, args.disk, name, args.jobs)
-    image = register(aws, parameters, name, snapshot, args.tpm)
+    tags = {"Name": name} | dict(args.tags)
+    snapshot = upload(aws, args.disk, tags, args.jobs)
+    image = register(aws, parameters, tags, snapshot, args.tpm)
     if args.deprecate_days:
         at = deprecation_time(datetime.datetime.now(datetime.UTC), args.deprecate_days)
         aws("ec2", "enable-image-deprecation", f"--image-id={image}", f"--deprecate-at={at}")
