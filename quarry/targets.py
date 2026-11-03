@@ -22,6 +22,7 @@ import os
 import subprocess
 import tempfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
@@ -194,6 +195,11 @@ def write_targets(args: argparse.Namespace) -> None:
         # All paths are absolute because hardhat runs from the stage, not the action's directory.
         argv = [
             os.path.abspath(args.hardhat),
+            # hardhat ignores SOURCE_DATE_EPOCH and versions the targets by the wall-clock time.
+            # Importing them into a repository keeps only their entries, so any fixed time will do.
+            # TODO: Drop this once the pinned quarry has https://github.com/amutable/quarry/pull/97
+            "--ref-time",
+            datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "targets",
             # The file has no signatures and the zero time as its expiry, which nothing checks.
             "--unsigned",

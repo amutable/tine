@@ -11,6 +11,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import targets
@@ -240,18 +241,20 @@ class TestCmdTargets(unittest.TestCase):
             transfers.mkdir()
             out = base / "out"
             out.mkdir()
-            targets.main([
-                "--artifacts", os.fspath(description),
-                "--files", os.fspath(files),
-                "--output", os.fspath(out / f"targets_{ARCH}.json"),
-                "--hardhat", os.fspath(hardhat),
-                "--exclude", "disk/raw",
-                "--transfer-dir", f"sysupdate.d={transfers}",
-            ])  # fmt: skip
+            with unittest.mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1739577600"}):
+                targets.main([
+                    "--artifacts", os.fspath(description),
+                    "--files", os.fspath(files),
+                    "--output", os.fspath(out / f"targets_{ARCH}.json"),
+                    "--hardhat", os.fspath(hardhat),
+                    "--exclude", "disk/raw",
+                    "--transfer-dir", f"sysupdate.d={transfers}",
+                ])  # fmt: skip
 
             self.assertFalse((out / "1.root.json").exists())
             called = json.loads((out / f"targets_{ARCH}.json").read_text())
-            self.assertEqual(called["argv"][0], "targets")
+            # The targets are versioned by SOURCE_DATE_EPOCH rather than the wall-clock time.
+            self.assertEqual(called["argv"][:3], ["--ref-time", "2025-02-15T00:00:00Z", "targets"])
             # The build holds no signing key.
             self.assertIn("--unsigned", called["argv"])
             self.assertNotIn("--keystore", called["argv"])
