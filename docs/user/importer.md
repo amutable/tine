@@ -140,7 +140,8 @@ introduce a proper tool verb for that cleanup, but that can wait until the need 
 
 A `packages/`_distro_`/`_branch_`/` directory may carry a `_properties.json` alongside the per-package
 `srcpkg.json` files. It holds hand-authored, branch-level build curation. The generated branch `BUCK`
-loads it and passes its properties to `rpm.branch()`. Never edit the `@generated` `BUCK` by hand.
+loads it and passes every property to `rpm.branch()`, so loading the branch fails on a property that
+`rpm.branch()` doesn't know. Never edit the `@generated` `BUCK` by hand.
 
 ### Buildroot-only packages
 
@@ -278,6 +279,6 @@ The buildroot still contains the imported BuildRequires. If the pinned spec requ
 imported spec does not, rpmbuild fails with `Failed build dependencies:` until the package is imported again
 at a commit with that BuildRequires.
 
-The branch's generated `BUCK` passes `in_place_packaging` to the build only if its `rpm.branch()` call has
-an `in_place_packaging` line and a `distro` line. `import`, and an `update` that takes new commits,
-regenerate the `BUCK` with both lines.
+The branch's generated `BUCK` must pass the branch's `distro` and the properties from `_properties.json`
+to `rpm.branch()`. If your `BUCK` doesn't forward `in_place_packaging`, run `import`, or an `update` that
+takes new commits, to regenerate it.

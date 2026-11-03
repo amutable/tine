@@ -1730,8 +1730,7 @@ class RegenerateBuck(unittest.TestCase):
         self.curate()
         buck = self.buck()
         self.assertIn('load(":_properties.json", _properties = "value")', buck)
-        for key in self.CURATION:
-            self.assertIn(f'_properties.get("{key}"', buck)
+        self.assertIn("| _properties)", buck)
         for value in (
             "//buildroots/myos:base",
             "glibc32",
@@ -1768,7 +1767,7 @@ class RegenerateBuck(unittest.TestCase):
         # Absent an override, the buildroot label is derived from the branch's <distro>/<branch>
         # path -- the one default that must be generated, since buck cannot know the branch's
         # distro. It stays the fallback even when the branch overrides it.
-        default = '_properties.get("buildroot", "//buildroots/fedora:rawhide")'
+        default = '**({"buildroot": "//buildroots/fedora:rawhide"} | _properties)'
         self.assertIn(default, self.buck())
         self.curate()
         self.assertIn(default, self.buck())
