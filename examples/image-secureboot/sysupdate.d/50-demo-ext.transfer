@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+# quarry verifies what it serves against the release's TUF targets, so sysupdate needs no signature.
+[Transfer]
+Verify=no
+
+# quarry-sysupdate replaces Path= with its local proxy.
+[Source]
+Type=url-file
+Path=http://localhost/
+MatchPattern=**/demo-ext_@v_%a.sysext.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions/demo-ext.raw.v
+PathRelativeTo=root
+MatchPattern=demo-ext_@v_%a.raw
+Mode=0644
+InstancesMax=2
