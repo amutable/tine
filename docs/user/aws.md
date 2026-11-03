@@ -65,7 +65,8 @@ is enabled for the region.
 
 If the import fails while uploading, EC2 cancels the incomplete snapshot after an hour. If it fails while
 registering, the completed snapshot stays; the import printed its ID, delete it with
-`aws ec2 delete-snapshot`.
+`aws ec2 delete-snapshot`. If it fails while deprecating, the AMI stays without a deprecation time; the
+failed command names its ID.
 
 ### Development mode
 
@@ -86,6 +87,10 @@ This prints the new AMI ID. Options:
 - `--region`: import into another region than the configured one.
 - `--jobs`: the number of blocks uploaded in parallel, 16 by default.
 - `--no-tpm`: register the AMI without a NitroTPM, for arm64 bare metal instance types.
+- `--deprecate-days`: [deprecate](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ami-deprecate.html)
+  the AMI after the given number of days, at most 3650. Other accounts then no longer find it unless
+  they ask for deprecated AMIs, but can still launch it by its ID. It stays in EC2 until
+  someone actually deregisters it.
 
 ### Importing from a release
 
