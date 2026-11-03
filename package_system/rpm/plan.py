@@ -133,6 +133,11 @@ def undelivered(
             if spec.removeprefix("@") not in groups:
                 missing.append(spec)
             continue
+        # resolve_pkg_spec() doesn't evaluate rich dependencies. For (A if B), it would report A as missing
+        # while B is absent, although the dependency holds. The solve still requests every rich dependency,
+        # and it fails when no package satisfies one, such as (A or B) with neither A nor B available.
+        if spec.startswith("("):
+            continue
         wanted = libdnf5.rpm.PackageQuery(base)
         wanted.resolve_pkg_spec(spec, settings, False)
         delivered = libdnf5.rpm.PackageQuery(wanted)
