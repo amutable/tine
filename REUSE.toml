@@ -15,6 +15,7 @@ path = [
     "examples/package/rpm/hello-distgit/local-note",
     "examples/package/rpm/hello-packaging.bundle",
     "examples/package/rpm/hello.src.rpm",
+    "examples/package/rpm-branch/hello/sources",
     "examples/package/rpm/hello.source/rpm/packaging-marker",
     "examples/package/rpm/hello.source/rpm/packaging.json",
     "tine.lock.json",

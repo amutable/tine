@@ -7,7 +7,7 @@
 
 These are integration tests: they stand up a local dist-git repo, build *real* rpms from it
 (so the metadata pipeline's `rpm -qp`/`rpmspec` calls run for real), and mock only the network
-edges -- koji (XML-RPC), the koji rpm download, and the source lookaside.
+edges -- koji (XML-RPC) and the koji rpm download.
 
 They run in-process (patching the tool's module globals + network calls, and chdir-ing into the
 temp monorepo), so they must run sequentially -- which plain unittest does. TestCLI is the one
@@ -216,8 +216,7 @@ def make_tarball(pkg: str, version: str) -> bytes:
     """A minimal, valid <pkg>-<version>.tar.gz (with a top-level dir, so %setup -q works).
 
     Deterministic: fixed member + gzip mtimes, so the same (pkg, version) always yields identical
-    bytes -- successive same-version commits then share a `sources` hash (and the mock lookaside
-    serves one consistent tarball for it)."""
+    bytes -- successive same-version commits then share a `sources` hash and one consistent tarball."""
     data = b"hello\n"
     tarbuf = io.BytesIO()
     with tarfile.open(fileobj=tarbuf, mode="w") as tar:
@@ -320,7 +319,7 @@ class PackagesTestCase(unittest.TestCase):
     """Shared scaffolding for all verb tests.
 
     A temp monorepo (with an orphan upstream-rpm branch), local dist-git repos with real built
-    rpms, and mocked network edges (koji, the rpm download, the source lookaside). Subclasses add
+    rpms, and mocked network edges (koji and the rpm download). Subclasses add
     the actual per-verb tests.
     """
 
@@ -351,7 +350,7 @@ class PackagesTestCase(unittest.TestCase):
             p.start()
 
         self._rpms: dict[str, Path] = {}  # rpm basename -> built rpm file
-        self._lookaside: dict[str, bytes] = {}  # source filename -> bytes
+        self._tarballs: dict[str, bytes] = {}  # source filename -> bytes
         self._builds: list[dict[str, Any]] = []  # koji builds; FakeKoji reads this live
         self._koji = FakeKoji(1, self._builds)
 
@@ -374,11 +373,7 @@ class PackagesTestCase(unittest.TestCase):
         return self._koji
 
     def _urlopen(self, url: str, *a: object, **k: object) -> io.BytesIO:
-        # Serve both koji rpm downloads (self._rpms) and lookaside sources (self._lookaside).
-        name = url.rsplit("/", 1)[-1]
-        if name in self._rpms:
-            return io.BytesIO(self._rpms[name].read_bytes())
-        return io.BytesIO(self._lookaside[name])
+        return io.BytesIO(self._rpms[url.rsplit("/", 1)[-1]].read_bytes())
 
     # --- fixture builder ----------------------------------------------------------------
 
@@ -388,7 +383,7 @@ class PackagesTestCase(unittest.TestCase):
         """Add a dist-git commit for `pkg` (creating its local repo on first call); return the sha.
 
         Writes the spec (+ a per-commit marker so successive commits differ) and a `sources` file,
-        and registers the source tarball with the mock lookaside."""
+        and keeps the source tarball for the builds of the package."""
         repo = self.distgit / f"{pkg}.git"
         if not repo.exists():
             init_repo(repo, branch)
@@ -397,7 +392,7 @@ class PackagesTestCase(unittest.TestCase):
             tmpl.format(pkg=pkg, version=version, release=release) + f"\n# {msg}\n"
         )
         tarball = make_tarball(pkg, version)
-        self._lookaside[f"{pkg}-{version}.tar.gz"] = tarball
+        self._tarballs[f"{pkg}-{version}.tar.gz"] = tarball
         (repo / "sources").write_text(
             f"SHA512 ({pkg}-{version}.tar.gz) = {hashlib.sha512(tarball).hexdigest()}\n"
         )
@@ -416,7 +411,7 @@ class PackagesTestCase(unittest.TestCase):
         defines = {"autorelease": f"{release}%{{?dist}}", "autochangelog": "%nil"} if autorelease else {}
         topdir = self._tmp / "build" / f"{pkg}-{version}-{release}"
         for r in build_rpms(
-            topdir, spec_text, pkg, version, self._lookaside[f"{pkg}-{version}.tar.gz"], defines
+            topdir, spec_text, pkg, version, self._tarballs[f"{pkg}-{version}.tar.gz"], defines
         ):
             self._rpms[r.name] = r
         rel = f"{release}{DIST}"
@@ -608,7 +603,8 @@ class UpstreamPackages(PackagesTestCase):
         self.assertIn("[fedora/rawhide/testpkg] Update to 1.0", log)
         self.assertIn(f"X-Upstream-Commit: {sha}", log)
 
-        # srcpkg.json: binaries bucketed under each build arch, BuildRequires, and source sha256.
+        # srcpkg.json: binaries bucketed under each build arch, and BuildRequires. The build downloads the
+        # archives that the mirrored `sources` file lists, so the json lists none.
         meta = json.loads((wt / f"{rel}.json").read_text())
         self.assertEqual(sorted(meta["binaries"]), ["aarch64", "x86_64"])
         binmeta = meta["binaries"]["x86_64"]["testpkg"]
@@ -617,13 +613,7 @@ class UpstreamPackages(PackagesTestCase):
         self.assertIn("bash", binmeta["Requires"])  # explicit Requires
         self.assertIn("/usr/share/testpkg/README", binmeta["Files"])
         self.assertEqual(meta["build_requires"]["_all"], ["sed"])
-        self.assertEqual(len(meta["sources"]), 1)
-        self.assertEqual(
-            meta["sources"][0]["sha256sum"],
-            hashlib.sha256(self._lookaside["testpkg-1.0.tar.gz"]).hexdigest(),
-        )
-        self.assertEqual(meta["sources"][0]["size"], len(self._lookaside["testpkg-1.0.tar.gz"]))
-        self.assertTrue(meta["sources"][0]["url"].endswith("/testpkg-1.0.tar.gz"))
+        self.assertNotIn("sources", meta)
 
     def test_download_retries_transient_reset(self) -> None:
         """A connection reset mid-download is retried, so the import still completes."""
@@ -992,13 +982,18 @@ class DownstreamPackages(PackagesTestCase):
         changed = git("show", "--name-only", "--format=", "HEAD", cwd=self.monorepo).split()
         self.assertEqual(changed, [f"{rel}.json"])
 
-    def test_rpm_metadata_preserves_sources_and_projection(self) -> None:
-        """rpm-metadata keeps the lookaside `sources` and refreshes the projection on recompute."""
+    def test_rpm_metadata_drops_recorded_archives(self) -> None:
+        """rpm-metadata refreshes the projection, and drops the archives that an older import recorded."""
         rel = "packages/fedora/rawhide/testpkg"
         self.seed("testpkg")
         self.tool.import_("testpkg", None, None)
-        before = json.loads((self.monorepo / f"{rel}.json").read_text())
-        self.assertTrue(before["sources"])  # sources recorded at import time
+        metafile = self.monorepo / f"{rel}.json"
+        # An older importer recorded the archives in the json.
+        before = json.loads(metafile.read_text())
+        before["sources"] = [
+            {"url": "https://lookaside.invalid/testpkg-1.0.tar.gz", "sha256sum": "0" * 64, "size": 1}
+        ]
+        metafile.write_text(json.dumps(before))
 
         # Recompute from natively-built rpms (dist .fc99aos, as a real downstream build produces).
         spec_text = NOARCH_SPEC.format(pkg="testpkg", version="1.0", release="1")
@@ -1007,14 +1002,15 @@ class DownstreamPackages(PackagesTestCase):
             spec_text,
             "testpkg",
             "1.0",
-            self._lookaside["testpkg-1.0.tar.gz"],
+            self._tarballs["testpkg-1.0.tar.gz"],
             {},
             dist=NDIST,
         )
         self.tool.rpm_metadata("testpkg", [str(r) for r in rpms], "fedora", "rawhide")
 
-        after = json.loads((self.monorepo / f"{rel}.json").read_text())
-        self.assertEqual(after["sources"], before["sources"])  # sources preserved, not wiped
+        after = json.loads(metafile.read_text())
+        # The build downloads the archives that the `sources` file lists, so the json lists none.
+        self.assertNotIn("sources", after)
         self.assertEqual(
             (after["version"], after["release"], after["dist"]), ("1.0", "1", NDIST)
         )  # projection refreshed
@@ -1052,8 +1048,8 @@ class DownstreamPackages(PackagesTestCase):
         self.tool.import_("arp", None, None)
 
         # Provide the source archive locally instead of hitting the real lookaside.
-        def fake_fetch(pkgdir: Path, distro: str, pkg: str) -> None:
-            (pkgdir / "arp-1.0.tar.gz").write_bytes(self._lookaside["arp-1.0.tar.gz"])
+        def fake_fetch(pkgdir: Path, distro: str, pkg: str, lookaside: str | None) -> None:
+            (pkgdir / "arp-1.0.tar.gz").write_bytes(self._tarballs["arp-1.0.tar.gz"])
 
         with mock.patch.object(self.tool, "fetch_sources", side_effect=fake_fetch):
             srcrpm = self.tool.srpm("arp", None, None)
@@ -1257,7 +1253,7 @@ class DownstreamPackages(PackagesTestCase):
             spec_text,
             "testpkg",
             "1.0",
-            self._lookaside["testpkg-1.0.tar.gz"],
+            self._tarballs["testpkg-1.0.tar.gz"],
             {},
         )
 
@@ -1312,26 +1308,10 @@ class NativePackages(PackagesTestCase):
         rel = self.make_native()
         meta = json.loads((self.monorepo / f"{rel}.json").read_text())
         self.assertEqual((meta["version"], meta["release"], meta["dist"]), ("1.0", "0.1", "." + NATIVE_DIST))
-        self.assertEqual(meta["sources"], [])
+        self.assertNotIn("sources", meta)
         self.assertEqual(meta["build_requires"], {"_all": ["sed"]})
         for arch in ("x86_64", "aarch64"):
             self.assertIn(f"mine = 1.0-0.1.{NATIVE_DIST}", meta["binaries"][arch]["mine"]["Provides"])
-
-    def test_rpm_metadata_json_without_sources(self) -> None:
-        """A recompute copes with an existing json that lacks the `sources` key.
-
-        A native package's first json can be written by hand (bootstrapping the build); nothing
-        guarantees it carries the `sources` list rpm-metadata otherwise preserves.
-        """
-        rel = self.make_native()
-        metafile = self.monorepo / f"{rel}.json"
-        meta = json.loads(metafile.read_text())
-        del meta["sources"]
-        metafile.write_text(json.dumps(meta))
-
-        self.tool.rpm_metadata("mine", [str(r) for r in self.native_rpms], None, None)
-
-        self.assertEqual(json.loads(metafile.read_text())["sources"], [])
 
     def rpm_metadata_with_options(self, spec_template: str, options: list[str]) -> None:
         """Build with `options`, recompute via the branch's rpmbuild_options, verify the json.
@@ -1699,6 +1679,7 @@ class RegenerateBuck(unittest.TestCase):
         "in_place_packaging": {"gcc": "packaging/pins.json"},
         "in_place_rpmbuild_options": {"glibc": ["--with=upstream"]},
         "in_place_specs": {"glibc": "packaging/fedora/glibc.spec"},
+        "lookaside": "https://mirror.invalid/rpms",
         "seed_only_packages": ["gcc"],
         "rpmbuild_options": {"gcc": ["--with=basic"]},
     }
@@ -1713,6 +1694,9 @@ class RegenerateBuck(unittest.TestCase):
         self.assertIn('    "glibc": _glibc,', buck)
         # The importer takes the distro from the name of the branch's parent directory.
         self.assertIn('    distro = "fedora",', buck)
+        # rpm.branch() takes the lookaside cache of the distribution from `distro`, so the BUCK
+        # doesn't name one.
+        self.assertNotIn('"lookaside"', buck)
         # ...but the curation file is never a PACKAGES entry.
         self.curate()
         self.assertNotIn('"_properties": _properties,', self.buck())
@@ -1737,6 +1721,7 @@ class RegenerateBuck(unittest.TestCase):
             "packaging/pins.json",
             "--with=upstream",
             "--with=basic",
+            "https://mirror.invalid/rpms",
         ):
             self.assertNotIn(value, buck)
 
@@ -1765,12 +1750,57 @@ class RegenerateBuck(unittest.TestCase):
 
     def test_default_buildroot(self) -> None:
         # Absent an override, the buildroot label is derived from the branch's <distro>/<branch>
-        # path -- the one default that must be generated, since buck cannot know the branch's
-        # distro. It stays the fallback even when the branch overrides it.
-        default = '**({"buildroot": "//buildroots/fedora:rawhide"} | _properties)'
+        # path. It is the one default that the importer generates, because rpm.branch() doesn't know
+        # the name of the branch. It stays the fallback even when the branch overrides it.
+        default = '"buildroot": "//buildroots/fedora:rawhide"'
         self.assertIn(default, self.buck())
         self.curate()
         self.assertIn(default, self.buck())
+
+
+class FetchSources(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.pkgdir = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp")))
+        (self.pkgdir / "sources").write_text(f"SHA512 (hello.tar.gz) = {'0' * 128}\n")
+
+    def fetch(self, lookaside: str | None) -> tuple[list[str], dict[str, str]]:
+        """Run fetch_sources() with a fake dist-git-client, and return its command and configuration."""
+        commands: list[list[str]] = []
+        config: dict[str, str] = {}
+
+        def run(cmd: list[str], **_kwargs: object) -> None:
+            commands.append(cmd)
+            if "--configdir" in cmd:
+                configdir = Path(cmd[cmd.index("--configdir") + 1])
+                config.update({path.name: path.read_text() for path in configdir.iterdir()})
+
+        with mock.patch.object(tool.subprocess, "run", side_effect=run):
+            tool.fetch_sources(self.pkgdir, "fedora", "hello", lookaside)
+        (command,) = commands
+        return command, config
+
+    def test_the_lookaside_of_the_distro_needs_no_configuration(self) -> None:
+        # Without a `lookaside` property, dist-git-client uses its own configuration for Fedora.
+        cmd, config = self.fetch(None)
+        self.assertNotIn("--configdir", cmd)
+        self.assertEqual(
+            cmd[-3:], ["--forked-from", "https://src.fedoraproject.org/rpms/hello.git", "sources"]
+        )
+        self.assertEqual(config, {})
+
+    def test_the_lookaside_property_configures_dist_git_client(self) -> None:
+        # The `lookaside` property of a branch names a mirror. fetch_sources() must point
+        # dist-git-client at the mirror for the host of the Fedora clone URL, and escape the % that
+        # ConfigParser would read as an interpolation.
+        _, config = self.fetch("https://mirror.example.com/pkgs%2Brpms/")
+        self.assertEqual(
+            config["tine.ini"],
+            "[tine]\n"
+            "clone_hostnames = src.fedoraproject.org\n"
+            "lookaside_location = https://mirror.example.com\n"
+            "lookaside_uri_pattern = pkgs%%2Brpms/{name}/{filename}/{hashtype}/{hash}/{filename}\n",
+        )
 
 
 class RepoRoot(unittest.TestCase):
