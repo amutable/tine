@@ -23,6 +23,7 @@ type Source = mmap.mmap | bytes
 MAGIC = b"070701"
 TRAILER = "TRAILER!!!"
 _HEADER = 110  # 6-byte magic + 13 * 8-hex fields
+_HEX_DIGITS = b"0123456789abcdefABCDEF"
 # Fixed alignment keeps bytes reproducible across filesystems.
 _BLOCK = 4096
 # A newc name is a full path, so the kernel's initramfs unpacker bounds the namesize field by
@@ -81,7 +82,12 @@ def read(source: Source, start: int = 0) -> Iterator[Entry]:
             raise ValueError(f"bad cpio magic at {off}: {source[off : off + 6]!r}")
         # 13 8-hex fields: ino, mode, uid, gid, nlink, mtime, filesize, devmajor, devminor,
         # rdevmajor, rdevminor, namesize, check.
-        f = [int(source[off + 6 + i * 8 : off + 6 + (i + 1) * 8], 16) for i in range(13)]
+        header = source[off + 6 : off + _HEADER]
+        # int() also accepts a sign, blanks and underscores. A negative filesize can point the next
+        # header offset back at this header, and the reader then loops forever.
+        if len(header) != _HEADER - 6 or header.strip(_HEX_DIGITS):
+            raise ValueError(f"bad cpio header at {off}: {header!r}")
+        f = [int(header[i * 8 : (i + 1) * 8], 16) for i in range(13)]
         ino, mode, nlink, filesize, devmajor, devminor, namesize = (
             f[0], f[1], f[4], f[6], f[7], f[8], f[11],
         )  # fmt: skip
