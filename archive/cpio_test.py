@@ -77,6 +77,15 @@ class TestUnpack(unittest.TestCase):
                 cpio.unpack(raw.fileno(), root / "dest")
             self.assertIn("magic", str(raised.exception))
 
+    def test_a_negative_size_is_a_malformed_archive(self) -> None:
+        # The data of "demo" starts at offset 116. int() parses the filesize "-0000074" as -116, which
+        # would point the next header back at this one.
+        before = b"".join(b"%08X" % field for field in (0, stat.S_IFREG | 0o644, 0, 0, 1, 0))
+        after = b"".join(b"%08X" % field for field in (0, 0, 0, 0, 5, 0))
+        header = b"070701" + before + b"-0000074" + after + b"demo\0"
+        with self.assertRaisesRegex(ValueError, "bad cpio header at 0: .*-0000074"):
+            list(cpio.read(header))
+
     def test_reports_what_actually_failed_when_an_entry_cannot_be_written(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
