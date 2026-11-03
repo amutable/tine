@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Tests for picking the blocks of an AMI disk to upload, and for when to deprecate the AMI.
+"""Tests for picking the blocks of an AMI disk to upload, and for the AMI's properties.
 
 buck test tine//image:test
 """
@@ -113,6 +113,23 @@ class DeprecationTest(unittest.TestCase):
         for days in ["0", "-1", str(ami_import.DEPRECATE_DAYS_MAX + 1)]:
             with self.assertRaisesRegex(argparse.ArgumentTypeError, "is not between 1 and"):
                 ami_import.deprecate_days(days)
+
+
+class TagTest(unittest.TestCase):
+    def test_key_and_value(self) -> None:
+        self.assertEqual(ami_import.tag("retention=pr"), ("retention", "pr"))
+        # Only the first = separates; EC2 allows = and commas in values, and empty ones.
+        self.assertEqual(ami_import.tag("a=b=c,d"), ("a", "b=c,d"))
+        self.assertEqual(ami_import.tag("a="), ("a", ""))
+
+    def test_needs_key_and_separator(self) -> None:
+        for value in ["a", "=b", ""]:
+            with self.assertRaisesRegex(argparse.ArgumentTypeError, "is not KEY=VALUE"):
+                ami_import.tag(value)
+
+    def test_refuses_name(self) -> None:
+        with self.assertRaisesRegex(argparse.ArgumentTypeError, "pass --name instead"):
+            ami_import.tag("Name=x")
 
 
 if __name__ == "__main__":
