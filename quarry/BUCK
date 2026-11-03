@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+"""quarry's "hardhat" repository tool, for writing a TUF repository.
+
+Keep these out of shared boxes and aggregate targets, so that only a project that publishes a quarry
+release builds hardhat and its boxes.
+"""
+
+load("//:tine.lock.json", _pins = "value")
+load("//box:defs.bzl", "box")
+load("//distribution:defs.bzl", "distribution")
+load("//git:defs.bzl", "git")
+load("//go:defs.bzl", "go")
+load(":defs.bzl", "hardhat_compatible_with")
+
+git.fetch(
+    name = "quarry.git",
+    repo = _pins["quarry"]["repository"],
+    rev = _pins["quarry"]["commit"],
+)
+
+box.new(
+    name = "hardhat-build.box",
+    packages = ["gcc"]
+    + distribution.select({
+        # go-pathrs finds the library with pkg-config, which Fedora's libpathrs-devel pulls in.
+        "arch": [
+            "libpathrs",
+            "pkgconf",
+        ],
+        # hardhat itself is incompatible with Debian, see hardhat_compatible_with().
+        "debian": [],
+        "fedora": ["libpathrs-devel"],
+    }),
+    parent = "tine//go:build.box",
+    release = distribution.release_target("release"),
+)
+
+go.package(
+    name = "hardhat",
+    box = ":hardhat-build.box",
+    linker_flags = [
+        "-s",
+        "-w",
+    ],
+    packages = {"hardhat": "./cmd/hardhat"},
+    src = ":quarry.git",
+    tags = [
+        "http",
+        # read keys from files, for tests
+        "insecure",
+    ],
+    target_compatible_with = hardhat_compatible_with(),
+    visibility = ["PUBLIC"],
+)
+
+# Runs hardhat, which loads libpathrs.
+box.new(
+    name = "hardhat.box",
+    packages = distribution.select({
+        "arch": ["libpathrs"],
+        "debian": [],
+        "fedora": ["libpathrs"],
+    }),
+    parent = "tine//distribution:tools.box",
+    release = distribution.release_target("release"),
+    visibility = ["PUBLIC"],
+)
