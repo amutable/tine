@@ -179,5 +179,10 @@
         "strip_prefix": "gh_2.103.3_linux_amd64"
       }
     }
+  },
+  "quarry": {
+    "repository": "https://github.com/amutable/quarry",
+    "ref": "main",
+    "commit": "164ff6f96513ce1c828a5cc13001b39f618c74bf"
   }
 }
