@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+"""A branch of imported packages, declared by hand with the metadata of each package inline."""
+
+load("@tine//box:defs.bzl", "box")
+load("@tine//package_system/rpm:defs.bzl", "rpm")
+
+_DISTRO = "catalog//:fedora.rawhide.distribution"
+
+# hello builds its imported spec. The build downloads the signature of the hello archive, which
+# hello/sources lists, from the lookaside cache of Fedora.
+rpm.branch(
+    buildroot = "catalog//:fedora.rawhide.buildroot",
+    distro = "fedora",
+    packages = {
+        "hello": {
+            "binaries": {
+                arch: {"hello": {"Files": ["/usr/share/tine-package/hello-2.12.3.tar.gz.sig"], "Provides": [], "Recommends": [], "Requires": []}}
+                for arch in ["aarch64", "x86_64"]
+            },
+            "build_requires": {"_all": []},
+            "dist": ".aos",
+            "release": "1",
+            "source_date_epoch": 1754006400,
+            "version": "1",
+        },
+    },
+)
+
+box.sh_test(
+    name = "hello-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = "catalog//:fedora.rawhide.box",
+    script = 'rpm -qpl "$1" | grep -qx /usr/share/tine-package/hello-2.12.3.tar.gz.sig',
+    args = ["$(location :hello[hello])"],
+)

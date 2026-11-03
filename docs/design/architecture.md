@@ -734,9 +734,11 @@ An `rpm_package` action:
    repository in one action, with tine's Python outside a box. A dynamic action then downloads each archive
    with Buck's `download_file`, which checks its SHA-512 digest. A download depends only on the line of its
    archive in `sources`, so the build downloads nothing again while that line stays the same. The output
-   directory of `rpm.lookaside()` goes in the `srcs` of the package. `rpm.srpm()` unpacks a source RPM into
-   a directory for `srcs`, with a driver that fails on any entry that is not a regular file with a plain
-   name. The project is read-only until the build driver exits;
+   directory of `rpm.lookaside()` goes in the `srcs` of the package. `rpm.branch()` declares an
+   `rpm.lookaside()` for the `sources` file of each package, with the lookaside cache of the branch's
+   distribution. `rpm.srpm()` unpacks a source RPM into a directory for `srcs`, with a driver that fails on
+   any entry that is not a regular file with a plain name. The project is read-only until the build driver
+   exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
