@@ -1,13 +1,15 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Tests for picking the blocks of an AMI disk to upload.
+"""Tests for picking the blocks of an AMI disk to upload, and for when to deprecate the AMI.
 
 buck test tine//image:test
 """
 
+import argparse
 import base64
 import compression.zstd
+import datetime
 import hashlib
 import tempfile
 import unittest
@@ -94,6 +96,23 @@ class ChecksumTest(unittest.TestCase):
     def test_is_base64_sha256(self) -> None:
         block = b"z" * BLOCK_SIZE
         self.assertEqual(base64.b64decode(ami_import.checksum(block)), hashlib.sha256(block).digest())
+
+
+class DeprecationTest(unittest.TestCase):
+    def test_time_is_utc(self) -> None:
+        now = datetime.datetime(
+            2026, 11, 3, 12, 30, 15, tzinfo=datetime.timezone(datetime.timedelta(hours=1))
+        )
+        self.assertEqual(ami_import.deprecation_time(now, 2), "2026-11-05T11:30:15Z")
+
+    def test_days_within_ec2_limits(self) -> None:
+        self.assertEqual(ami_import.deprecate_days("30"), 30)
+        self.assertEqual(
+            ami_import.deprecate_days(str(ami_import.DEPRECATE_DAYS_MAX)), ami_import.DEPRECATE_DAYS_MAX
+        )
+        for days in ["0", "-1", str(ami_import.DEPRECATE_DAYS_MAX + 1)]:
+            with self.assertRaisesRegex(argparse.ArgumentTypeError, "is not between 1 and"):
+                ami_import.deprecate_days(days)
 
 
 if __name__ == "__main__":

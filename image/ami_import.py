@@ -11,6 +11,7 @@ import argparse
 import base64
 import compression.zstd
 import concurrent.futures
+import datetime
 import errno
 import hashlib
 import json
@@ -27,6 +28,8 @@ BLOCK_SIZE = 512 * 1024
 GIB = 1024**3
 # Biggest possible zstd frame header, for reading the decompressed size.
 ZSTD_FRAME_HEADER_MAX = 18
+# EC2 takes deprecation times up to ten years ahead.
+DEPRECATE_DAYS_MAX = 3650
 
 
 def zstd_size(disk: Path) -> int | None:
@@ -190,6 +193,19 @@ def register(aws: Aws, parameters: dict[str, Any], name: str, snapshot: str, tpm
         return str(aws("ec2", "register-image", "--cli-input-json", f"file://{f.name}")["ImageId"])
 
 
+def deprecate_days(value: str) -> int:
+    """`--deprecate-days`, checked against what EC2 takes before spending the upload."""
+    days = int(value)
+    if not 1 <= days <= DEPRECATE_DAYS_MAX:
+        raise argparse.ArgumentTypeError(f"{days} is not between 1 and {DEPRECATE_DAYS_MAX} days")
+    return days
+
+
+def deprecation_time(now: datetime.datetime, days: int) -> str:
+    """The time `days` after `now`, in the format `EnableImageDeprecation` takes."""
+    return (now + datetime.timedelta(days=days)).astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("disk", type=Path, help="the .raw[.zst] disk to upload")
@@ -203,6 +219,12 @@ def main() -> None:
         action="store_false",
         help="register without a NitroTPM, which bare metal instance types lack",
     )
+    parser.add_argument(
+        "--deprecate-days",
+        type=deprecate_days,
+        metavar="DAYS",
+        help="deprecate the image this many days after registering it",
+    )
     args = parser.parse_args()
 
     aws = Aws(args.region)
@@ -213,7 +235,11 @@ def main() -> None:
         sys.exit(f"ami-import: an image named {name!r} exists already; pass another --name")
 
     snapshot = upload(aws, args.disk, name, args.jobs)
-    print(register(aws, parameters, name, snapshot, args.tpm))
+    image = register(aws, parameters, name, snapshot, args.tpm)
+    if args.deprecate_days:
+        at = deprecation_time(datetime.datetime.now(datetime.UTC), args.deprecate_days)
+        aws("ec2", "enable-image-deprecation", f"--image-id={image}", f"--deprecate-at={at}")
+    print(image)
 
 
 if __name__ == "__main__":
