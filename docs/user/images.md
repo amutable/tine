@@ -802,7 +802,7 @@ The `files` key maps each published name to an entry with these fields:
   file whose `image.PublishedInfo` gives no version has no `version`.
 
 A consumer can match on these fields rather than file names. The excerpt below also gathers
-`:image[initrd][sbom]`.
+`:image[initrd][sbom]`. [`quarry.release`](quarry.md) reads them to describe a release for quarry.
 
 ```json
 {
