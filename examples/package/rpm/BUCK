@@ -19,6 +19,29 @@ _CHECK_BOX = "catalog//:fedora.rawhide.box"
 
 git.checkout(name = "hello.source")
 
+# rpm.branch() derives buildroot_packages from the BuildRequires of every architecture. A package can then
+# have buildroot_packages and no build_requires on the architecture that it builds for.
+rpm.package(
+    name = "hello-buildroot-packages",
+    distro = _DISTRO,
+    package = "hello",
+    spec = "hello/hello.spec",
+    buildroot = _BUILDROOT,
+    buildroot_packages = [":hello-archive"],
+    release = "1",
+    source_date_epoch = 1754006400,
+    subpackages = ["hello"],
+)
+
+box.sh_test(
+    name = "hello-buildroot-packages-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = 'python3 "$@"',
+    args = ["$(source hello_archive_check.py)", "$(location :hello-buildroot-packages)"],
+)
+
 # The archive path runs %prep and emits both binary and source RPMs. It exists separately from the
 # source-tree fixture to check release and dev compression through real RPM headers.
 rpm.package(

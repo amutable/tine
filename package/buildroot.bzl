@@ -75,9 +75,6 @@ def package_buildroot(
     delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
     `owner` starts a failure message.
     """
-    stack = [base.root]
-    if not build_requires and not buildroot_packages:
-        return stack
     package_system = base.package_manager[PackageManagerInfo].package_system
     extra_packages = []
     for dependency in buildroot_packages:
@@ -92,6 +89,13 @@ def package_buildroot(
                 ),
             )
         extra_packages.append(info.packages)
+    stack = [base.root]
+
+    # The packages of buildroot_packages are only candidates for the solve, so they install nothing on
+    # their own. rpm.branch() derives them from the BuildRequires of every architecture, so a package can
+    # have them without any BuildRequires on this architecture.
+    if not build_requires:
+        return stack
     return stack + [
         install_packages(
             ctx,
