@@ -1,0 +1,4 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+# Zed needs a Python manifest here to route these files to their own ty instance.

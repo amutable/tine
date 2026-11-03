@@ -198,6 +198,9 @@ User guides:
   the VM runner
 - [Publishing images to AWS EC2](docs/user/aws.md): importing a disk as an AMI, and booting a test
   instance
+- [Publishing quarry releases](docs/user/quarry.md): a release folder with the
+  [TUF](https://theupdateframework.io/) targets.
+  [quarry](https://github.com/amutable/quarry) updates machines from that.
 - [Building Rust projects](docs/user/cargo.md): building a checked-out Rust project offline, with its
   crate graph in the executables and image SBOM
 - [Building Go projects](docs/user/go.md): the same for a checked-out Go project, whose module list go

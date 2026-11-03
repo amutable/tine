@@ -12,6 +12,7 @@ load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//git:defs.bzl", "git")
 load("//go:defs.bzl", "go")
+load("//python:defs.bzl", "python")
 load(":defs.bzl", "hardhat_compatible_with")
 
 git.fetch(
@@ -66,4 +67,18 @@ box.new(
     parent = "tine//distribution:tools.box",
     release = distribution.release_target("release"),
     visibility = ["PUBLIC"],
+)
+
+python.binary(
+    name = "targets",
+    main = "targets.py",
+    visibility = ["PUBLIC"],
+)
+
+python.test(
+    name = "test",
+    srcs = [
+        "targets.py",
+        "targets_test.py",
+    ],
 )
