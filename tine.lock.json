@@ -74,35 +74,35 @@
   },
   "ty": {
     "repository": "astral-sh/ty",
-    "release": "0.0.95",
+    "release": "0.0.97",
     "platforms": {
       "arm64": {
         "artifact": "ty-aarch64-unknown-linux-musl.tar.gz",
-        "sha256": "22426a63cfd160dfefba127afc96fba884b54fdaa14e625ee6ec34072b799a30",
-        "size": 13382669,
+        "sha256": "ecb8248acf983abf32b304bfa7f88098f942af177d2cca72bfea1967cb2bcd7a",
+        "size": 13520439,
         "strip_prefix": "ty-aarch64-unknown-linux-musl"
       },
       "x86_64": {
         "artifact": "ty-x86_64-unknown-linux-musl.tar.gz",
-        "sha256": "1b48fee7b7829cb1776a1fbb7efc17d0ffd5995f28af92fa67b94aa64c8576f3",
-        "size": 14564898,
+        "sha256": "2a49f551e757f8e02b975270296595145a690428b9531248066c8427d11de4b4",
+        "size": 14683139,
         "strip_prefix": "ty-x86_64-unknown-linux-musl"
       }
     }
   },
   "syft": {
     "repository": "anchore/syft",
-    "release": "v1.55.0",
+    "release": "v1.56.0",
     "platforms": {
       "arm64": {
-        "artifact": "syft_1.55.0_linux_arm64.tar.gz",
-        "sha256": "929bd163db2d7cd2255d3bcb8967208079813d7b46b0c952f7b794d8e2c7d304",
-        "size": 28485268
+        "artifact": "syft_1.56.0_linux_arm64.tar.gz",
+        "sha256": "ace61b9397ae28189c674ae332d67a8074dafd71e87724dfb8b22412d8253bb5",
+        "size": 28639815
       },
       "x86_64": {
-        "artifact": "syft_1.55.0_linux_amd64.tar.gz",
-        "sha256": "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d",
-        "size": 31198534
+        "artifact": "syft_1.56.0_linux_amd64.tar.gz",
+        "sha256": "1c2493cfcf52d3367d6cb25780d9190c111c2219c34c820574c43e8bae15c528",
+        "size": 31413058
       }
     }
   },
@@ -126,17 +126,17 @@
   },
   "seaweedfs": {
     "repository": "seaweedfs/seaweedfs",
-    "release": "4.51",
+    "release": "4.52",
     "platforms": {
       "arm64": {
         "artifact": "linux_arm64.tar.gz",
-        "sha256": "4772e7de6a3b8711eb53587a1c156aee67ebfc24536d15d85cd74a0d70ad53ec",
-        "size": 41901804
+        "sha256": "b70a09540bf8aa2b9ea2a48b3b16abe27e162e90a0c3bf041f8d414caf52de8a",
+        "size": 42515971
       },
       "x86_64": {
         "artifact": "linux_amd64.tar.gz",
-        "sha256": "c03be37416a8ee672c77766e20b22a4e1430744c3af2668599a4b6eeaec14cee",
-        "size": 47534485
+        "sha256": "8b538c22d47d0c3fb6792adaa6b0c735a967401270a53427d5a476dcaca9b7ae",
+        "size": 48215173
       }
     }
   },
@@ -183,6 +183,6 @@
   "quarry": {
     "repository": "https://github.com/amutable/quarry",
     "ref": "main",
-    "commit": "164ff6f96513ce1c828a5cc13001b39f618c74bf"
+    "commit": "0b5619318478b9c5438763ba06e8914ae3f5d08b"
   }
 }
