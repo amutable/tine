@@ -285,7 +285,7 @@ class TyPackages(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertEqual(result.stdout.count("error["), 1, result.stdout)
-        self.assertIn("unresolved-import", result.stdout)
+        self.assertIn("import-not-found", result.stdout)
         self.assertIn("compression.zstd", result.stdout)
 
     def test_launch_generates_settings_without_a_root_manifest(self) -> None:
@@ -400,7 +400,7 @@ class TyPackages(unittest.TestCase):
                     path = self.root / package / "probe.py"
                     diagnostics = server.check(path, "from helper import VALUE\nvalue: int = VALUE\n")
                     if package == "cargo":
-                        self.assertIn("unresolved-import", [item["code"] for item in diagnostics])
+                        self.assertIn("import-not-found", [item["code"] for item in diagnostics])
                     else:
                         self.assertEqual(diagnostics, [])
 
@@ -411,7 +411,7 @@ class TyPackages(unittest.TestCase):
                         "import libdnf5\nimport createrepo_c\nimport pefile\n",
                     )
                     if package == "cargo":
-                        self.assertEqual([item["code"] for item in diagnostics], ["unresolved-import"] * 3)
+                        self.assertEqual([item["code"] for item in diagnostics], ["import-not-found"] * 3)
                     else:
                         self.assertEqual(diagnostics, [])
 
