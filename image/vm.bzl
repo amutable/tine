@@ -6,13 +6,14 @@
 load("@prelude//platforms:defs.bzl", "host_configuration")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
-load(":ddi.bzl", "DdiInfo", "SIZE_PATTERN")
+load(":ddi.bzl", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN")
 load(":extension.bzl", "ExtensionInfo", "PortableInfo")
 
 def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
-    disk = ctx.attrs.image[DdiInfo]
-    if disk.disk == None:
-        fail("image_vm: DdiInfo does not contain a composed disk")
+    # The qcow is the intended VM format, and it has virtual_size; the raw doesn't.
+    qcow2 = ctx.attrs.image[DefaultInfo].sub_targets.get("qcow2")
+    if qcow2 == None:
+        fail("image_vm: {} is not a disk with a qcow2".format(ctx.attrs.image.label))
     run = cmd_args(
         box.run(
             box = ctx.attrs._box[box.Info],
@@ -20,7 +21,8 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
             relaxed = True,
         ),
         "--image",
-        disk.disk,
+        qcow2[DiskConversionInfo].image,
+        "--image-format=qcow2",
         "--console=native",
         "--ephemeral",
         "--kvm=yes",
@@ -31,8 +33,7 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
         if not regex_match(SIZE_PATTERN, ctx.attrs.grow):
             fail("image_vm: invalid grow size {!r}".format(ctx.attrs.grow))
 
-        # vmspawn grows the file itself, before the ephemeral overlay is stacked on top of it, so
-        # the guest sees the larger disk while its writes still go nowhere.
+        # vmspawn creates the ephemeral overlay at this size, and leaves the qcow2 alone.
         run.add("--grow-image={}".format(ctx.attrs.grow))
 
     if ctx.attrs.ram != None:
@@ -149,9 +150,9 @@ _image_vm = rule(
         "grow": attrs.option(
             attrs.string(),
             default = None,
-            doc = 'size to grow the disk file to before booting, e.g. "8G"; the built image itself grows',
+            doc = 'size of the disk the guest sees, e.g. "8G", for more room than the virtual_size of the image',
         ),
-        "image": attrs.dep(providers = [DdiInfo], doc = "the raw disk image to boot ephemerally"),
+        "image": attrs.dep(providers = [DdiInfo], doc = "the disk image whose qcow2 boots ephemerally"),
         "portables": attrs.list(
             attrs.dep(providers = [DdiInfo]),
             default = [],

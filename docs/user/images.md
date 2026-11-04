@@ -413,7 +413,7 @@ when needed:
   set its `sign_expected_pcr` to false to opt out;
 - `image.bootable` selects a kernel and matching initrd from a logical image, exposed as `[uki]`, `[kernel]`,
   and `[initrd]` subtargets;
-- `image.vm` runs the raw image ephemerally with the `systemd-vmspawn`, QEMU and OVMF stack of the tools box
+- `image.vm` runs the image's qcow2 ephemerally with the `systemd-vmspawn`, QEMU and OVMF stack of the tools box
   of the image's release, and binds the DDIs in `extensions` into the guest, where systemd merges them at
   boot: a sysext from `/var/lib/extensions`, a confext from `/var/lib/confexts`, and a DDI of both classes
   from both. Each must have the `system` scope. It binds the DDIs in `portables`, portable images and
@@ -590,8 +590,8 @@ Optional attributes:
 - `secure_boot_key` (target providing `image.SigningKeyInfo`): Signs the UKIs and systemd-boot; see "Secure
   Boot signing" below.
 - `virtual_size` (size string such as `"20G"`): The size of a virtual disk (`[qcow2]` or `[vmdk]`). A
-  system booted from it can claim the extra space during first boot, e.g. for a root partition. The raw
-  image stays at the size of its partitions. As with `image.vm`'s `grow`, the extra space sits past the GPT
+  system booted from it, including `image.vm`, can claim the extra space during first boot, e.g. for a
+  root partition. The raw image stays at the size of its partitions. The extra space sits past the GPT
   backup header until something rewrites the table. A size the partitions do not fit in fails the build.
 - `mkfs_options` (dict of filesystem to option list, default `{}`): Options `mkfs` is given when
   creating a partition of that filesystem. The disk hands each list to
@@ -1103,11 +1103,10 @@ which is where it takes extra kernel command line arguments, so it picks how to 
 image takes its command line from its own UKI, and vmspawn writes them as the SMBIOS OEM strings the stub
 and the boot loader read (`io.systemd.stub.kernel-cmdline-extra` and its `boot` counterpart).
 
-`grow` enlarges the disk file to a given size before boot (vmspawn's `--grow-image`), which is how an
-ephemeral guest is given room the built partitions do not occupy; the guest claims that room itself, for
-example with `systemd-repart`. vmspawn grows the built artifact in place, and the added space sits past the
-GPT backup header until something rewrites the table. Use it to give a guest more room than the shipped
-disk carries; a qcow2 that should always carry that room comes from setting `virtual_size` on the image.
+The guest boots the image's `[qcow2]`, so it sees a disk of the image's `virtual_size` and claims the room
+past the built partitions itself, for example with `systemd-repart`. `grow` gives it a larger disk than
+that (vmspawn's `--grow-image`): vmspawn creates the ephemeral overlay at that size, and the qcow2 stays
+untouched.
 
 ```sh
 tine buck run //examples/image:boot-demo-vm.fedora
