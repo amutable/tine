@@ -71,6 +71,14 @@ python.binary(
     visibility = ["PUBLIC"],
 )
 
+# A driver that writes a disk converts it in its own action, rather than handing Buck a raw for the
+# conversion to read.
+python.library(
+    name = "convert-lib",
+    srcs = ["convert.py"],
+    deps = ["//:specs", "//:util"],
+)
+
 python.binary(
     name = "uki",
     main = "uki.py",
