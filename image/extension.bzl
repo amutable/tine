@@ -38,6 +38,27 @@ PortableInfo = provider(
     fields = {},
 )
 
+def system_extension(rule: str, dep: Dependency) -> ExtensionInfo:
+    """Return the ExtensionInfo of `dep`, which `rule` hands to a host to merge."""
+    extension = dep[ExtensionInfo]
+    if "system" not in extension.scope:
+        fail("{}: {} is not an extension with the system scope".format(rule, dep.label))
+    return extension
+
+def check_portable(rule: str, dep: Dependency) -> None:
+    """Fail unless `dep`, which `rule` hands to portabled, is a portable image or an extension of one."""
+    extension = dep.get(ExtensionInfo)
+    if dep.get(PortableInfo) == None and (extension == None or "portable" not in extension.scope):
+        fail("{}: {} is neither a portable image nor an extension with the portable scope".format(rule, dep.label))
+
+def ddi_image_name(disk: Artifact) -> str:
+    """The image name systemd takes from the file name of `disk`: everything up to the first "_".
+
+    systemd looks up an extension's release file by it, and portablectl attaches the units of a
+    portable image by it.
+    """
+    return disk.basename.split("_")[0]
+
 # _CLASSES is a list and not a dict, because its order is the order of the CopyFiles= lines of the
 # root partition.
 _CLASSES = [
