@@ -94,10 +94,6 @@ if [ -n "${TINE_TEST_DISTRO:-}" ]; then
     trap box_cleanup EXIT
 fi
 
-# The catalog pins Arch repositories for x86_64 only. On another architecture, the Arch root box
-# cannot be built and the catalog cannot be verified.
-x86_only_catalog() { [ "$(uname -m)" = x86_64 ]; }
-
 # A run builds and tests one distro release (TINE_TEST_DISTRO, or else the catalog's default release
 # Fedora): its images, and tine's own targets with its boxes. Apart from secureboot_pkcs11 (which signs a
 # Fedora image), it needs only that release's mirrors, so a release whose mirror is down fails its own
@@ -221,9 +217,14 @@ done
 group box               -- "${buck[@]}" build "catalog//:$release.box"
 group check             -- "${buck[@]}" run tine//tools:check -- --release "$release"
 # Every repository the catalog declares is pinned to a mirror serving immutable snapshots, so the whole
-# catalog is verifiable rather than the boxes that happen to be pinned.
-if x86_only_catalog; then
-    group verify-catalog -- "${buck[@]}" run tine//tools:verify-catalog
+# catalog is verifiable rather than the boxes that happen to be pinned. The root box of a release
+# reaches every repository of it. Every release serves x86_64, so its x86_64 run verifies its locks for
+# every architecture. The Go releases belong to no release, so the run with the default boxes verifies
+# them.
+if [ "$(uname -m)" = x86_64 ]; then
+    go=()
+    if [ -z "${TINE_TEST_DISTRO:-}" ]; then go=(--go); fi
+    group verify-catalog -- "${buck[@]}" run tine//tools:verify-catalog -- --box "$release.box" "${go[@]}"
 fi
 # Everything the cell declares for the release, rather than the handful of targets someone remembered to
 # name here: every example image, the boxes, and the source-build demos.
