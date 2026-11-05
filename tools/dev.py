@@ -86,14 +86,28 @@ def _universe() -> str:
     return "tine//... + catalog//..."
 
 
-def _targets() -> list[str]:
+def _default_release() -> str:
+    """The release that the catalog's `default.*` targets point to, after `tine.box`."""
+    query = ("uquery", "catalog//:default.release", "--output-attribute", "^actual$")
+    attributes = cast(dict[str, dict[str, str]], json.loads(buck_output(*query)))
+    actual = attributes["catalog//:default.release"]["actual"]
+    return actual.removeprefix("catalog//:").removesuffix(".release")
+
+
+def _targets(release: str | None = None) -> list[str]:
     """What `_universe()` matches, to hand to a command that takes no query.
 
     Named explicitly, a target incompatible by design (an image base without a chosen distribution, a
     signing token without a configured token, an Arch box on an arm64 host) is an error rather than a
     skip, so a command given these needs `--skip-incompatible-targets`.
+
+    With `release`, only the compatible targets that reach no other release's repositories, as
+    tools/release.bxl selects them.
     """
-    return buck_output("uquery", _universe()).split()
+    if release is None:
+        return buck_output("uquery", _universe()).split()
+    bxl = ("bxl", "tine//tools/release.bxl:targets", "--", "--pattern", _universe(), "--release", release)
+    return buck_output(*bxl).split()
 
 
 def _starlark_fmt(args: argparse.Namespace, *arguments: str | Path) -> list[str | Path]:
@@ -169,7 +183,7 @@ def _check(args: argparse.Namespace) -> None:
     _bold("unit tests")
     # Building an example image is minutes where these are seconds. Everything that needs one is
     # labelled `image` and covered by `buck test tine//... --include image`, which is what CI runs.
-    _run(buck2_argv("test", "--skip-incompatible-targets", *_targets(), "--exclude", "image"))
+    _run(buck2_argv("test", "--skip-incompatible-targets", *_targets(args.release), "--exclude", "image"))
 
 
 def _fmt(args: argparse.Namespace) -> None:
@@ -432,16 +446,30 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="dev")
     sub = p.add_subparsers(dest="command", required=True)
 
-    for name, func, help_text in (
-        ("lint", _lint, "run the source lints (fmt fixes)"),
-        ("check", _check, "run the source lints, then every unit-test suite"),
-    ):
-        verb = sub.add_parser(name, parents=[starlark], help=help_text)
-        verb.add_argument("--ruff", required=True)
-        verb.set_defaults(func=func)
+    only_release = argparse.ArgumentParser(add_help=False)
+    only_release.add_argument(
+        "--release",
+        help="leave out the targets of every other release of the catalog, such as debian.testing",
+    )
+
+    lint = sub.add_parser("lint", parents=[starlark], help="run the source lints (fmt fixes)")
+    lint.add_argument("--ruff", required=True)
+    lint.set_defaults(func=_lint)
+
+    check = sub.add_parser(
+        "check", parents=[starlark, only_release], help="run the source lints, then every unit-test suite"
+    )
+    check.add_argument("--ruff", required=True)
+    check.set_defaults(func=_check)
 
     universe = sub.add_parser("universe", help="print the query for what a whole-cell run asks for here")
     universe.set_defaults(func=lambda _args: print(_universe()))
+
+    targets = sub.add_parser("targets", parents=[only_release], help="print the targets of a whole-cell run")
+    targets.set_defaults(func=lambda args: print(*_targets(args.release), sep="\n"))
+
+    release = sub.add_parser("release", help="print the release that the catalog's default boxes come from")
+    release.set_defaults(func=lambda _args: print(_default_release()))
 
     fmt = sub.add_parser("fmt", parents=[starlark], help="auto-format and auto-fix lints")
     fmt.add_argument("--ruff", required=True)
