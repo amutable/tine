@@ -22,12 +22,11 @@ class Spec(TypedDict):
     virtual_size: str | None
 
 
-def main(argv: list[str] | None = None) -> None:
-    spec = specs.parse(Spec, "convert", argv)
+def convert(source: Path, out: Path, fmt: str, virtual_size: str | None) -> None:
+    """Write the raw disk `source` to `out` in the format `fmt`, one of ddi.bzl's DISK_FORMATS.
 
-    source = Path(spec["input"])
-    out = Path(spec["out"])
-    fmt = spec["format"]
+    `virtual_size` sizes the disk of a qcow2 or vmdk, which otherwise is as large as `source`.
+    """
     if fmt == "raw.zst":
         cmd = [
             "zstd", "-q", "-f",
@@ -52,7 +51,7 @@ def main(argv: list[str] | None = None) -> None:
         fail(f"convert: unknown format {fmt!r}")
 
     with tempfile.TemporaryDirectory() as tmp:
-        if size := spec["virtual_size"]:
+        if size := virtual_size:
             # A VMDK cannot be resized after the fact, and a streamOptimized one cannot be converted
             # into at a larger size either, as the raw ends within a grain. So convert from a qcow2
             # overlay of that size instead, which reads the raw and zeros past its end, and costs no
@@ -78,6 +77,11 @@ def main(argv: list[str] | None = None) -> None:
             ["qemu-img", "convert", "-f", source_format, "-O", fmt, *options, str(source), str(out)],
             check=True,
         )
+
+
+def main(argv: list[str] | None = None) -> None:
+    spec = specs.parse(Spec, "convert", argv)
+    convert(Path(spec["input"]), Path(spec["out"]), spec["format"], spec["virtual_size"])
 
 
 if __name__ == "__main__":
