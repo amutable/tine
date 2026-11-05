@@ -62,8 +62,8 @@ Cell layout and architecture: [the design plan](docs/design/architecture.md). Us
   writes into a root. The test carries the `image` label, so `check` does not run it and only CI's
   image step catches a stale file.
 - **Full CI pipeline:** `tools/ci.sh`, fail-fast. Run individual groups by stating their names, e.g.
-  `tools/ci.sh check build`. `TINE_BOX=arch.rolling tools/ci.sh` runs it with the boxes of another
-  release of the catalog, as one of CI's jobs does.
+  `tools/ci.sh check build`. `TINE_TEST_DISTRO=arch.rolling tools/ci.sh` runs it with the boxes of
+  another release of the catalog, as one of CI's jobs does.
 - **rpm importer:** `buck run tine//tools:importer -- <verb>`; see [importer.md](docs/user/importer.md).
 - **BuildRequires cycle analysis:** `buck run tine//tools:scc -- <branch label>`; background in
   [self-host-approaches.md](docs/design/self-host-approaches.md).

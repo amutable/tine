@@ -82,15 +82,15 @@ if [ "$mode" = github ]; then
     trap 'printf "::endgroup::\n::error::ci group %s failed\n" "$groupname"' ERR
 fi
 
-# TINE_BOX names the release whose boxes every group builds with, such as arch.rolling. Nested Buck
-# runs, such as the ones `check` starts, take no command-line configuration, so the setting goes into
-# the project's configuration for as long as this script runs.
+# TINE_TEST_DISTRO names the release whose boxes every group builds with, such as arch.rolling. Nested
+# Buck runs, such as the ones `check` starts, take no command-line configuration, so the setting goes
+# into the project's configuration for as long as this script runs.
 box_config=.buckconfig.d/tine-box
 box_cleanup() { rm -f "$box_config"; }
 box_cleanup
-if [ -n "${TINE_BOX:-}" ]; then
+if [ -n "${TINE_TEST_DISTRO:-}" ]; then
     mkdir -p .buckconfig.d
-    printf '[tine]\nbox = %s\n' "$TINE_BOX" > "$box_config"
+    printf '[tine]\nbox = %s\n' "$TINE_TEST_DISTRO" > "$box_config"
     trap box_cleanup EXIT
 fi
 
@@ -103,16 +103,16 @@ x86_only_catalog() { [ "$(uname -m)" = x86_64 ]; }
 universe() { "${buck[@]}" run tine//tools:dev -- universe; }
 
 # `build` and `test` take no query, so they get the universe target list explicitly. An image builds
-# in the tools box of its own release, so TINE_BOX doesn't change most images. With TINE_BOX set, the
-# list only contains the targets that depend on the catalog's default release or default boxes. The run
-# with the default boxes builds and tests the rest. Every image depends on tine//distribution:tools.box,
+# in the tools box of its own release, so TINE_TEST_DISTRO doesn't change most images. With
+# TINE_TEST_DISTRO set, the list only contains the targets that depend on the catalog's default release
+# or default boxes. The run with the default boxes builds and tests the rest. Every image depends on tine//distribution:tools.box,
 # which is configured for the image's release. Only cquery tells the tools box of the default release
 # apart from the tools box of another release.
 whole_cell() {
     local verb=$1 query listing targets
     shift
     query=$(universe)
-    if [ -n "${TINE_BOX:-}" ]; then
+    if [ -n "${TINE_TEST_DISTRO:-}" ]; then
         query="rdeps($query, set(catalog//:default.release tine//distribution:tools.box))"
         listing=$("${buck[@]}" cquery "$query" | sed 's/ (.*)$//' | sort -u)
     else
@@ -213,10 +213,10 @@ case $(uname -m) in
     *) other=x86_64 ;;
 esac
 platforms=(catalog//:debian.testing.distribution)
-# The catalog's default.* aliases have no architecture constraint. With TINE_BOX=arch.rolling, the
-# analysis for arm64 fails on catalog//:default.release, because Arch serves x86_64 only. The run with
-# the default boxes analyzes the other architecture.
-if [ -z "${TINE_BOX:-}" ]; then
+# The catalog's default.* aliases have no architecture constraint. With TINE_TEST_DISTRO=arch.rolling,
+# the analysis for arm64 fails on catalog//:default.release, because Arch serves x86_64 only. The run
+# with the default boxes analyzes the other architecture.
+if [ -z "${TINE_TEST_DISTRO:-}" ]; then
     platforms=("tine//platform:$other" "${platforms[@]}")
 fi
 for platform in "${platforms[@]}"; do

@@ -25,27 +25,27 @@ jobs:
       # first thing worth knowing.
       fail-fast: false
       matrix:
-        # architecture is tine's name for it, as in platform/architecture.bzl. box names the release
-        # whose boxes the run builds with, and an empty box keeps the catalog's default. A run with
+        # architecture is tine's name for it, as in platform/architecture.bzl. distro names the release
+        # whose boxes the run builds with, and an empty distro keeps the catalog's default. A run with
         # another release's boxes only builds and tests what depends on the default boxes. Only a run
         # with the default boxes checks the digests in examples/image/expected.json. Arch serves x86_64
         # only.
         include:
           - runner: ubuntu-24.04
             architecture: x86_64
-            box: ""
+            distro: ""
           - runner: ubuntu-24.04-arm
             architecture: arm64
-            box: ""
+            distro: ""
           - runner: ubuntu-24.04
             architecture: x86_64
-            box: arch.rolling
+            distro: arch.rolling
           - runner: ubuntu-24.04
             architecture: x86_64
-            box: debian.testing
+            distro: debian.testing
     # The ruleset of main requires the checks `build (ubuntu-24.04)` and `build (ubuntu-24.04-arm)`.
     # A run with the default boxes keeps that name, because a PR otherwise waits for those checks forever.
-    name: build (${{ matrix.runner }}${{ matrix.box && format(', {0}', matrix.box) || '' }})
+    name: build (${{ matrix.runner }}${{ matrix.distro && format(', {0}', matrix.distro) || '' }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     steps:
@@ -57,7 +57,7 @@ jobs:
       - name: CI
         run: tools/ci.sh
         env:
-          TINE_BOX: ${{ matrix.box }}
+          TINE_TEST_DISTRO: ${{ matrix.distro }}
 
       # If examples/image:reproducibility-test fails, for easy pickup. Unarchived, the artifact is the
       # file itself, under its own name.
