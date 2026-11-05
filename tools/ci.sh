@@ -98,30 +98,24 @@ fi
 # cannot be built and the catalog cannot be verified.
 x86_only_catalog() { [ "$(uname -m)" = x86_64 ]; }
 
+# A run builds and tests one distro release (TINE_TEST_DISTRO, or else the catalog's default release
+# Fedora): its images, and tine's own targets with its boxes. Apart from secureboot_pkcs11 (which signs a
+# Fedora image), it needs only that release's mirrors, so a release whose mirror is down fails its own
+# job only.
+release=$("${buck[@]}" run tine//tools:dev -- release)
+
 # `universe` lists the build targets of the tine and catalog cells. tools/dev.py explains which targets
 # it leaves out.
 universe() { "${buck[@]}" run tine//tools:dev -- universe; }
 
-# `build` and `test` take no query, so they get the universe target list explicitly. An image builds
-# in the tools box of its own release, so TINE_TEST_DISTRO doesn't change most images. With
-# TINE_TEST_DISTRO set, the list only contains the targets that depend on the catalog's default release
-# or default boxes. The run with the default boxes builds and tests the rest. Every image depends on tine//distribution:tools.box,
-# which is configured for the image's release. Only cquery tells the tools box of the default release
-# apart from the tools box of another release.
+# `build` and `test` take no query, so they get the targets of the release explicitly, as
+# tools/release.bxl selects them. That leaves out the incompatible ones too.
 whole_cell() {
-    local verb=$1 query listing targets
+    local verb=$1 listing targets
     shift
-    query=$(universe)
-    if [ -n "${TINE_TEST_DISTRO:-}" ]; then
-        query="rdeps($query, set(catalog//:default.release tine//distribution:tools.box))"
-        listing=$("${buck[@]}" cquery "$query" | sed 's/ (.*)$//' | sort -u)
-    else
-        listing=$("${buck[@]}" uquery "$query")
-    fi
+    listing=$("${buck[@]}" run tine//tools:dev -- targets --release "$release")
     mapfile -t targets <<< "$listing"
-    # There are a lot of targets which are incompatible everywhere (image base without a chosen distribution, a
-    # signing token without config, etc.), don't fail on them.
-    "${buck[@]}" "$verb" --skip-incompatible-targets "${targets[@]}" "$@"
+    "${buck[@]}" "$verb" "${targets[@]}" "$@"
 }
 
 # The boot smokes need the host's KVM. Some CI envs (like GitHub's arm64 runners) don't have that.
@@ -212,7 +206,7 @@ case $(uname -m) in
     x86_64) other=arm64 ;;
     *) other=x86_64 ;;
 esac
-platforms=(catalog//:debian.testing.distribution)
+platforms=("catalog//:$release.distribution")
 # The catalog's default.* aliases have no architecture constraint. With TINE_TEST_DISTRO=arch.rolling,
 # the analysis for arm64 fails on catalog//:default.release, because Arch serves x86_64 only. The run
 # with the default boxes analyzes the other architecture.
@@ -222,27 +216,20 @@ fi
 for platform in "${platforms[@]}"; do
     group "graph-${platform##*:}" -- "${buck[@]}" bxl --target-platforms "$platform" tine//tools/graph.bxl:analyze -- --pattern "$pattern"
 done
-# First invocation fetches buck's pinned tools and builds the shared box; kept its own group so
-# bootstrap time stays visible.
-group box               -- "${buck[@]}" build catalog//:fedora.rawhide.box
-# The Arch box and the Debian box are root boxes, so each box is bootstrapped from scratch and
-# gets its own group.
-if x86_only_catalog; then
-    group arch-box      -- "${buck[@]}" build catalog//:arch.rolling.box
-fi
-group deb-box           -- "${buck[@]}" build catalog//:debian.testing.box
-group check             -- "${buck[@]}" run tine//tools:check
+# First invocation fetches buck's pinned tools and bootstraps the release's root box; kept its own
+# group so bootstrap time stays visible.
+group box               -- "${buck[@]}" build "catalog//:$release.box"
+group check             -- "${buck[@]}" run tine//tools:check -- --release "$release"
 # Every repository the catalog declares is pinned to a mirror serving immutable snapshots, so the whole
 # catalog is verifiable rather than the boxes that happen to be pinned.
 if x86_only_catalog; then
     group verify-catalog -- "${buck[@]}" run tine//tools:verify-catalog
 fi
-# Everything the cell declares, rather than the handful of targets someone remembered to name here:
-# every example image over every package system, the boxes, and the source-build demos.
+# Everything the cell declares for the release, rather than the handful of targets someone remembered to
+# name here: every example image, the boxes, and the source-build demos.
 group build             -- whole_cell build
-# Everything `check` left out: the boot smokes over every package system, which take minutes each,
-# and the assertions about what the images above produced. Adding one is declaring it, not naming it
-# here as well.
+# Everything `check` left out: the boot smokes, which take minutes each, and the assertions about what
+# the images above produced. Adding one is declaring it, not naming it here as well.
 group image-tests       -- whole_cell test --include image "${vm_filter[@]}"
 group secureboot-pkcs11 -- secureboot_pkcs11
 # Expensive and distro independent.
