@@ -339,7 +339,7 @@ box.sh_test(
 )
 
 # demo-ext extends boot-demo. The DDI contains only the files that demo-ext adds to boot-demo,
-# and its extension-release file pins the ID and VERSION_ID of boot-demo. `boot-demo-vm` binds
+# and its extension-release file pins the exact build of boot-demo. `boot-demo-vm` binds
 # it into /var/lib/extensions.
 image.sysext(
     name = "demo-ext",
@@ -350,8 +350,8 @@ image.sysext(
     ops = [image.ops.copy("from-source.txt", "/usr/lib/tine/from-source")],
 )
 
-# demo-confext contains only /etc. Its extension-release file pins the ID and VERSION_ID of
-# boot-demo, as the one of demo-ext does.
+# demo-confext contains only /etc. Its extension-release file pins the exact build of boot-demo,
+# as the one of demo-ext does.
 image.confext(
     name = "demo-confext",
     parent = ":boot-demo",

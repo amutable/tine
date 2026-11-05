@@ -196,7 +196,7 @@ def declare_extension(
         suffixes.append(spec.suffix)
 
         # systemd refuses an extension without ID. Without a parent, ID=_any matches any host. With a
-        # parent, the driver pins the ID and VERSION_ID of the parent.
+        # parent, the driver pins the identity of the parent (see pin_release).
         fields = {}
         if parent == None:
             fields["ID"] = "_any"
@@ -204,11 +204,11 @@ def declare_extension(
         fields["EXTENSION_RELOAD_MANAGER"] = "1"
 
         # The rule fills in the name, version and architecture of the DDI, so a caller does not
-        # repeat them. `release` overrides every field.
+        # repeat them. `release` overrides every field. Not IMAGE_VERSION: in an extension-release,
+        # that is the image version of the *host* the extension requires, not our own version.
         fields["ARCHITECTURE"] = systemd_arch
         fields[spec.prefix + "_ID"] = name
         fields[spec.prefix + "_VERSION_ID"] = version
-        fields["IMAGE_VERSION"] = version
         fields.update(release)
         releases.append({
             "fields": {key: fields[key] for key in sorted(fields)},

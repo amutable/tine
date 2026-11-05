@@ -274,15 +274,17 @@ def _os_release(tree: Path) -> dict[str, str]:
 
 
 def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, str]:
-    """Add the parent's ID and VERSION_ID to the extension-release fields `release` does not set.
+    """Add the parent's identity to the extension-release fields `release` does not set.
 
-    The extension must pin the parent identity it was built against, so systemd refuses to merge
-    it onto anything else. An extension that declares ID=_any matches any OS, and systemd then
-    does no VERSION_ID matching either, so it gets neither field.
+    The extension is a delta against the parent it was built on, so systemd must refuse to merge
+    it onto anything else: it pins the parent's ID and VERSION_ID, and the IMAGE_ID and
+    IMAGE_VERSION of a parent that is an image build. An extension that declares ID=_any matches
+    any OS and gets none of them.
     """
     if release.get("ID") == "_any":
         return release
-    strict = {key: parent[key] for key in ("ID", "VERSION_ID") if key in parent and key not in release}
+    keys = ("ID", "VERSION_ID", "IMAGE_ID", "IMAGE_VERSION")
+    strict = {key: parent[key] for key in keys if key in parent and key not in release}
     return strict | release
 
 
