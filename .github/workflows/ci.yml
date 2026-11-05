@@ -26,22 +26,24 @@ jobs:
       fail-fast: false
       matrix:
         # architecture is tine's name for it, as in platform/architecture.bzl. distro names the release
-        # whose boxes the run builds with, and an empty distro keeps the catalog's default. A run with
-        # another release's boxes only builds and tests what depends on the default boxes. Only a run
-        # with the default boxes checks the digests in examples/image/expected.json. Arch serves x86_64
-        # only.
+        # that the run builds and tests.
         include:
+          # Empty = catalog's default, Fedora. This also checks the digests in examples/image/expected.json.
           - runner: ubuntu-24.04
             architecture: x86_64
             distro: ""
           - runner: ubuntu-24.04-arm
             architecture: arm64
             distro: ""
+          # Arch serves x86_64 only.
           - runner: ubuntu-24.04
             architecture: x86_64
             distro: arch.rolling
           - runner: ubuntu-24.04
             architecture: x86_64
+            distro: debian.testing
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
             distro: debian.testing
     # The ruleset of main requires the checks `build (ubuntu-24.04)` and `build (ubuntu-24.04-arm)`.
     # A run with the default boxes keeps that name, because a PR otherwise waits for those checks forever.
