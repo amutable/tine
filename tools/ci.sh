@@ -245,7 +245,11 @@ group build             -- whole_cell build
 # here as well.
 group image-tests       -- whole_cell test --include image "${vm_filter[@]}"
 group secureboot-pkcs11 -- secureboot_pkcs11
-# A change to the box must not change the Secure Boot example. The test builds in its own isolation dir.
-group rebuild-reproducibility -- "${buck[@]}" run tine//tests:rebuild-reproducibility
-# The shared cache with a real Buck on both ends; in its own isolation dir.
-group remote-cache      -- "${buck[@]}" run tine//tests:cache-roundtrip
+# Expensive and distro independent.
+if [ -z "${TINE_TEST_DISTRO:-}" ]; then
+    # A change to the box must not change the Secure Boot example. The test builds in its own isolation dir.
+    # Builds Fedora regardless of $TINE_TEST_DISTRO.
+    group rebuild-reproducibility -- "${buck[@]}" run tine//tests:rebuild-reproducibility
+    # The shared cache with a real Buck on both ends; in its own isolation dir.
+    group remote-cache -- "${buck[@]}" run tine//tests:cache-roundtrip
+fi
