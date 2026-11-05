@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+"""Print the targets of a whole-cell run that apply to a given release.
+
+This segments the per-distribution CI matrix builds, to only fetch from that release's mirror.
+
+Whether a target belongs to a release is computed from its transitive dependencies, configured the
+way a build configures them. This skips the targets whose dependencies include another release's
+repository. Incompatible targets are left out as well, as a build skips them.
+"""
+
+def _impl(ctx: bxl.Context) -> None:
+    release = ctx.cli_args.release
+    releases = [node.label.name.removesuffix(".release") for node in ctx.uquery().kind("^_os_release$", "catalog//:")]
+    if release not in releases:
+        fail("the catalog declares no release {}, only {}".format(repr(release), releases))
+    others = " ".join(["catalog//:{}.release".format(other) for other in releases if other != release])
+    foreign = {str(node.label): None for node in ctx.uquery().eval("attrfilter(labels, 'tine:remote-repository', deps(set({})))".format(others))}
+
+    configured = ctx.configured_targets(ctx.uquery().eval(ctx.cli_args.pattern))
+    cquery = ctx.cquery()
+    reached = [node for node in cquery.deps(configured) if str(node.label.raw_target()) in foreign]
+    excluded = {str(node.label): None for node in cquery.rdeps(configured, reached)} if reached else {}
+    for node in configured:
+        if str(node.label) not in excluded:
+            ctx.output.print(node.label.raw_target())
+
+targets = bxl_main(
+    impl = _impl,
+    cli_args = {
+        "pattern": cli_args.string(default = "tine//... + catalog//..."),
+        "release": cli_args.string(doc = "the release, such as fedora.rawhide"),
+    },
+)
