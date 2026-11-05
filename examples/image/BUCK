@@ -385,6 +385,49 @@ image.extension(
     ],
 )
 
+# boot-demo with the demo DDIs on its ESP, where systemd-sysupdate would update them. Nothing merges or
+# attaches them at boot yet: whoever instantiates the disk does that.
+image.ddi_preloaded_disk(
+    name = "boot-demo-preloaded",
+    base = ":boot-demo",
+    extensions = [":demo-confext", ":demo-ext"],
+    portables = [":demo-portable", ":demo-portable-ext"],
+)
+
+image.vm(
+    name = "boot-demo-preloaded-vm",
+    autologin = "root",
+    credentials = {
+        "firstboot.locale": "C.UTF-8",
+        "firstboot.timezone": "UTC",
+    },
+    image = ":boot-demo-preloaded",
+)
+
+# The checks activate the DDIs on the ESP the way an instance would, see "image.ddi_preloaded_disk" in images.md.
+# The ESP carries one version of each, so the links can name the .raw.v directories.
+tests.vm_smoke(
+    name = "boot-demo-preloaded-vm-smoke",
+    vm = ":boot-demo-preloaded-vm",
+    checks = [
+        # The disk has boot-demo's virtual_size
+        'test "$(lsblk --nodeps --noheadings --bytes --output SIZE /dev/vda)" = 2147483648',
+        # The ESP is where systemd-gpt-auto-generator mounts it, which is /boot on this image.
+        'test -d "$(bootctl --print-esp-path)/extensions"',
+        "mkdir -p /run/extensions /run/confexts",
+        'ln -s "$(bootctl --print-esp-path)/extensions/demo-ext.raw.v" /run/extensions/',
+        'ln -s "$(bootctl --print-esp-path)/extensions/demo-confext.raw.v" /run/confexts/',
+        "systemd-sysext refresh",
+        "systemd-confext refresh",
+        # systemd-vpick picked each newest version out of its directory, and the extension-release of
+        # each matches boot-demo.
+        "test -x /usr/bin/zsh",
+        "test -f /etc/tine/from-confext",
+        'portablectl attach --now --runtime --extension "$(bootctl --print-esp-path)/portables/demo-portable-ext.raw.v" "$(bootctl --print-esp-path)/portables/demo-portable.raw.v"',
+        "systemctl is-active demo-portable.service",
+    ],
+)
+
 # A file tree that differs per distribution is one copy whose source is a select, rather than a
 # target per distribution and an alias choosing between them. A distribution the select names no
 # tree for gets `None`, which copies nothing; only arch ships one so every other exercises that.

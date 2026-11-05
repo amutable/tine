@@ -1,5 +1,8 @@
 {
   "arm64": {
+    "boot-demo-preloaded.fedora": {
+      "sha256": "eb0291105e6dda37fbe5b77bf603ece5c46ef75077238949aa0faa1191a4dacf"
+    },
     "boot-demo.fedora": {
       "sha256": "e3377bc790d7f40a25bd0126b5d18904d29bcc9cbb287047113019845d971b1f"
     },
@@ -35,6 +38,9 @@
     }
   },
   "x86_64": {
+    "boot-demo-preloaded.fedora": {
+      "sha256": "5639ec39438ad8de3facbc193b55163785b36956abec603061c95dce4229a8d2"
+    },
     "boot-demo.fedora": {
       "sha256": "810f4d8cd0ae75dd5d58c09784615409a4c0c5983f44b9a7e68b3e2b758aaab0"
     },
