@@ -7,7 +7,7 @@ load("@prelude//platforms:defs.bzl", "host_configuration")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load(":ddi.bzl", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN")
-load(":extension.bzl", "ExtensionInfo", "PortableInfo")
+load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "system_extension")
 
 def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     # The qcow is the intended VM format, and it has virtual_size; the raw doesn't.
@@ -59,25 +59,19 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
 
     directories = {}
     for dep in ctx.attrs.extensions:
-        extension = dep[ExtensionInfo]
-        if "system" not in extension.scope:
-            fail("image_vm: {} is not an extension with the system scope".format(dep.label))
+        extension = system_extension("image_vm", dep)
         for class_name, directory in (("sysext", "extensions"), ("confext", "confexts")):
             if class_name in extension.classes:
                 directories.setdefault(directory, []).append(dep[DdiInfo].disk)
     for dep in ctx.attrs.portables:
-        extension = dep.get(ExtensionInfo)
-        if dep.get(PortableInfo) == None and (extension == None or "portable" not in extension.scope):
-            fail("image_vm: {} is neither a portable image nor an extension with the portable scope".format(dep.label))
+        check_portable("image_vm", dep)
         directories.setdefault("portables", []).append(dep[DdiInfo].disk)
 
     for directory in sorted(directories):
         files = {}
         for disk in directories[directory]:
-            # systemd takes the image name from the file name, up to the first "_", and looks up an
-            # extension's release file by it. portablectl attaches the units of a portable image
-            # by it too, so the guest gets each DDI as <image name>.raw.
-            name = disk.basename.split("_")[0] + ".raw"
+            # The guest gets each DDI as <image name>.raw, so that systemd finds it by that name.
+            name = ddi_image_name(disk) + ".raw"
             if name in files:
                 fail("image_vm: duplicate {} DDI {!r}".format(directory, name))
             files[name] = disk
