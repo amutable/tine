@@ -497,13 +497,15 @@ The rule writes one extension-release file per class:
 `/etc/extension-release.d/extension-release.<name>` for a confext. Each file contains:
 
 - `ID` and `VERSION_ID` from the os-release of `parent`. A parent without `VERSION_ID`, such as Arch
-  Linux, gives only `ID`. Without `parent`, `ID=_any`, which matches any host.
+  Linux, gives only `ID`. A parent that is an image build, such as an `image.disk`, also gives its
+  `IMAGE_ID` and `IMAGE_VERSION`, so the extension merges only onto that exact build. Without `parent`,
+  `ID=_any`, which matches any host.
 - `SYSEXT_SCOPE` or `CONFEXT_SCOPE`, from `scope`. The scope lists where systemd applies the extension.
   `system` merges it on the host and `initrd` in the initrd. `portable` lets
   `portablectl attach --extension` or `ExtensionImages=` add it on top of a portable service image. The
   default is `["system"]`.
-- `SYSEXT_ID` or `CONFEXT_ID` with the target name, `SYSEXT_VERSION_ID` or `CONFEXT_VERSION_ID` and
-  `IMAGE_VERSION` with `version`, and `ARCHITECTURE` from `arch`.
+- `SYSEXT_ID` or `CONFEXT_ID` with the target name, `SYSEXT_VERSION_ID` or `CONFEXT_VERSION_ID` with
+  `version`, and `ARCHITECTURE` from `arch`.
 - `EXTENSION_RELOAD_MANAGER=1`.
 
 `release` overrides any of these fields in every file, except the scope: set it with `scope`, which

@@ -90,6 +90,7 @@ class TestCopyPartition(unittest.TestCase):
 
 class TestPinRelease(unittest.TestCase):
     PARENT = {"ID": "fedora", "VERSION_ID": "45", "NAME": "Fedora Linux"}
+    BUILD = {"IMAGE_ID": "demo", "IMAGE_VERSION": "7"}
 
     def test_pins_id_and_version_id(self) -> None:
         pinned = ddi.pin_release(self.PARENT, {"SYSEXT_SCOPE": "portable"})
@@ -105,8 +106,14 @@ class TestPinRelease(unittest.TestCase):
         pinned = ddi.pin_release({"ID": "arch"}, {})
         self.assertEqual(pinned, {"ID": "arch"})
 
+    def test_pins_the_image_build(self) -> None:
+        pinned = ddi.pin_release(self.PARENT | self.BUILD, {"SYSEXT_VERSION_ID": "1"})
+        self.assertEqual(
+            pinned, {"ID": "fedora", "VERSION_ID": "45"} | self.BUILD | {"SYSEXT_VERSION_ID": "1"}
+        )
+
     def test_any_pins_nothing(self) -> None:
-        pinned = ddi.pin_release(self.PARENT, {"ID": "_any"})
+        pinned = ddi.pin_release(self.PARENT | self.BUILD, {"ID": "_any"})
         self.assertEqual(pinned, {"ID": "_any"})
 
 

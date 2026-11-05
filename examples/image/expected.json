@@ -31,7 +31,7 @@
       "sha256": "b7efc5062a0fc4dd43c5939db6a87df456451cd3c5c6e036aeda74b7f09770e8"
     },
     "demo-ext.fedora": {
-      "sha256": "b95bdfd172d81907259af9aef554789e74dbcb5eda616de8ef72446c2d8e5184"
+      "sha256": "716d43d09b98a868b361cac63e26bb1fc37187e6cabc95e32fdf5bd2febb9b8d"
     }
   },
   "x86_64": {
@@ -66,7 +66,7 @@
       "sha256": "11154212e17a8ce6a5547ee1446697610143e5843b4fac05579d138d4469ded3"
     },
     "demo-ext.fedora": {
-      "sha256": "3ac7ccf149a9a5ce86329ecbf666141192563b85b59e51ffa8048451450840e9"
+      "sha256": "fe8308bb979aae3004152ed7acc1190b343c46cc822a54c5c65e7ae2e89934ab"
     }
   }
 }
