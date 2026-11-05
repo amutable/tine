@@ -15,8 +15,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-# 4.50 regression: first write blocks for 15s: https://github.com/seaweedfs/seaweedfs/issues/12058
-STARTUP_TIMEOUT = 30
+STARTUP_TIMEOUT = 10
 
 
 def free_ports(count: int) -> list[int]:
