@@ -95,9 +95,8 @@ if [ -n "${TINE_TEST_DISTRO:-}" ]; then
 fi
 
 # A run builds and tests one distro release (TINE_TEST_DISTRO, or else the catalog's default release
-# Fedora): its images, and tine's own targets with its boxes. Apart from secureboot_pkcs11 (which signs a
-# Fedora image), it needs only that release's mirrors, so a release whose mirror is down fails its own
-# job only.
+# Fedora): its images, and tine's own targets with its boxes. It needs only that release's mirrors, so a
+# release whose mirror is down fails its own job only.
 release=$("${buck[@]}" run tine//tools:dev -- release)
 
 # `universe` lists the build targets of the tine and catalog cells. tools/dev.py explains which targets
@@ -168,11 +167,12 @@ token = PcrPolicy
 pin-file = $pkcs11_dir/pin
 socket = $pkcs11_dir/sock/pkcs11
 EOF
-    local config=(--config-file "$pkcs11_dir/signing.bcfg")
+    # The release's platform, rather than a per-distribution alias of the image, whose suffix is a key of
+    # catalog//:releases.bzl.
+    local config=(--config-file "$pkcs11_dir/signing.bcfg" --target-platforms "catalog//:$release.distribution")
 
-    # Token signing uses the PKCS#11 provider and the p11-kit client. Only the Fedora box contains them.
-    "${buck[@]}" build "${config[@]}" tine//examples/image-secureboot:image.fedora
-    "${buck[@]}" build "${config[@]}" 'tine//examples/image-secureboot:image.fedora[uki]' --out "$pkcs11_dir/ukis"
+    "${buck[@]}" build "${config[@]}" tine//examples/image-secureboot:image
+    "${buck[@]}" build "${config[@]}" 'tine//examples/image-secureboot:image[uki]' --out "$pkcs11_dir/ukis"
 
     # The public key the UKI hands the booted system must be the PcrPolicy token's, and not the
     # Secure Boot one. Read each side into a variable first: a command substitution inside a `test`
@@ -188,7 +188,7 @@ EOF
     test "$pcrpkey" = "$pcr_certificate"
     test "$pcrpkey" != "$secure_boot_certificate"
 
-    if have_kvm; then "${buck[@]}" run "${config[@]}" tine//examples/image-secureboot:vm-smoke.fedora; fi
+    if have_kvm; then "${buck[@]}" run "${config[@]}" tine//examples/image-secureboot:vm-smoke; fi
 }
 
 # Nothing here needs a box, so a graph that does not analyze is reported in seconds rather than
