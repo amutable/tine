@@ -870,6 +870,40 @@ boot is not exposed the way the same package in the running system is. The union
 everything in the UKI, provided the image keeps the kernel package installed in its own tree, which is where
 the UKI's kernel and modules come from.
 
+### image.ddi_preloaded_disk
+
+`image.ddi_preloaded_disk()` adds extension and portable service DDIs to the ESP of an already built
+disk. It keeps all existing signatures intact, and fails if any file on the ESP already exists.
+
+```Starlark
+image.ddi_preloaded_disk(
+    name = "appliance",
+    base = ":base-os",
+    extensions = [":debug-tools", ":site-config"],
+    portables = [":webapp", ":webapp-config"],
+)
+```
+
+- `base` (target providing `image.DdiInfo`): The disk (raw or zstd-compressed), such as an
+  `image.disk()` or another `image.ddi_preloaded_disk()`. It needs exactly one ESP partition, with
+  room for the DDIs.
+- `extensions` (list of extension targets): Each must have the `system` scope. A DDI goes to
+  `/extensions/<name>.raw.v/<name>_<version>_<arch>.raw` on the ESP, regardless of its classes.
+- `portables` (list of portable images and extensions with the `portable` scope): A DDI goes to
+  `/portables/<name>.raw.v/<name>_<version>_<arch>.raw` on the ESP.
+- `virtual_size` (size string such as `"20G"`): Same as for `image.disk()`. It defaults to the base's.
+
+These paths are compatible with `systemd-sysupdate` transfer files and `systemd-vpick` versioning,
+so that updates replace the preloaded extensions.
+
+Nothing currently merges or attaches the DDIs at boot: systemd does not look for extensions and
+portable images in the ESP. Booting/instantiation needs to do that with creating symlinks to `/run`
+or `/var`, followed by `systemd-{conf,sys}ext refresh` (as `systemd-tmpfiles-setup.service` runs
+after the initial confext/sysext merge). For portable services, call `portablectl attach` as usual.
+
+The target defaults to the disk as `<name>.raw.zst`, and offers `[qcow2]` and `[vmdk]` subtargets.
+It can be booted by `image.vm`.
+
 ### Kernel modules in the UKI
 
 A UKI carries the kernel, the initrds it was built from, and one further initrd the `image.uki` rule
@@ -1137,7 +1171,9 @@ versioned UKI creation, semantic boot-artifact extraction, ESP-layer assembly, a
 `demo-portable` is a portable service image, and `demo-portable-ext` an extension for it. Running
 `boot-demo-vm` validates the interactive VM runner. `boot-demo-vm-smoke` boots `boot-demo`, merges
 `demo-ext` and `demo-confext` at boot, and attaches the two portable DDIs with
-`portablectl attach --extension demo-portable-ext demo-portable`.
+`portablectl attach --extension demo-portable-ext demo-portable`. `boot-demo-preloaded` is `boot-demo`
+with these four DDIs on its ESP. `boot-demo-preloaded-vm-smoke` boots it, activates the DDIs from the ESP,
+and checks that they merge and attach.
 
 A host that merges a confext or attaches a portable image needs two things, which `boot-demo` provides:
 

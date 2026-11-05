@@ -17,6 +17,7 @@ image_tools(
     ddi = ":ddi",
     layer = ":layer",
     manifest = ":manifest",
+    preload = ":preload",
     python = "//tools:python3",
     sbom = ":sbom",
     syft = "//tools:syft",
@@ -80,6 +81,13 @@ python.library(
 )
 
 python.binary(
+    name = "preload",
+    main = "preload.py",
+    deps = [":convert-lib", "//:specs", "//:util"],
+    visibility = ["PUBLIC"],
+)
+
+python.binary(
     name = "uki",
     main = "uki.py",
     deps = [
@@ -118,6 +126,8 @@ python.test(
         "layer_test.py",
         "manifest.py",
         "manifest_test.py",
+        "preload.py",
+        "preload_test.py",
         "substitute.py",
         "substitute_test.py",
         "uki.py",
@@ -125,6 +135,7 @@ python.test(
         "version_test.py",
     ],
     deps = [
+        ":convert-lib",
         ":finalize",
         ":version",
         "//:specs",
