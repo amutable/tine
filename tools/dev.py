@@ -172,10 +172,6 @@ def _check(args: argparse.Namespace) -> None:
     _run(buck2_argv("test", "--skip-incompatible-targets", *_targets(), "--exclude", "image"))
 
 
-def _print_universe(_args: argparse.Namespace) -> None:
-    print(_universe())
-
-
 def _fmt(args: argparse.Namespace) -> None:
     cell = _cell_root("tine")
     srcs = _starlark_srcs()
@@ -445,7 +441,7 @@ def main(argv: list[str] | None = None) -> None:
         verb.set_defaults(func=func)
 
     universe = sub.add_parser("universe", help="print the query for what a whole-cell run asks for here")
-    universe.set_defaults(func=_print_universe)
+    universe.set_defaults(func=lambda _args: print(_universe()))
 
     fmt = sub.add_parser("fmt", parents=[starlark], help="auto-format and auto-fix lints")
     fmt.add_argument("--ruff", required=True)
