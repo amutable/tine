@@ -7,7 +7,7 @@ load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//platform:architecture.bzl", "architecture")
-load(":ami.bzl", "declare_ami")
+load(":ami.bzl", "AMI_IMPORT_ATTR", "declare_ami")
 load(
     ":archive.bzl",
     "ARCHIVE_ATTRS",
@@ -613,18 +613,21 @@ _DISK_ATTRS = (
 
 # Only a bootable disk has the attributes in _BOOTABLE_ATTRS. Buck refuses them on a disk that
 # doesn't boot.
-_BOOTABLE_ATTRS = UKI_ATTRS | {
-    "cmdline": attrs.list(
-        attrs.string(),
-        default = ["root=tmpfs", "mount.usr=dissect", "rw"],
-    ),
-    "initrd": attrs.dep(
-        providers = [InitrdInfo],
-        doc = "the initrd to boot; the declaration macro declares a conventional one when given none",
-    ),
-    "_ami_box": attrs.dep(providers = [box.Info], default = "tine//tools:aws.box"),
-    "_ami_import": attrs.dep(providers = [RunInfo], default = "tine//image:ami-import"),
-}
+_BOOTABLE_ATTRS = (
+    UKI_ATTRS
+    | {
+        "cmdline": attrs.list(
+            attrs.string(),
+            default = ["root=tmpfs", "mount.usr=dissect", "rw"],
+        ),
+        "initrd": attrs.dep(
+            providers = [InitrdInfo],
+            doc = "the initrd to boot; the declaration macro declares a conventional one when given none",
+        ),
+        "_ami_box": attrs.dep(providers = [box.Info], default = "tine//tools:aws.box"),
+    }
+    | AMI_IMPORT_ATTR
+)
 
 _disk = rule(
     impl = _disk_impl,

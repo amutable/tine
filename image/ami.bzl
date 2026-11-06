@@ -86,13 +86,79 @@ def declare_ami(
                 uefi_data = _uefi_data(actions, box_info, secure_boot_certificate),
             ),
         )
+    return _ami_providers(basename = basename, disk = disk, importer = importer, parameters = parameters, version = version)
+
+def declare_ami_from_base(
+    actions: AnalysisActions,
+    *,
+    base_parameters: Artifact,
+    basename: str,
+    disk: Artifact,
+    importer: RunInfo,
+    virtual_size: str | None,
+) -> list[Provider]:
+    """Declare the AMI RegisterImage parameters of a disk built on another, for its `[ami]` subtarget.
+
+    The disk registers with the `base_parameters` of the disk it builds on, under its own name, so that an
+    instance gets the base's UEFI variable store, which this build has no certificate to write.
+    `virtual_size` replaces the base's root volume size.
+    """
+    parameters = actions.declare_output("{}.ami.json".format(basename))
+    actions.dynamic_output_new(
+        _from_base(
+            base = base_parameters,
+            name = basename,
+            out = parameters.as_output(),
+            volume_size = _gib(virtual_size) if virtual_size != None else None,
+        ),
+    )
+    return _ami_providers(basename = basename, disk = disk, importer = importer, parameters = parameters, version = None)
+
+def _from_base_impl(
+    actions: AnalysisActions,
+    base: ArtifactValue,
+    name: str,
+    out: OutputArtifact,
+    volume_size: int | None,
+) -> list[Provider]:
+    register = base.read_json() | {"Description": name, "Name": _ami_name(name)}
+    if volume_size != None:
+        mappings = [dict(mapping) for mapping in register["BlockDeviceMappings"]]
+        mappings[0]["Ebs"] = dict(mappings[0]["Ebs"]) | {"VolumeSize": volume_size}
+        register["BlockDeviceMappings"] = mappings
+    actions.write_json(out, register)
+    return []
+
+_from_base = dynamic_actions(
+    impl = _from_base_impl,
+    attrs = {
+        "base": dynattrs.artifact_value(),
+        "name": dynattrs.value(str),
+        "out": dynattrs.output(),
+        "volume_size": dynattrs.value(int | None),
+    },
+)
+
+def _ami_providers(
+    *,
+    basename: str,
+    disk: Artifact,
+    importer: RunInfo,
+    parameters: Artifact,
+    version: str | None,
+) -> list[Provider]:
     return [
         # Building an AMI builds the disk, as for any other format; only the parameters are published,
         # as a release carries the disk already.
         DefaultInfo(default_output = parameters, other_outputs = [disk]),
-        PublishedInfo(artifacts = {name: PublishedFile(artifact = parameters, kind = "ami")}, image = basename, version = version),
+        PublishedInfo(artifacts = {parameters.basename: PublishedFile(artifact = parameters, kind = "ami")}, image = basename, version = version),
         RunInfo(args = cmd_args(importer, disk, parameters)),
     ]
+
+# The importer that running an `[ami]` subtarget runs.
+AMI_IMPORT_ATTR = {
+    "_ami_import": attrs.dep(providers = [RunInfo], default = "tine//image:ami-import"),
+}
 
 def _with_uefi_data_impl(
     actions: AnalysisActions,
