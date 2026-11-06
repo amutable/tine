@@ -3,23 +3,34 @@ SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 SPDX-License-Identifier: MPL-2.0
 -->
 
-# Pinning prebuilt tools
+# Pinning downloads
 
-`http.tool()` downloads a prebuilt tool for each CPU architecture that tine builds for. The project's
-`tine.lock.json` pins every download by sha256 and size, and Buck checks the download against both. `bump`
-updates the pins to the newest upstream release.
+`http.file()` downloads a file for each CPU architecture that tine builds for, such as a disk image that
+a project builds on. `http.tool()` does the same for a prebuilt program (possibly shipped as an archive),
+and makes it runnable. The project's `tine.lock.json` pins every download by sha256 and size, and Buck
+checks the download against both. `bump` updates the pins to the newest upstream release.
 
-## Declaring a tool
+## Declaring a download
 
-Add an entry for the tool to `tine.lock.json` at the root of the project. The `ruff` entry in tine's own
-[`tine.lock.json`](../../tine.lock.json) pins a GitHub release.
+Add an entry for the download to `tine.lock.json` at the root of the project. The `ruff` entry in tine's
+own [`tine.lock.json`](../../tine.lock.json) pins a GitHub release.
 
-Then load the entry in a `BUCK` file and declare the tool:
+Then load the entry in a `BUCK` file and declare the download. A file is the target's output, named
+`name`:
 
 ```starlark
 load("//:tine.lock.json", pins = "value")
 load("@tine//http:defs.bzl", "http")
 
+http.file(
+    name = "os.raw.zst",
+    spec = pins["os-disk"],
+)
+```
+
+A program is a tool:
+
+```starlark
 http.tool(
     name = "ruff",
     path = "ruff",
@@ -32,8 +43,8 @@ http.tool(
 ## The pin
 
 - `repository` and `release` name a GitHub release, and each `artifact` is a file attached to it.
-- `url` replaces `repository` for a tool that is not published on GitHub. Each artifact is downloaded from
-  `<url>/<artifact>`, and `release` is the version.
+- `url` replaces `repository` for a download that is not published on GitHub. Each artifact is downloaded
+  from `<url>/<artifact>`, and `release` is the version.
 - `releases` names the index that `bump` reads for a pin with a `url`. Its `url` is a page that lists the
   releases, and every match of its `pattern`, a Python regular expression, is a release. `bump` compares
   the numbers in each match and takes the highest. A prerelease such as `go1.28rc1` ranks by its numbers
@@ -48,6 +59,10 @@ http.tool(
 ## The arguments
 
 - `spec` is the pin, as loaded from `tine.lock.json`.
+- `executable = True` makes the file of `http.file()` executable.
+
+The arguments of `http.tool()` beyond `spec`:
+
 - Without `path` or `directory`, the download is the program itself.
 - `path` names the program inside an archive. The program is the target's output.
 - `directory = True` makes the whole unpacked archive the target's output, for a tool that needs the files
@@ -58,7 +73,7 @@ http.tool(
 
 ## Updating the pins
 
-Run `tine bump` with the tools to update. It updates the `tine.lock.json` of the project that it runs in:
+Run `tine bump` with the pins to update. It updates the `tine.lock.json` of the project that it runs in:
 
 ```sh
 tine bump --tool ruff
