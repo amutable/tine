@@ -218,6 +218,9 @@ DdiInfo = provider(
         "manifests": provider_field(dict[str, Artifact], default = {}),
         "partitions": provider_field(list[PartitionInfo]),
         "root_hash": provider_field(RootHashInfo | None, default = None),
+        # The size of a virtual disk of `disk`, with room past the partitions for first boot to claim, as
+        # image.disk's virtual_size. A disk built on this one needs the same.
+        "virtual_size": provider_field(str | None, default = None),
     },
 )
 
@@ -285,6 +288,7 @@ def declare_ddi(
     extension: dict[str, typing.Any] | None = None,
     tmpfiles: list[str] | None = None,
     exclude: list[str] = [],
+    virtual_size: str | None = None,
 ) -> DdiOutput:
     """Declare the systemd-repart action that builds a DDI from an image and partition definitions.
 
@@ -292,7 +296,8 @@ def declare_ddi(
     keeps it, for a system nothing ever resolves packages in. The image's `[pkgdb]` and `[sbom]`
     subtargets still capture it from the tree itself. `extension` makes the driver package the tree
     as an extension (see extension.bzl). `tmpfiles` replaces the tmpfiles lines of `image`. The
-    partitions leave out the contents of the directories in `exclude`.
+    partitions leave out the contents of the directories in `exclude`. `virtual_size` goes into the
+    provider, see DdiInfo.
     """
     _check_definitions(
         definitions,
@@ -427,6 +432,7 @@ def declare_ddi(
         partitions = available_partitions,
         manifests = manifests,
         root_hash = root_hash,
+        virtual_size = virtual_size,
     )
     sub_targets = manifest_sub_targets(manifests)
     if manifest != None:
