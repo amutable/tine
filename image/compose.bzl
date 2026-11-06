@@ -462,6 +462,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             imported = [system.info],
             mkfs_options = ctx.attrs.mkfs_options,
             seed = ctx.attrs.disk_seed,
+            virtual_size = ctx.attrs.virtual_size,
         )
 
         # repart lists the files of the system partitions in the run that writes them. The disk
@@ -509,6 +510,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             split = True,
             strip_pkgdb = ctx.attrs.strip_pkgdb,
             verity_key = resolve_signing_key(ctx.attrs.verity_key),
+            virtual_size = ctx.attrs.virtual_size,
         )
         manifests = composed.info.manifests
         boot_sub_targets = {}
