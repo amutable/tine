@@ -885,8 +885,8 @@ image.ddi_preloaded_disk(
 ```
 
 - `base` (target providing `image.DdiInfo`): The disk (raw or zstd-compressed), such as an
-  `image.disk()` or another `image.ddi_preloaded_disk()`. It needs exactly one ESP partition, with
-  room for the DDIs.
+  `image.disk()`, another `image.ddi_preloaded_disk()`, or an `image.imported_disk()` (see below).
+  It needs exactly one ESP partition, with room for the DDIs.
 - `extensions` (list of extension targets): Each must have the `system` scope. A DDI goes to
   `/extensions/<name>.raw.v/<name>_<version>_<arch>.raw` on the ESP, regardless of its classes.
 - `portables` (list of portable images and extensions with the `portable` scope): A DDI goes to
@@ -903,6 +903,53 @@ after the initial confext/sysext merge). For portable services, call `portablect
 
 The target defaults to the disk as `<name>.raw.zst`, and offers `[qcow2]` and `[vmdk]` subtargets.
 It can be booted by `image.vm`.
+
+### External disks as a base
+
+`image.imported_disk()` declares a base disk for preloading from a disk that was built elsewhere,
+such as a published release of an OS. `disk` is its `.raw` or `.raw.zst`, and the optional `ami` its
+`.ami.json`, which the target provides as `[ami]`, plus optionally a `virtual_size`. Pin each file in the
+project's `tine.lock.json`, and download it with [`http.file()`](http.md#declaring-a-download):
+
+```json
+{
+  "os-disk": {
+    "url": "https://releases.example.com",
+    "release": "1.2",
+    "platforms": {
+      "x86_64": {"artifact": "os_1.2_x86-64.raw.zst", "sha256": "…", "size": 382105381}
+    }
+  },
+  "os-ami": {
+    "url": "https://releases.example.com",
+    "release": "1.2",
+    "platforms": {
+      "x86_64": {"artifact": "os_1.2_x86-64.ami.json", "sha256": "…", "size": 1414}
+    }
+  }
+}
+```
+
+`tine bump` fills in `sha256` and `size`, and with a `releases` index moves the pins to the newest
+release, see [The pin](http.md#the-pin).
+
+```Starlark
+load("//:tine.lock.json", pins = "value")
+load("@tine//http:defs.bzl", "http")
+
+http.file(name = "os.raw.zst", spec = pins["os-disk"])
+
+http.file(name = "os.ami.json", spec = pins["os-ami"])
+
+image.imported_disk(
+    name = "os",
+    disk = ":os.raw.zst",
+    ami = ":os.ami.json",
+    virtual_size = "20G",
+)
+```
+
+Then `image.ddi_preloaded_disk()` takes `:os` as a `base =`, see above.
 
 ### Kernel modules in the UKI
 
@@ -1173,7 +1220,9 @@ versioned UKI creation, semantic boot-artifact extraction, ESP-layer assembly, a
 `demo-ext` and `demo-confext` at boot, and attaches the two portable DDIs with
 `portablectl attach --extension demo-portable-ext demo-portable`. `boot-demo-preloaded` is `boot-demo`
 with these four DDIs on its ESP. `boot-demo-preloaded-vm-smoke` boots it, activates the DDIs from the ESP,
-and checks that they merge and attach.
+and checks that they merge and attach. `boot-demo-imported` imports the `[raw.zst]` and `[ami]` of
+`boot-demo` the way a project that builds on a release would, and `imported-disk-test` checks that
+preloading it gives the same disk.
 
 A host that merges a confext or attaches a portable image needs two things, which `boot-demo` provides:
 

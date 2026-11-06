@@ -126,3 +126,48 @@ def ddi_preloaded_disk(
 ) -> None:
     """Declare one, compatible with the distributions its package serves."""
     _ddi_preloaded_disk(name = name, **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs))
+
+def _imported_disk_impl(ctx: AnalysisContext) -> list[Provider]:
+    disk = ctx.attrs.disk
+
+    # The preload driver tells the two apart by name.
+    if not (disk.basename.endswith(".raw") or disk.basename.endswith(".raw.zst")):
+        fail("imported_disk: {} is neither a .raw nor a .raw.zst".format(disk.basename))
+    if ctx.attrs.virtual_size != None and not regex_match(SIZE_PATTERN, ctx.attrs.virtual_size):
+        fail("imported_disk: invalid virtual_size {!r}".format(ctx.attrs.virtual_size))
+    sub_targets = {}
+    if ctx.attrs.ami != None:
+        # As the `[ami]` of an image.disk, which image.ddi_preloaded_disk takes the parameters from.
+        sub_targets["ami"] = [DefaultInfo(default_output = ctx.attrs.ami, other_outputs = [disk])]
+    return [
+        DefaultInfo(default_output = disk, sub_targets = sub_targets),
+        DdiInfo(disk = disk, partitions = [], virtual_size = ctx.attrs.virtual_size),
+    ]
+
+_imported_disk = rule(
+    impl = _imported_disk_impl,
+    attrs = {
+        "ami": attrs.option(
+            attrs.source(),
+            default = None,
+            doc = "the disk's AMI RegisterImage parameters (.ami.json), which an [ami] subtarget provides",
+        ),
+        "disk": attrs.source(doc = "the disk, a .raw or .raw.zst"),
+        "virtual_size": attrs.option(
+            attrs.string(),
+            default = None,
+            doc = 'size of the virtual disk the release boots from, e.g. "20G", which image.ddi_preloaded_disk keeps',
+        ),
+    },
+    supports_incoming_transition = True,
+)
+
+def imported_disk(
+    name: str,
+    distro: str | None = None,
+    visibility: list[str] | None = None,
+    target_compatible_with: list[str] | Select | None = None,
+    **kwargs,
+) -> None:
+    """Declare a disk built elsewhere, such as a published release, as a base for image.ddi_preloaded_disk."""
+    _imported_disk(name = name, **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs))
