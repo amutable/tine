@@ -6,6 +6,7 @@
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
+load(":ami.bzl", "AMI_IMPORT_ATTR", "declare_ami_from_base")
 load(":ddi.bzl", "DISK_FORMATS", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN", "VIRTUAL_SIZE_FORMATS")
 load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "system_extension")
 load(":image.bzl", "IMAGE_TOOLS_ATTR", "ImageToolsInfo", "spec_path")
@@ -70,11 +71,21 @@ def _ddi_preloaded_disk_impl(ctx: AnalysisContext) -> list[Provider]:
             identifier = format,
         )
         disks[format] = out
+    sub_targets = {format: [DefaultInfo(default_output = out), DiskConversionInfo(format = format, image = out)] for format, out in disks.items()}
+
+    # A base that registers as an AMI has `[ami]`, as a bootable image.disk does.
+    base_ami = ctx.attrs.base[DefaultInfo].sub_targets.get("ami")
+    if base_ami != None:
+        sub_targets["ami"] = declare_ami_from_base(
+            ctx.actions,
+            base_parameters = base_ami[DefaultInfo].default_outputs[0],
+            basename = ctx.label.name,
+            disk = disks["raw.zst"],
+            importer = ctx.attrs._ami_import[RunInfo],
+            virtual_size = ctx.attrs.virtual_size,
+        )
     return [
-        DefaultInfo(
-            default_output = disks["raw.zst"],
-            sub_targets = {format: [DefaultInfo(default_output = out), DiskConversionInfo(format = format, image = out)] for format, out in disks.items()},
-        ),
+        DefaultInfo(default_output = disks["raw.zst"], sub_targets = sub_targets),
         DdiInfo(disk = disks["raw.zst"], partitions = [], virtual_size = virtual_size),
     ]
 
@@ -95,12 +106,13 @@ _ddi_preloaded_disk = rule(
         "virtual_size": attrs.option(
             attrs.string(),
             default = None,
-            doc = 'size of the disk a qcow2 or vmdk describes, e.g. "20G", instead of the base\'s',
+            doc = "size of the disk a qcow2 or vmdk describes, and of the AMI's root volume, e.g. \"20G\", instead of the base's",
         ),
         # The tools box of the release has the tools that read the partition table, write the FAT and
         # convert the disk.
         "_box": distribution.TOOLS_BOX_ATTR,
     }
+    | AMI_IMPORT_ATTR
     | IMAGE_TOOLS_ATTR,
     supports_incoming_transition = True,
 )
