@@ -385,13 +385,44 @@ image.extension(
     ],
 )
 
+_PRELOADED_EXTENSIONS = [":demo-confext", ":demo-ext"]
+
+_PRELOADED_PORTABLES = [":demo-portable", ":demo-portable-ext"]
+
 # boot-demo with the demo DDIs on its ESP, where systemd-sysupdate would update them. Nothing merges or
 # attaches them at boot yet: whoever instantiates the disk does that.
 image.ddi_preloaded_disk(
     name = "boot-demo-preloaded",
     base = ":boot-demo",
-    extensions = [":demo-confext", ":demo-ext"],
-    portables = [":demo-portable", ":demo-portable-ext"],
+    extensions = _PRELOADED_EXTENSIONS,
+    portables = _PRELOADED_PORTABLES,
+)
+
+# boot-demo's published raw.zst and AMI parameters, the way a project that builds on a release of it
+# imports them, and the same DDIs on its ESP.
+image.imported_disk(
+    name = "boot-demo-imported",
+    ami = ":boot-demo[ami]",
+    disk = ":boot-demo[raw.zst]",
+    # As boot-demo's own, which a release would publish beside the disk.
+    virtual_size = "2G",
+)
+
+image.ddi_preloaded_disk(
+    name = "boot-demo-imported-preloaded",
+    base = ":boot-demo-imported",
+    extensions = _PRELOADED_EXTENSIONS,
+    portables = _PRELOADED_PORTABLES,
+)
+
+# The preloaded disk defaults to the virtual_size of the imported one.
+box.sh_test(
+    name = "imported-virtual-size-test",
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    script = """test "$(qemu-img info --output=json "$1" | jq '."virtual-size"')" = 2147483648""",
+    args = ["$(location :boot-demo-imported-preloaded.fedora[qcow2])"],
+    distro = _FEDORA,
 )
 
 image.vm(
@@ -443,6 +474,33 @@ assert {k: v for k, v in preloaded.items() if k not in names} == {k: v for k, v 
 ' "$@"
 """,
     args = ["$(location :boot-demo.fedora[ami])", "$(location :boot-demo-preloaded.fedora[ami])"],
+    distro = _FEDORA,
+)
+
+# Preloading the imported raw.zst writes the same disk as preloading boot-demo itself, and registers it
+# with the same AMI parameters, under its own name.
+box.sh_test(
+    name = "imported-disk-test",
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    script = """
+python3 -c '
+import hashlib, json, sys
+disk, imported_disk, ami, imported_ami = sys.argv[1:]
+digests = [hashlib.file_digest(open(path, "rb"), "sha256").hexdigest() for path in (disk, imported_disk)]
+assert digests[0] == digests[1], digests
+ami, imported_ami = json.load(open(ami)), json.load(open(imported_ami))
+assert imported_ami["Name"] == "boot-demo-imported-preloaded", imported_ami
+names = ("Name", "Description")
+assert {k: v for k, v in ami.items() if k not in names} == {k: v for k, v in imported_ami.items() if k not in names}
+' "$@"
+""",
+    args = [
+        "$(location :boot-demo-preloaded.fedora)",
+        "$(location :boot-demo-imported-preloaded.fedora)",
+        "$(location :boot-demo-preloaded.fedora[ami])",
+        "$(location :boot-demo-imported-preloaded.fedora[ami])",
+    ],
     distro = _FEDORA,
 )
 
