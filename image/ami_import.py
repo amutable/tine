@@ -217,6 +217,16 @@ def tag(value: str) -> tuple[str, str]:
     return key, tag_value
 
 
+def reusable_image(images: list[dict[str, Any]], name: str) -> str:
+    """The ID of the image named `name` among `images` (those of that name), if it can be used as is."""
+    if len(images) != 1:
+        sys.exit(f"ami-import: {len(images)} images are named {name!r}, expected one to reuse")
+    image = images[0]
+    if image["State"] != "available":
+        sys.exit(f"ami-import: image {image['ImageId']} named {name!r} is {image['State']}, not available")
+    return str(image["ImageId"])
+
+
 def deprecation_time(now: datetime.datetime, days: int) -> str:
     """The time `days` after `now`, in the format `EnableImageDeprecation` takes."""
     return (now + datetime.timedelta(days=days)).astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -228,6 +238,11 @@ def main() -> None:
     parser.add_argument("parameters", type=Path, help="the disk's RegisterImage parameters (.ami.json)")
     parser.add_argument("--name", help="the image name, instead of the parameters'; EC2 requires it unique")
     parser.add_argument("--region", help="the region to import into, instead of the CLI's configured one")
+    parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="print the ID of an image with the name if there is one already, instead of importing",
+    )
     parser.add_argument("--jobs", type=int, default=16, help="blocks to upload in parallel")
     parser.add_argument(
         "--no-tpm",
@@ -256,8 +271,15 @@ def main() -> None:
     parameters = json.loads(args.parameters.read_text())
     name = args.name or parameters["Name"]
     # Names are unique per account and region; find out before spending the upload.
-    if aws("ec2", "describe-images", "--owners=self", f"--filters=Name=name,Values={name}")["Images"]:
-        sys.exit(f"ami-import: an image named {name!r} exists already; pass another --name")
+    images = aws("ec2", "describe-images", "--owners=self", f"--filters=Name=name,Values={name}")["Images"]
+    if images:
+        if not args.reuse:
+            sys.exit(f"ami-import: an image named {name!r} exists already; pass another --name or --reuse")
+        # The default name carries the image version, so this is usually an earlier import of that version.
+        image = reusable_image(images, name)
+        print(f"ami-import: reusing {image} named {name!r}", file=sys.stderr)
+        print(image)
+        return
 
     tags = {"Name": name} | dict(args.tags)
     snapshot = upload(aws, args.disk, tags, args.jobs)

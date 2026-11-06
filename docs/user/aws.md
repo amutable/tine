@@ -84,6 +84,9 @@ This prints the new AMI ID. Options:
 - `--name`: register under another name. EC2 requires names to be unique per account and region, and the
   import fails before uploading anything if the name is taken, so pass this to import the same image
   version again.
+- `--reuse`: if an image with the name exists already, print its ID instead of importing, for example
+  when a pipeline runs again for the same image version. The image must be available. It is used as it
+  is, so `--deprecate-days` and `--tag` don't apply to it.
 - `--region`: import into another region than the configured one.
 - `--jobs`: the number of blocks uploaded in parallel, 16 by default.
 - `--no-tpm`: register the AMI without a NitroTPM, for arm64 bare metal instance types.

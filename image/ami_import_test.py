@@ -132,5 +132,21 @@ class TagTest(unittest.TestCase):
             ami_import.tag("Name=x")
 
 
+class ReusableImageTest(unittest.TestCase):
+    def test_available_image(self) -> None:
+        images = [{"ImageId": "ami-1", "State": "available"}]
+        self.assertEqual(ami_import.reusable_image(images, "n"), "ami-1")
+
+    def test_refuses_unavailable_image(self) -> None:
+        for state in ["pending", "failed", "error"]:
+            with self.assertRaisesRegex(SystemExit, f"is {state}, not available"):
+                ami_import.reusable_image([{"ImageId": "ami-1", "State": state}], "n")
+
+    def test_refuses_several_images(self) -> None:
+        images = [{"ImageId": "ami-1", "State": "available"}, {"ImageId": "ami-2", "State": "available"}]
+        with self.assertRaisesRegex(SystemExit, "2 images are named 'n'"):
+            ami_import.reusable_image(images, "n")
+
+
 if __name__ == "__main__":
     unittest.main()
