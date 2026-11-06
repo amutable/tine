@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Prebuilt tools downloaded and verified by Buck."""
+"""Pinned files and prebuilt tools, downloaded and verified by Buck."""
 
 load("//python:defs.bzl", "python")
 
