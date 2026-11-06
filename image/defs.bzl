@@ -48,7 +48,7 @@ load(
     "layer",
     "ops",
 )
-load(":preload.bzl", "ddi_preloaded_disk")
+load(":preload.bzl", "ddi_preloaded_disk", "imported_disk")
 load(":publish.bzl", "PublishedFile", "PublishedInfo", "image_artifacts")
 load(
     ":sign.bzl",
@@ -87,6 +87,7 @@ image = struct(
     portable = portable,
     disk = disk,
     ddi_preloaded_disk = ddi_preloaded_disk,
+    imported_disk = imported_disk,
     artifacts = image_artifacts,
     initrd = initrd_image,
     # The core kernel modules a UKI carries unless a target says otherwise; extend it with `+`.
