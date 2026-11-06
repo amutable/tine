@@ -428,6 +428,24 @@ tests.vm_smoke(
     ],
 )
 
+# The preloaded disk registers with the AMI parameters of boot-demo, under its own name.
+box.sh_test(
+    name = "preloaded-ami-test",
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    script = """
+python3 -c '
+import json, sys
+base, preloaded = (json.load(open(path)) for path in sys.argv[1:])
+assert preloaded["Name"] == preloaded["Description"] == "boot-demo-preloaded", preloaded
+names = ("Name", "Description")
+assert {k: v for k, v in preloaded.items() if k not in names} == {k: v for k, v in base.items() if k not in names}, (base, preloaded)
+' "$@"
+""",
+    args = ["$(location :boot-demo.fedora[ami])", "$(location :boot-demo-preloaded.fedora[ami])"],
+    distro = _FEDORA,
+)
+
 # A file tree that differs per distribution is one copy whose source is a select, rather than a
 # target per distribution and an alias choosing between them. A distribution the select names no
 # tree for gets `None`, which copies nothing; only arch ships one so every other exercises that.
