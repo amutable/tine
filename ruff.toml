@@ -21,6 +21,7 @@ src = [
     "package_system/rpm",
     "remote_cache",
     "rootfs",
+    "uapi16",
 ]
 lint.select = [
     "E",    # pycodestyle
