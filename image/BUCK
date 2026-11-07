@@ -143,6 +143,7 @@ python.test(
         "//kmod:kmod",
         "//package:installer",
         "//rootfs:rootfs",
+        "//uapi16:storage",
         "//uapi16:uapi16",
     ],
 )

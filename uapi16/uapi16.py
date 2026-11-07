@@ -197,6 +197,28 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> Object
     obj["mTimeNSec"] = min(entry.st.st_mtime_ns, epoch * _NANOSECONDS)
     if entry.st.st_mtime_ns < 0:
         fail(f"manifest: {entry.name!r} has a timestamp before the UNIX epoch")
+    attributes: dict[str, Xattr] = {}
+    for name in sorted(os.listxattr(entry.path, follow_symlinks=False)):
+        if not name.startswith("user.") or name.startswith("user.overlay."):
+            continue
+        short = name.removeprefix("user.")
+        if not short or any(ord(c) < 32 or ord(c) == 127 for c in short):
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        try:
+            short.encode("utf-8")
+        except UnicodeEncodeError:
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        value = os.getxattr(entry.path, name, follow_symlinks=False)
+        try:
+            text = value.decode("utf-8")
+        except UnicodeDecodeError:
+            text = None
+        if text is None or "\0" in text:
+            attributes[short] = {"base64": base64.b64encode(value).decode("ascii")}
+        else:
+            attributes[short] = {"text": text}
+    if attributes:
+        obj["extendedAttributes"] = {"user": attributes}
     if token is not None:
         obj["inodeToken"] = token
     if kind == "lnk":
