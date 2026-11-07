@@ -12,9 +12,16 @@ python.library(
     visibility = ["tine//..."],
 )
 
+python.library(
+    name = "storage",
+    srcs = ["storage.py"],
+    deps = [":uapi16", "//:util", "//box:isolation"],
+    visibility = ["tine//..."],
+)
+
 python.test(
     name = "test",
     box = "//tools:dev.box",
-    srcs = ["uapi16_test.py"],
-    deps = [":uapi16", "//:util"],
+    srcs = ["storage_test.py", "uapi16_test.py"],
+    deps = [":storage", ":uapi16", "//:util", "//box:isolation"],
 )

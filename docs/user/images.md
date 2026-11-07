@@ -401,12 +401,13 @@ produces only its latest delta. Selecting `[pkgdb]` runs the image's package sys
 selecting either nested SBOM format runs one shared scan of the completed stack.
 
 `[manifest]` is a [UAPI.16 File Manifest](https://uapi-group.org/specifications/): an RFC7464 JSON-SEQ
-listing of every path the assembled tree holds, with the type, mode, ownership and clamped mtime of each,
-a SHA256 over every regular file's contents, symlink targets carried inline, and one `inodeToken` per
-inode two names share. It answers what an image ships rather than what it was built from, so a consumer
-can compare the paths of two images against each other (a path in both a system extension and the /usr it
-merges onto shadows an OS file) or account for size per file. The artifact is named `Uapi16Manifest`,
-which is the name the format reserves, so it can be dropped beside a tree of the image it describes.
+listing of every path the assembled tree holds, with the type, mode, ownership, clamped mtime and user
+extended attributes of each, a SHA256 over every regular file's contents, symlink targets carried inline, and
+one `inodeToken` per inode two names share. It answers what an image ships rather than what it was built
+from, so a consumer can compare the paths of two images against each other (a path in both a system extension
+and the /usr it merges onto shadows an OS file) or account for size per file. The artifact is named
+`Uapi16Manifest`, which is the name the format reserves, so it can be dropped beside a tree of the image it
+describes.
 
 `image` also takes `install_langs`: keep translated files only for these languages, instead of all of them.
 Nothing matches a value that is not a language, so `install_langs = ["C.UTF-8"]` installs no translations
