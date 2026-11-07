@@ -1520,10 +1520,10 @@ A package installs configuration that describes state rather than carrying it: m
 index, `hwdb.d` with no compiled database, a locale list with no archive. On a running system scriptlets and
 boot-time units produce it; an image being assembled is neither, so tine builds it explicitly. Each generator
 is an operation of its own rather than a step of one pass, so it is positioned where the image wants it,
-configured on its own terms, and adopted one at a time; what it writes persists into the delta that captures
-it, so it is built once and cached with the layer rather than repeated by every terminal output. An `image`
-gets the content its operations ask for and nothing else, which is the same reason terminal rules leave
-package state alone.
+configured on its own terms, and adopted one at a time; what it writes persists into the snapshot that
+captures it, so it is built once and cached with the layer rather than repeated by every terminal output. An
+`image` gets the content its operations ask for and nothing else, which is the same reason terminal rules
+leave package state alone.
 
 Each generator is a no-op for an image that carries none of what it acts on, so none of them needs
 per-distribution knowledge: `image.ops.depmod()` is silent without kernels, `image.ops.hwdb()` without

@@ -10,12 +10,17 @@ is how the closure is arrived at, not how it is described.
 """
 
 import json
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
 from util import fail, text_destination
 
+import rootfs
 import snapshotter
+import storage
+import uapi16
 from snapshotter import MetadataFile
 
 
@@ -170,3 +175,15 @@ def write(path: Path, packages: list[TransactionPackage], repositories: list[Rep
     with text_destination(path) as output:
         json.dump(entries, output, indent=2)
         output.write("\n")
+
+
+@contextmanager
+def installed_root(lowers: Sequence[str]) -> Generator[Path]:
+    # A snapshot store contains `uapi16.MANIFEST` at its top level. A box layer is a plain directory
+    # tree, and no package installs a file of that name into the root.
+    if (Path(lowers[-1]) / uapi16.MANIFEST).exists():
+        with storage.root(lowers) as tree:
+            yield tree
+    else:
+        with rootfs.rootfs("/installroot", lowers=lowers) as tree:
+            yield tree

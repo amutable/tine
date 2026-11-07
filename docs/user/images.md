@@ -182,7 +182,7 @@ be trusted because procfs magic links can access paths outside the image.
 `image.layer` has two construction modes. An initial image takes `package_manager`, which defaults to the
 package manager of the distribution that the build chooses. A derived image takes `parent` and inherits the
 package manager of that image. A call with operations applies one ordered operation sequence in one action
-and persists exactly one delta:
+and persists exactly one snapshot:
 
 - `packages` and `package_sets` are rule attributes rather than operations: a layer installs them as one
   request before any of its operations run, so every operation sees what the layer adds. `package_sets`
@@ -203,7 +203,7 @@ and persists exactly one delta:
   project like any other artifact. It takes the same `env` and `chroot` arguments, so the script either
   sees the image
   at `/buildroot` or has it as its own root; in the chrooted case nothing of the interpreter reaches the
-  delta, because the project bind carrying it lives under `/run`.
+  snapshot, because the project bind carrying it lives under `/run`.
 - `image.ops.copy` introduces a declared Buck artifact at an absolute image path; `image.ops.mkdir` and
   `image.ops.symlink` mutate the same root. `image.ops.remove` treats its absolute path as a glob pattern,
   including recursive `**`, and removes every matching file, symlink, or directory tree. A pattern that
@@ -377,7 +377,7 @@ database whenever the image has a package manager. The same artifacts are expose
 ```
 
 The `version` attribute sets the SBOM source version and defaults to `"0"`. Merely building the image still
-produces only its latest delta. Selecting `[pkgdb]` runs the image's package system's capture driver;
+produces only its latest snapshot. Selecting `[pkgdb]` runs the image's package system's capture driver;
 selecting either nested SBOM format runs one shared scan of the completed stack.
 
 `[manifest]` is a [UAPI.16 File Manifest](https://uapi-group.org/specifications/): an RFC7464 JSON-SEQ
@@ -1212,7 +1212,7 @@ tine buck build //examples/image:demo-ext.fedora
 tine buck build //examples/image:demo-portable.fedora
 ```
 
-These validate package installation and commands sharing one delta, incremental layering, archive packing,
+These validate package installation and commands sharing one layer, incremental layering, archive packing,
 versioned UKI creation, semantic boot-artifact extraction, ESP-layer assembly, and disk composition.
 `demo-ext` is a system extension and `demo-confext` a configuration extension on top of `boot-demo`.
 `demo-portable` is a portable service image, and `demo-portable-ext` an extension for it. Running

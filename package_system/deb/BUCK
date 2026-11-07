@@ -46,7 +46,6 @@ python.binary(
         "//:util",
         "//package:href",
         "//package:transaction",
-        "//rootfs:rootfs",
     ],
 )
 
@@ -134,6 +133,5 @@ python.test(
         "//package:installer",
         "//package:snapshotter",
         "//package:transaction",
-        "//rootfs:rootfs",
     ],
 )

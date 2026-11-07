@@ -349,6 +349,7 @@ def rootfs(
     apivfs: bool = False,
     binds: Sequence[tuple[str | Path, str | Path]] | None = None,
     chroot: bool = False,
+    strict_unmount: bool = False,
 ) -> Generator[Path]:
     """Mount a bind or overlay root, optionally chrooting and persisting its output.
 
@@ -382,17 +383,24 @@ def rootfs(
                 # Enter before registering the unmount so capture runs after it.
                 stack.enter_context(capture_on_exit(upper, resolved))
             # capture() reads and rewrites the upperdir after the unmount, so a captured upper needs a
-            # strict unmount. Nobody reads an ephemeral upper, so it is unmounted lazily like every
-            # other mount.
+            # strict unmount.
             mounted: Overlay | Bind = stack.enter_context(
-                Overlay(tuple(components), upper, work, target, strict_unmount=upperdir is not None)
+                Overlay(
+                    tuple(components),
+                    upper,
+                    work,
+                    target,
+                    strict_unmount=upperdir is not None or strict_unmount,
+                )
             )
         elif bind is not None:
             if capture_bind:
                 # Enter before registering the unmount so capture runs after it.
                 stack.enter_context(capture_on_exit(bind))
             # capture() reads the bind source after the unmount, like the upper of an overlay.
-            mounted = stack.enter_context(Bind(Path(bind), target, strict_unmount=capture_bind))
+            mounted = stack.enter_context(
+                Bind(Path(bind), target, strict_unmount=capture_bind or strict_unmount)
+            )
         else:
             raise ValueError("rootfs needs bind= or lowers=")
         mounted.mount()

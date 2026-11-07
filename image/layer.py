@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Apply ordered operations against one mounted root and capture its overlay delta."""
+"""Apply ordered operations against one mounted root and capture its complete snapshot."""
 
 import glob  # noqa: F401  # Preload for Path.glob before entering the image chroot.
 import os
@@ -25,6 +25,7 @@ import util
 import finalize
 import installer
 import rootfs
+import storage
 from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
@@ -41,7 +42,6 @@ class LayerInstall(TypedDict):
 class Spec(TypedDict):
     lower: list[str]
     out: str
-    work: str | None
     install: LayerInstall | None
     operations: list[object]
 
@@ -147,25 +147,6 @@ def _remove_glob(tree: Path, value: str) -> None:
     matches = sorted(tree.glob(relative), key=lambda path: (len(path.parts), str(path)), reverse=True)
     for path in matches:
         util.remove_path(path)
-
-
-def _normalize_mode(path: Path) -> None:
-    """Normalize file permissions for path.
-
-    See docs/user/images.md.
-    """
-    mode = path.lstat().st_mode
-    if stat.S_ISDIR(mode):
-        path.chmod(0o755)
-    elif stat.S_ISREG(mode):
-        path.chmod(0o755 if mode & 0o111 else 0o644)
-    # ignore symlinks (meaningless mode), whiteout nodes, and non-files
-
-
-def _normalize_modes(tree: Path) -> None:
-    _normalize_mode(tree)
-    for path in tree.rglob("*"):
-        _normalize_mode(path)
 
 
 # The ELF fields the stack check reads; see elf(5). Per class: the header after e_ident up to
@@ -311,37 +292,24 @@ def main(argv: list[str] | None = None) -> None:
     install = spec["install"]
 
     lower = spec["lower"]
-    if lower:
-        if spec["work"] is None:
-            util.fail("image lower stack needs a work overlay directory")
-        mounted = rootfs.rootfs(
-            "/buildroot",
-            lowers=lower,
-            upperdir=out,
-            workdir=spec["work"],
-            apivfs=True,
-        )
-    else:
-        if spec["work"] is not None:
-            util.fail("image work overlay directory requires a lower stack")
-        mounted = rootfs.rootfs(
-            "/buildroot",
-            bind=out,
-            capture_bind=True,
-            apivfs=True,
-        )
-
-    with mounted as target, tempfile.TemporaryDirectory(prefix="layer.") as scratch:
-        # Packages land before the operations so every one of them sees what this layer installs.
-        if install is not None:
-            _install(install, target, Path(scratch))
-        for operation in operations:
-            _apply(operation, target)
-    _normalize_modes(out)
-    stacks = _executable_stacks(out)
-    if stacks:
-        util.fail("image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks))
-    print(f"image: applied {len(operations)} ops over {len(lower)} lower(s) -> {out}", file=sys.stderr)
+    with (
+        storage.root(lower) as tree,
+        tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
+    ):
+        with rootfs.rootfs("/buildroot", bind=tree, apivfs=True, strict_unmount=True) as target:
+            if install is not None:
+                _install(install, target, Path(scratch))
+            for operation in operations:
+                _apply(operation, target)
+        stacks = _executable_stacks(tree)
+        if stacks:
+            util.fail(
+                "image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks)
+            )
+        storage.capture(tree, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
+    print(
+        f"image: applied {len(operations)} ops over {len(lower)} parent store(s) -> {out}", file=sys.stderr
+    )
 
 
 if __name__ == "__main__":

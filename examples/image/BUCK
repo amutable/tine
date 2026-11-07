@@ -90,14 +90,14 @@ image.archive(
     format = "tar",
 )
 
-# Base-only image exercising a single-component delta stack.
+# An image with a single layer.
 image.archive(
     name = "base",
     packages = ["bash"],
     format = "tar",
 )
 
-# Chained images: the child adds one file and whiteouts another.
+# The child image adds one file and removes a file of its parent.
 image.layer(
     name = "chained-base",
     packages = ["bash", "coreutils"],
@@ -122,7 +122,7 @@ image.archive(
     format = "tar",
 )
 
-# Package installation and mutations sharing one physical delta.
+# One layer installs packages and runs commands.
 image.layer(
     name = "layered-install-base",
     packages = ["bash"],
@@ -143,35 +143,6 @@ image.layer(
 image.archive(
     name = "layered-install",
     parent = ":layered-install.layer",
-    format = "tar",
-)
-
-# Round-trip an escaped name and an escaped whiteout through stored deltas.
-image.layer(
-    name = "escaped-base",
-    packages = ["bash", "coreutils"],
-    ops = [
-        image.ops.mkdir("/etc/tine"),
-        image.ops.run(
-            [
-                "/usr/bin/bash",
-                "-c",
-                "echo kept > '/etc/tine/esc\\x2dkept'; echo gone > '/etc/tine/esc\\x2dgone'",
-            ],
-            chroot = True,
-        ),
-    ],
-)
-
-image.layer(
-    name = "escaped-child.layer",
-    parent = ":escaped-base",
-    ops = [image.ops.remove("/etc/tine/esc\\x2dgone")],
-)
-
-image.archive(
-    name = "escaped",
-    parent = ":escaped-child.layer",
     format = "tar",
 )
 
@@ -530,30 +501,6 @@ box.sh_test(
     box = "@tine//tools:dev.box",
     test = "tree-test.sh",
     args = ["$(location :tree)"] + distribution.select({d["release"]: [name if name == "arch" else "none"] for name, d in DISTRIBUTIONS.items()}),
-)
-
-# Replacing a populated directory exercises the opaque-dir marker.
-image.layer(
-    name = "opaque-base",
-    packages = ["bash", "coreutils"],
-    ops = [
-        image.ops.run(["/usr/bin/bash", "-c", "mkdir -p /etc/tine/sub; echo old > /etc/tine/sub/old"], chroot = True),
-    ],
-)
-
-image.layer(
-    name = "opaque-child.layer",
-    parent = ":opaque-base",
-    ops = [
-        image.ops.remove("/etc/tine/sub"),
-        image.ops.run(["/usr/bin/bash", "-c", "mkdir -p /etc/tine/sub; echo new > /etc/tine/sub/fresh"], chroot = True),
-    ],
-)
-
-image.archive(
-    name = "opaque",
-    parent = ":opaque-child.layer",
-    format = "tar",
 )
 
 # The UKI's module selection still carries what the demo image boots through. The smoke proves the

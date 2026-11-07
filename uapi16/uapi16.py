@@ -243,8 +243,8 @@ def _record(obj: Object) -> bytes:
 def records(tree: Path, epoch: int, roots: Sequence[str] = ()) -> Iterator[bytes]:
     """The whole sequence for `tree`: the root object, then one object per inode below it."""
     # The root object carries the media type alone, which is what marks the sequence a manifest.
-    # Its mode and mtime would be the ephemeral overlay upper's rather than the image's, and the
-    # format defaults a nameless first object to a directory anyway.
+    # A partition manifest lists a part of the image, and the image root is not part of it. The format
+    # defaults a nameless first object to a directory.
     yield _record({"mediaType": MEDIA_TYPE})
     found = list(entries(tree, roots))
     tokens = hardlink_tokens(found)

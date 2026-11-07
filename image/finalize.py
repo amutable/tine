@@ -15,6 +15,7 @@ import contextlib
 import gzip
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from typing import TypedDict
 from util import fail
 
 import rootfs
+import storage
 
 
 class ImageSpec(TypedDict):
@@ -34,21 +36,31 @@ class ImageSpec(TypedDict):
     tmpfiles: list[str]
 
 
-# The directories whose whole point is a mode, so a layer cannot carry them: sticky and
-# world-writable, which is exactly what Buck cannot store and the tar filter strips.
+def _normalize_mode(path: Path) -> None:
+    """Normalize file permissions for path.
+
+    See docs/user/images.md.
+    """
+    mode = path.lstat().st_mode
+    desired = 0o755 if stat.S_ISDIR(mode) or mode & 0o111 else 0o644
+    if (stat.S_ISDIR(mode) or stat.S_ISREG(mode)) and stat.S_IMODE(mode) != desired:
+        path.chmod(desired)
+
+
+def normalize_modes(tree: Path) -> None:
+    _normalize_mode(tree)
+    for path in tree.rglob("*"):
+        _normalize_mode(path)
+
+
 _WORLD_WRITABLE = ("tmp", "var/tmp")
 
 
 def world_writable(tree: Path) -> None:
-    """Restore the mode on the temporary directories, which nothing upstream of here can keep.
-
-    Buck stores no mode beyond the executable bit, so a package's `0o1777` is gone by the time a
-    layer is a build artifact however faithfully it was extracted. Here is the last point before
-    the image is written, and the only one where the mode survives into it.
-    """
+    """Apply the temporary-directory exception to the image permission policy."""
     for name in _WORLD_WRITABLE:
         path = tree / name
-        if path.is_dir() and not path.is_symlink():
+        if path.is_dir() and not path.is_symlink() and stat.S_IMODE(path.stat().st_mode) != 0o1777:
             path.chmod(0o1777)
 
 
@@ -59,11 +71,14 @@ def image(
     program: str,
     lowers: Sequence[str | Path] | None = None,
     binds: Sequence[tuple[str | Path, str | Path]] | None = None,
+    base: int = 0,
 ) -> Generator[Path]:
     """Mount the image stack the spec names and yield the finalized tree."""
-    with rootfs.rootfs(
-        "/buildroot", lowers=spec["lower"] if lowers is None else lowers, binds=binds
-    ) as tree:
+    with (
+        storage.root(spec["lower"] if lowers is None else lowers, base=base) as restored,
+        rootfs.rootfs("/buildroot", bind=restored, binds=binds) as tree,
+    ):
+        normalize_modes(tree)
         # Before the snippets, so an image that states a mode of its own still wins.
         world_writable(tree)
         apply_tmpfiles(tree, spec["tmpfiles"], program=program)

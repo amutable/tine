@@ -23,7 +23,6 @@ import specs
 from util import fail
 
 import macros
-import rootfs
 import transaction
 
 # A multilib package in a pinned-arch transaction indicates a bad solve.
@@ -250,7 +249,7 @@ def main(argv: list[str] | None = None) -> None:
         installroot = None
         if solve_spec["lower"]:
             # An ephemeral upper keeps the lower stack unchanged.
-            installroot = stack.enter_context(rootfs.rootfs("/installroot", lowers=solve_spec["lower"]))
+            installroot = stack.enter_context(transaction.installed_root(solve_spec["lower"]))
         tx = plan(
             repos,
             install,
