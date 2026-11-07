@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> None:
     epoch = int(os.environ["SOURCE_DATE_EPOCH"])
 
     with (
-        finalize.image(spec, program="sbom") as tree,
+        finalize.image(spec) as tree,
         tempfile.TemporaryDirectory(prefix="syft.") as home,
     ):
         env = os.environ | {

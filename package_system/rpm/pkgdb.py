@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "pkgdb", argv)
 
     out = Path(spec["out"])
-    with finalize.image(spec, program="pkgdb") as tree:
+    with finalize.image(spec) as tree:
         src = tree / DBPATH
         if not src.exists():
             fail(f"no rpmdb at {src}; the image has no installed packages")

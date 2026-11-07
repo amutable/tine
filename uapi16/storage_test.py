@@ -443,6 +443,29 @@ class TestStorage(unittest.TestCase):
             self.assertEqual((root / "a").read_text(), "identical")
             self.assertFalse((root / "new").samefile(root / "new-independent"))
 
+    def test_capture_keeps_modes_and_clears_set_id_bits(self) -> None:
+        # A snapshot stores modes as installed, except setuid and setgid. Snapshots store no owner, so
+        # a set-id file would run as root. Capture a tree with private, sticky and set-id modes. The
+        # restored tree must keep every mode except the set-id bits.
+        self.tree.chmod(0o700)
+        (self.tree / "sticky").mkdir()
+        (self.tree / "sticky").chmod(0o1777)
+        (self.tree / "setgid").mkdir()
+        (self.tree / "setgid").chmod(0o2755)
+        for name, mode in (("secret", 0o600), ("group", 0o664), ("setuid", 0o4755), ("setgid-tty", 0o2711)):
+            (self.tree / name).write_text(name)
+            (self.tree / name).chmod(mode)
+        storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
+        with storage.root([self.store], readonly=True) as restored:
+            root = restored.path
+            modes = {
+                name: stat.S_IMODE((root / name).lstat().st_mode)
+                for name in ("sticky", "setgid", "secret", "group", "setuid", "setgid-tty")
+            }
+            self.assertEqual(stat.S_IMODE(root.lstat().st_mode), 0o700)
+        expected = {"sticky": 0o1777, "setgid": 0o755, "secret": 0o600, "group": 0o664, "setuid": 0o755}
+        self.assertEqual(modes, expected | {"setgid-tty": 0o711})
+
     def test_capture_reads_only_changed_files(self) -> None:
         # capture() reuses the digests of restored files that commands didn't change. In a private copy
         # and in an overlay, overwrite an inherited file in place with contents of the same size and

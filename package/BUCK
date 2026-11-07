@@ -50,7 +50,7 @@ python.library(
 python.library(
     name = "transaction",
     srcs = ["transaction.py"],
-    deps = [":snapshotter", "//:util"],
+    deps = [":snapshotter", "//:util", "//rootfs:rootfs", "//uapi16:storage"],
     visibility = ["PUBLIC"],
 )
 

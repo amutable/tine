@@ -138,7 +138,6 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
         # instead of packages.
         package_sets = ["initrd"] + ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     cpio = declare_image_archive(
@@ -223,7 +222,6 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = generated(ctx.attrs.ops, ctx.attrs.packages + ctx.attrs.package_sets),
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     archive = declare_image_archive(
@@ -268,7 +266,6 @@ def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = ctx.attrs.ops,
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     return declare_extension(
@@ -305,7 +302,6 @@ def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = _PORTABLE_MOUNT_POINTS + generated(ctx.attrs.ops, ctx.attrs.packages + ctx.attrs.package_sets),
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     return declare_portable(
@@ -350,7 +346,6 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         package_sets = ctx.attrs.package_sets,
         parent = ctx.attrs.parent[ImageInfo] if ctx.attrs.parent != None else None,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = version,
     )
 

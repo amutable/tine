@@ -104,8 +104,12 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
             inodes[entry.inode] = obj
         objects.append(obj)
     for obj in objects:
-        # Snapshot ownership is root even when a package manager installs another owner.
+        # Snapshot ownership is root even when a package manager installs another owner. A setuid or
+        # setgid file would therefore run as root, for example a binary that a package installed
+        # setgid tty. Clearing the set-id bits prevents that.
         obj["uid"] = obj["gid"] = 0
+        if "mode" in obj:
+            obj["mode"] &= ~(stat.S_ISUID | stat.S_ISGID)
     uapi16.write_objects(objects, out / uapi16.MANIFEST)
 
 

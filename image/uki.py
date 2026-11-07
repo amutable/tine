@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> None:
     pcr = spec["sign_expected_pcr"]
 
     with (
-        finalize.image(spec, program="uki") as tree,
+        finalize.image(spec) as tree,
         tempfile.TemporaryDirectory(prefix="boot.") as scratch_dir,
     ):
         scratch = Path(scratch_dir)
