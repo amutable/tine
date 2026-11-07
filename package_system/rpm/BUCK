@@ -35,7 +35,7 @@ python.binary(
     name = "plan",
     main = "plan.py",
     boxes = [_BOX],
-    deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
+    deps = [":macros", "//:specs", "//:util", "//package:transaction"],
 )
 
 python.library(name = "rpmbuild", srcs = ["rpmbuild.py"], deps = ["//:util", "//package:builder"])
@@ -96,7 +96,7 @@ python.test(
     name = "plan-test",
     box = _BOX,
     srcs = ["createrepo.py", "plan.py", "plan_test.py"],
-    deps = [":macros", "//:specs", "//:util", "//package:transaction", "//rootfs:rootfs"],
+    deps = [":macros", "//:specs", "//:util", "//package:transaction"],
 )
 
 python.test(

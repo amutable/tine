@@ -27,7 +27,6 @@ import specs
 from util import fail
 
 import alpm
-import rootfs
 import transaction
 from href import relative_href
 
@@ -111,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="plan.")))
         if spec["lower"]:
             # An ephemeral upper keeps the lower stack unchanged while alpm writes into the root.
-            root = stack.enter_context(rootfs.rootfs("/installroot", lowers=spec["lower"]))
+            root = stack.enter_context(transaction.installed_root(spec["lower"]))
         else:
             root = scratch / "root"
             root.mkdir()
