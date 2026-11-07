@@ -16,6 +16,7 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 from typing import override
+from unittest import mock
 
 import uapi16
 
@@ -251,7 +252,8 @@ class TestDeviceNodes(unittest.TestCase):
             (mode, 0, 0, 1, 0, 0, 0, 0, EPOCH - 1, 0),
             {"st_rdev": rdev, "st_mtime_ns": (EPOCH - 1) * 10**9},
         )
-        return uapi16.file_object(uapi16.Entry(name="dev/x", path=Path("dev/x"), st=st), epoch=EPOCH)
+        with mock.patch.object(uapi16.os, "listxattr", return_value=[]):
+            return uapi16.file_object(uapi16.Entry(name="dev/x", path=Path("dev/x"), st=st), epoch=EPOCH)
 
     def test_a_character_device_carries_its_numbers_and_nothing_a_file_would(self) -> None:
         self.assertEqual(

@@ -53,7 +53,7 @@ tine//box/                box bootstrap and sandbox command construction
 tine//rootfs/             bind/overlay mounting and stored-delta translation
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
-tine//uapi16/             UAPI.16 manifests
+tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them
 tine//archive/            tar writer, cpio reader and writer
 tine//git/                pinned Git repositories with local checkout overrides
 tine//cargo/              vendored crate trees and offline Rust source builds
@@ -1171,6 +1171,52 @@ not preserve general ownership, capabilities, xattrs, or every mode bit. Authore
 recreate paths, modes, and xattrs during terminal assembly. Ownership is deliberately normalized to uid/gid
 zero rather than reconstructed. SELinux labels are not currently produced.
 
+A snapshot store keeps what a Buck directory artifact loses. Its UAPI.16 manifest lists logical paths, inode
+types, modes, nanosecond modification times, user extended attributes, symlink targets and explicit hardlink
+groups, and regular-file contents are immutable SHA-256 blobs. Each store contains only blobs absent from its
+parents; the ordered store list remains an explicit input to every consumer. Content references use
+`blobs/<sha256>` in the combined store namespace, resolved in store order. A store with parents therefore
+needs its declared parent stores to resolve its references. The root object of a snapshot also holds the
+metadata of the root directory.
+
+Equal bytes share storage without sharing an inode. Reproducible `inodeToken` counters identify explicit
+hardlink groups independently of content digests. Capture reads the visible filesystem, so deletions,
+native OverlayFS whiteouts, opaque directories and file/directory replacements disappear from the next
+snapshot. Logical names never become the file names of a snapshot store. Capture clamps modification times
+to the action's `SOURCE_DATE_EPOCH`, so the same install at another time writes the same manifest.
+
+Reconstruction first reflinks one blob into the temporary directory. If that works, it clones every file into
+a private root. Each independent file gets its own inode with shared data extents, and only declared hardlink
+groups share an inode. Metadata restoration and later writes leave cached blobs unchanged. A read-only root
+is a read-only bind mount of the private root. Reconstruction tests a clone instead of checking the
+filesystem type. Separate btrfs filesystems cannot reflink between each other, and other filesystems support
+reflinks too.
+
+Reconstruction creates one inode per file of the snapshot. Capture reads a regular file only when its device,
+inode number, ctime, modification time or size changed since reconstruction. Every write sets the ctime and
+the modification time. An action therefore costs time in proportion to the number of files in its root plus
+the size of the files it changes.
+
+If the blob cannot be reflinked, reconstruction uses OverlayFS. Each independent file has a sparse metadata
+inode in the normal lower layer and reads contents from the blob stores as data-only lower layers. Explicit
+hardlink groups start as private clones or copies in the upper, with aliases linked to that private inode.
+`index=off` would break a lower hardlink group on copy-up. Metadata restoration finishes before mounting.
+Directory times are restored after their contents, and symlink metadata is applied without following the
+link.
+
+On the overlay path, metadata changes and data writes copy independent files into the upper. `metacopy=off`
+copies file data even for chmod; the kernel attempts a reflink and falls back to a byte copy. An unprivileged
+mount cannot enable `redirect_dir`, so renaming an inherited directory fails with `EXDEV`
+on this path. It works in a private root, so a command that renames an inherited directory only builds on
+a filesystem with reflinks. A command that creates a hardlink to an inherited independent file can
+see different inode numbers for the source and alias even though writes affect both. Snapshot capture scans
+the visible tree and uses the upper inode to identify the actual hardlink group. The complete snapshot
+retains the group when the root is reconstructed or exported.
+
+Read-only overlays use only metadata inodes in the normal lower, with aliases linked for declared groups.
+Temporary roots are removed when the operation exits, including on failure. There is no persistent
+materialized-root cache.
+
 ### Selecting a distribution
 
 Which distribution an image is built from is a configuration, and the target carries it.
@@ -1763,7 +1809,7 @@ set would also get a separate `buck-out`. Keeping one isolation directory preser
 switching between checkouts; with every command running its own daemon, nothing else tells the mount
 sets apart, and the `TINE_MOUNTS` variable only names the one a nested invocation inherited.
 
-### Require Linux 6.15 for sandbox and project mounts
+### Require Linux 6.16 for sandbox, project and snapshot mounts
 
 The sandbox builds every filesystem as a detached mount, assembles its root as a detached tmpfs, and
 attaches the result once. It uses `open_tree_attr()`, mounting onto a detached mount, and cloning a mount
@@ -1771,9 +1817,13 @@ out of a detached mount from the [Linux 6.15 mount API][mount-api-6.15]. The box
 clones out of the detached tools tree, and `File` clones its file out of a private tmpfs. Overlay layer
 file descriptors require [Linux 6.13 or newer][overlay-layer-fds].
 
+A snapshot root on a filesystem without reflinks is an overlay with data-only lower layers. An unprivileged
+overlay must use `userxattr`, which turns metacopy off. Linux 6.15 refuses data-only layers without
+metacopy, and [Linux 6.16][overlay-data-only] accepts them.
+
 An older kernel floor would require attaching the root first and keeping staging mount points for the
 tools tree and `File`. Kernels without overlay layer file descriptors would also need escaped path
-strings. The 6.15 floor keeps one mount mechanism without staging directories. Hosts with older kernels
+strings. The 6.15 mount API keeps one mount mechanism without staging directories. Hosts with older kernels
 need a newer kernel. `tine mount` uses the same mount operations and requires the same version.
 
 The host root must also support `pivot_root()`. Kernels that [cannot pivot their initramfs
@@ -1782,6 +1832,7 @@ root][initramfs-pivot] require booting from another root filesystem.
 [mount-api-6.15]: https://github.com/torvalds/linux/blob/v6.15/fs/namespace.c
 [overlay-layer-fds]:
   https://docs.kernel.org/filesystems/overlayfs.html#specifying-layers-via-file-descriptors
+[overlay-data-only]: https://docs.kernel.org/6.16/filesystems/overlayfs.html
 [initramfs-pivot]: https://docs.kernel.org/6.15/filesystems/ramfs-rootfs-initramfs.html#what-is-initramfs
 
 ## Operating the current system
