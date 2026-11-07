@@ -25,6 +25,7 @@ The host needs only:
  * `git`
  * `/bin/sh`, which runs the fetch of a Rust project's git dependencies
  * `/dev/kvm` to run VMs for testing; without it, you can still build everything
+ * Read access to `/proc/sys/kernel/overflowuid` for directory exports
 
 tine uses the host's `python` and `git` to bootstrap itself and to read the project's git state, such as the
 version an image derives from it. A build also runs the host's `git` to fetch git checkouts, and the host's

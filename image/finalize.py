@@ -27,6 +27,7 @@ from util import fail
 
 import rootfs
 import storage
+import uapi16
 
 
 class ImageSpec(TypedDict):
@@ -370,3 +371,61 @@ def locale_gen(tree: Path) -> None:
         # it wrote nothing. Only 0 means that the archive contains the locale.
         if rc != 0:
             fail(f"locale_gen: `{' '.join(cmd)}` failed (rc={rc})")
+
+
+def _remove(objects: dict[str, uapi16.Object], relative: str, epoch: int) -> None:
+    path = Path(relative)
+    name = storage.resolve(objects, relative, follow=False)
+    removed = False
+    for child in list(objects):
+        if child == name or child.startswith(name + "/"):
+            del objects[child]
+            removed = True
+    while True:
+        path = path.parent
+        name = storage.resolve(objects, str(path))
+        directory = objects.get(name)
+        if directory is None or directory["type"] != "dir":
+            return
+        if removed:
+            # Removing a file from a real tree sets the mtime of its directory to the current time.
+            # snapshot() clamps that time to the epoch.
+            directory["mTimeNSec"] = epoch * 10**9
+        # remove_path() stops at a parent that is a symlink.
+        if name == "." or objects[storage.resolve(objects, str(path), follow=False)]["type"] == "lnk":
+            return
+        if any(child.startswith(name + "/") for child in objects):
+            return
+        del objects[name]
+        removed = True
+
+
+@contextlib.contextmanager
+def snapshot(
+    spec: ImageSpec,
+    *,
+    program: str,
+    epoch: int,
+    pkgdb_paths: Sequence[str] = (),
+) -> Generator[storage.Snapshot]:
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+        if spec["tmpfiles"]:
+            out = Path(scratch) / "snapshot"
+            with image(spec, program=program) as tree:
+                storage.capture(tree, out, spec["lower"], epoch=epoch)
+            result = storage.Snapshot([*spec["lower"], out])
+        else:
+            result = storage.Snapshot(spec["lower"])
+            for obj in result.objects:
+                if obj["type"] == "dir":
+                    obj["mode"] = 0o1777 if obj.get("name") in _WORLD_WRITABLE else 0o755
+                elif obj["type"] == "reg":
+                    obj["mode"] = 0o755 if obj["mode"] & 0o111 else 0o644
+        objects = storage.by_name(result.objects)
+        for relative in pkgdb_paths:
+            _remove(objects, relative, epoch)
+        result.objects = list(objects.values())
+        uapi16.renumber(result.objects)
+        for obj in result.objects:
+            obj["mTimeNSec"] = min(obj.get("mTimeNSec", epoch * 10**9), epoch * 10**9)
+        yield result

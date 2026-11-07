@@ -1780,10 +1780,9 @@ belong to one package system are listed in its own section instead:
 - A root box verifies its packages with the `rpmkeys` of its own unverified stage1, so a tampered rpm
   package in the seed could defeat the check for that box; every other box and every image verifies with a
   predecessor. Arch packages are not verified at all.
-- Archive ownership is intentionally normalized to uid/gid zero. Capabilities, xattrs, and SELinux labels do
-  not survive as Buck directory metadata; deferred tmpfiles can restore xattrs at terminal assembly, and tar
-  preserves them in PAX headers, but newc cpio cannot represent general xattrs.
-- Directory image output cannot represent backslashes in names; archive outputs should be used instead.
+- Archive ownership is intentionally normalized to uid/gid zero. Snapshots keep user xattrs but no
+  capabilities, other xattr namespaces or SELinux labels. Deferred tmpfiles can restore xattrs at terminal
+  assembly, tar preserves user xattrs in PAX headers, and newc cpio cannot represent xattrs.
 - The default `/usr`-only disk has a volatile root, so the `/etc` a build writes is not what such an image
   boots with; first-boot defaults come from credentials instead. Package and authored state outside `/usr`
   is not yet translated into factory defaults or another persistent partition. How much `/etc` such an

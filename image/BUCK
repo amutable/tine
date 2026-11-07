@@ -49,7 +49,9 @@ python.binary(
         "//:util",
         "//archive:cpio",
         "//archive:tar",
+        "//box:isolation",
         "//uapi16:storage",
+        "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
 )
@@ -98,6 +100,7 @@ python.binary(
         "//:specs",
         "//:util",
         "//archive:cpio",
+        "//archive:tar",
         "//kmod:kmod",
     ],
     visibility = ["PUBLIC"],
@@ -122,6 +125,8 @@ python.test(
     srcs = [
         "ami_import.py",
         "ami_import_test.py",
+        "archive.py",
+        "archive_test.py",
         "ddi.py",
         "ddi_test.py",
         "finalize_test.py",
@@ -142,6 +147,7 @@ python.test(
         "//:specs",
         "//:util",
         "//archive:cpio",
+        "//archive:tar",
         "//box:isolation",
         "//kmod:kmod",
         "//package:installer",
@@ -178,7 +184,7 @@ python.binary(
 python.library(
     name = "finalize",
     srcs = ["finalize.py"],
-    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage"],
+    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage", "//uapi16:uapi16"],
     visibility = ["PUBLIC"],
 )
 

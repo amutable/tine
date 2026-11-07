@@ -24,8 +24,8 @@ def main(argv: list[str] | None = None) -> None:
 
     out = Path(spec["out"])
     epoch = int(os.environ["SOURCE_DATE_EPOCH"])
-    with finalize.image(spec, program="manifest") as tree:
-        written = uapi16.write(tree, out, epoch)
+    with finalize.snapshot(spec, program="manifest", epoch=epoch) as snapshot:
+        written = uapi16.write_listing(snapshot.objects, out)
     print(f"manifest: wrote {written} objects -> {out}", file=sys.stderr)
 
 

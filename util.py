@@ -241,7 +241,7 @@ def remove_path(path: Path, with_parents: bool = False) -> None:
         return
     for parent in path.parents:
         # `parent.parent` stops the walk at the filesystem root.
-        if parent == parent.parent or not parent.is_dir() or any(parent.iterdir()):
+        if parent == parent.parent or parent.is_symlink() or not parent.is_dir() or any(parent.iterdir()):
             break
         parent.rmdir()
 

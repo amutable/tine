@@ -852,8 +852,26 @@ helper label. The same `image.InitrdInfo`, containing its logical `image.ImageIn
 `image.ImageArchiveInfo`, is the sole typed provider published by `[initrd]`. Merely carrying an artifact
 in a provider does not build it;
 optional actions run only when a consumer uses the artifact or a user selects its subtarget.
-`[directory]` has the same representability limit as `image.directory`: it fails when the completed tree
-contains a path, such as a systemd-escaped unit name, that Buck directory artifacts cannot store.
+`[directory]` contains a UAPI.16 manifest and content blobs. Export it after Buck has materialized the
+artifact, so the destination retains modes, times, user extended attributes, symlinks and hardlinks.
+
+Directory export requires read access to `/proc/sys/kernel/overflowuid`. Keep the stored manifest and blobs
+immutable while exporting. The destination must not exist. Its parent must be owned by you or root. A parent
+with group or other write permissions must have the sticky bit, as `/var/tmp` does. Use a parent owned by you
+if Buck runs in a user namespace that does not map its owner's uid. The exporter rejects a parent owned by
+the overflow uid, which is how a user namespace shows an owner that it does not map. The exporter creates a
+private user namespace when needed; uid/gid zero then maps to your host uid/gid. Device nodes require
+permission to create them on the destination filesystem.
+
+```sh
+tine buck run 'tine//examples/image:boot-demo.fedora[directory]' -- /var/tmp/tine-image-export/root
+```
+
+The stored manifest remains authoritative if you copy the Buck artifact elsewhere; copying an exported
+directory with a tool that drops metadata requires exporting it again from the stored snapshot.
+
+The `[manifest]` of an archive or disk describes its terminal contents, including authored tmpfiles and
+package-database removal. `[pkgdb]` and `[sbom]` describe the installed package set.
 
 `[boot]` is what the disk boots, as files: the `bootable` rule run against the composition's own ESP, so a
 direct kernel boot or a publisher needs no second target pointing back at it. Its `[kernel]` and `[initrd]`
