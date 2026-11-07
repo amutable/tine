@@ -199,7 +199,7 @@ def _microcode(tree: Path, scratch: Path, epoch: int, efi_arch: str) -> Path | N
     for path in root.rglob("*"):
         path.chmod(0o755 if path.is_dir() else 0o644)
     archive = scratch / "microcode.cpio"
-    cpio.pack_tree(root, archive, epoch, block_align=False)
+    cpio.pack_tree(root, archive, epoch)
     print(f"uki: microcode for {', '.join(packed)} in {archive.stat().st_size // 1024} KiB", file=sys.stderr)
     return archive
 

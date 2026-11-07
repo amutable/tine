@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Archive and materialized-directory image outputs."""
+"""Archive and snapshot image outputs."""
 
 load("//distribution:defs.bzl", "distribution")
 load(
@@ -22,13 +22,14 @@ ImageArchiveInfo = provider(
     fields = {
         "archive": provider_field(Artifact),
         "format": provider_field(str),
+        "manifest": provider_field(Artifact),
     },
 )
 
-ImageDirectoryInfo = provider(
-    doc = "A materialized logical image directory.",
+ImageSnapshotInfo = provider(
+    doc = "The stored snapshot of a logical image, which `buck run` exports as a directory.",
     fields = {
-        "directory": provider_field(Artifact),
+        "store": provider_field(Artifact),
     },
 )
 
@@ -49,6 +50,7 @@ def declare_image_archive(
     captures the database from the tree itself.
     """
     out = declare_out(ctx, identifier, "image." + format + _COMPRESSION_EXT[compression])
+    listing = declare_out(ctx, identifier, "image." + format + ".Uapi16Manifest")
     cmd = terminal_image_command(
         ctx,
         # One image can be archived in several formats, so the spec is named like the output.
@@ -59,57 +61,65 @@ def declare_image_archive(
         spec = {
             "compression": compression,
             "format": format,
+            "manifest": listing.as_output(),
             "out": out.as_output(),
             "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         },
     )
     ctx.actions.run(cmd, category = "image_" + format, identifier = identifier or format)
-    return ImageArchiveInfo(archive = out, format = format)
+    return ImageArchiveInfo(archive = out, format = format, manifest = listing)
 
 ARCHIVE_ATTRS = {
     "compression": attrs.enum(COMPRESSIONS, default = "none"),
     "format": attrs.enum(["tar", "cpio"], default = "tar"),
 }
 
-def declare_image_directory(
+def declare_image_snapshot(
     ctx: AnalysisContext,
     *,
     tools: ImageToolsInfo,
     image: ImageInfo,
     identifier: str | None = None,
-) -> ImageDirectoryInfo:
-    """Declare a directory materialization from a resolved logical image."""
-    out = declare_out(ctx, identifier, "image.rootfs", dir = True)
+) -> ImageSnapshotInfo:
+    """Declare the stored snapshot of a resolved logical image."""
+    out = declare_out(ctx, identifier, "image.snapshot", dir = True)
     cmd = terminal_image_command(
         ctx,
-        driver = "directory",
+        driver = "snapshot",
         exe = tools.archive,
         identifier = identifier,
         image = image,
         spec = {
             "compression": "none",
-            "format": "directory",
+            "format": "snapshot",
+            "manifest": None,
             "out": out.as_output(),
             "pkgdb_paths": [],
         },
     )
-    ctx.actions.run(cmd, category = "image_directory", identifier = identifier or "directory")
-    return ImageDirectoryInfo(directory = out)
+    ctx.actions.run(cmd, category = "image_snapshot", identifier = identifier or "snapshot")
+    return ImageSnapshotInfo(store = out)
 
-def _image_directory_impl(ctx: AnalysisContext) -> list[Provider]:
-    info = declare_image_directory(ctx, tools = ctx.attrs._tools[ImageToolsInfo], image = ctx.attrs.image[ImageInfo])
-    return [DefaultInfo(default_output = info.directory), info]
+def image_snapshot_providers(tools: ImageToolsInfo, info: ImageSnapshotInfo) -> list[Provider]:
+    """Return the providers of a `[snapshot]` target or sub-target for `info`, which export it when run."""
+    export = RunInfo(args = cmd_args(tools.archive[RunInfo], "export", "--store", info.store))
+    return [DefaultInfo(default_output = info.store), export, info]
 
-_image_directory = rule(
-    impl = _image_directory_impl,
+def _image_snapshot_impl(ctx: AnalysisContext) -> list[Provider]:
+    tools = ctx.attrs._tools[ImageToolsInfo]
+    info = declare_image_snapshot(ctx, tools = tools, image = ctx.attrs.image[ImageInfo])
+    return image_snapshot_providers(tools, info)
+
+_image_snapshot = rule(
+    impl = _image_snapshot_impl,
     attrs = {
-        "image": attrs.dep(providers = [ImageInfo], doc = "the logical image to materialize"),
+        "image": attrs.dep(providers = [ImageInfo], doc = "the logical image to store"),
     }
     | IMAGE_TOOLS_ATTR,
     supports_incoming_transition = True,
 )
 
-def image_directory(
+def image_snapshot(
     name: str,
     distro: str | None = None,
     visibility: list[str] | None = None,
@@ -117,4 +127,4 @@ def image_directory(
     **kwargs,
 ) -> None:
     """Declare one, compatible with the distributions its package serves."""
-    _image_directory(name = name, **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs))
+    _image_snapshot(name = name, **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs))

@@ -3,14 +3,14 @@
 
 """Store complete filesystem snapshots independently of artifact filesystem metadata."""
 
-import base64
+import hashlib
 import os
 import stat
 import tempfile
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from util import clone_file, fail, reflink
 
@@ -71,6 +71,12 @@ class Root:
             yield entry
 
 
+def add_blob(source: Path, destination: Path) -> None:
+    if not destination.exists():
+        clone_file(source, destination)
+        destination.chmod(0o444)
+
+
 def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch: int) -> None:
     """Write the snapshot of `tree` to `out`, with modification times clamped to `epoch`."""
     parent = Snapshot(parents)
@@ -101,10 +107,8 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
             if obj["type"] == "reg":
                 digest = obj["sha256"]
                 obj["contents"] = [{"file": f"blobs/{digest}"}]
-                destination = blobs / digest
-                if digest not in parent.blobs and not destination.exists():
-                    clone_file(entry.path, destination)
-                    destination.chmod(0o444)
+                if digest not in parent.blobs:
+                    add_blob(entry.path, blobs / digest)
             inodes[entry.inode] = obj
         objects.append(obj)
     for obj in objects:
@@ -116,14 +120,65 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
     uapi16.write_objects(objects, out / uapi16.MANIFEST)
 
 
+def save(snapshot: Snapshot, out: Path) -> None:
+    blobs = out / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    for obj in snapshot.objects[1:]:
+        if obj["type"] == "reg":
+            add_blob(snapshot.content(obj), blobs / obj["sha256"])
+    uapi16.write_objects(snapshot.objects, out / uapi16.MANIFEST)
+
+
+def check(snapshot: Snapshot) -> None:
+    """Fail when the blob of a file is missing or its contents do not match the file's digest."""
+    for obj in snapshot.objects[1:]:
+        if obj["type"] != "reg":
+            continue
+        blob = snapshot.blobs.get(obj["sha256"])
+        if blob is None:
+            fail(f"storage: the blob of {obj['name']!r} is missing")
+        with blob.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != obj["sha256"]:
+                fail(f"storage: the blob of {obj['name']!r} does not match its digest")
+
+
+def by_name(objects: Sequence[uapi16.Object]) -> dict[str, uapi16.Object]:
+    # The root object has no name. resolve() returns "." for it.
+    return {obj.get("name", "."): obj for obj in objects}
+
+
+def resolve(objects: dict[str, uapi16.Object], name: str, *, follow: bool = True) -> str:
+    resolved = PurePosixPath()
+    parts = list(PurePosixPath(name).parts)
+    hops = 0
+    while parts:
+        part = parts.pop(0)
+        if part == "..":
+            resolved = resolved.parent
+            continue
+        candidate = resolved / part
+        obj = objects.get(str(candidate))
+        if obj is None or obj["type"] != "lnk" or (not parts and not follow):
+            resolved = candidate
+            continue
+        hops += 1
+        if hops > 40:
+            fail(f"storage: too many levels of symbolic links in {name!r}")
+        target = PurePosixPath(uapi16.symlink_target(obj))
+        if target.is_absolute():
+            resolved = PurePosixPath()
+            target = target.relative_to("/")
+        parts = [*target.parts, *parts]
+    return str(resolved)
+
+
 def metadata(path: Path, obj: uapi16.Object) -> None:
     if "uid" in obj or "gid" in obj:
         os.chown(path, obj.get("uid", 0), obj.get("gid", 0), follow_symlinks=False)
     if obj["type"] != "lnk":
         path.chmod(obj["mode"])
     for name, value in obj.get("extendedAttributes", {}).get("user", {}).items():
-        data = value["text"].encode() if "text" in value else base64.b64decode(value["base64"])
-        os.setxattr(path, "user." + name, data, follow_symlinks=False)
+        os.setxattr(path, "user." + name, uapi16.xattr_value(value), follow_symlinks=False)
     os.utime(path, ns=(obj["mTimeNSec"], obj["mTimeNSec"]), follow_symlinks=False)
 
 
@@ -180,7 +235,7 @@ def restore(
                 # Metadata restoration and writes must never change a cached blob's inode.
                 clone_file(snapshot.content(obj), path)
         elif kind == "lnk":
-            path.symlink_to(os.fsdecode(base64.b64decode(obj["contents"][0]["literal"])))
+            path.symlink_to(uapi16.symlink_target(obj))
         elif kind == "fifo":
             os.mkfifo(path)
         elif kind in ("chr", "blk"):
