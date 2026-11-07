@@ -314,13 +314,15 @@ box.sh_test(
     name = "disk-manifest-test",
     labels = ["image"],
     box = "@tine//tools:dev.box",
-    test = "@tine//tests:contains.sh",
-    args = [
-        "$(location :image[disk-manifest])",
-        '"name":"usr/bin/bash"',
-        '"name":"boot/tine-tmpfiles","type":"dir","mode":448',
-        '"name":"boot/EFI/Linux',
-    ],
+    args = ["$(location :image[disk-manifest])"],
+    script = """
+# Authored tmpfiles must set the boot directory mode in the disk's filesystem listing.
+jq --seq -es '
+    any(.[]; .name == "usr/bin/bash") and
+    any(.[]; .name == "boot/tine-tmpfiles" and .type == "dir" and .mode == 448) and
+    any(.[]; .name | strings | startswith("boot/EFI/Linux"))
+' "$1"
+""",
 )
 
 # The kernel install hook is bypassed, it didn't generate its own initrd.
