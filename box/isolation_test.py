@@ -353,6 +353,55 @@ class TestMountContexts(unittest.TestCase):
                 (target / "generated").write_text("output")
             self.assertEqual((upper / "generated").read_text(), "output")
 
+    def test_overlay_reads_data_layers_without_changing_blobs(self) -> None:
+        # Sparse lower files provide distinct metadata for shared data in two hidden data layers.
+        # Reading must not copy data up; chmod and writes must leave the data layers unchanged.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
+            root = Path(directory)
+            lower, first, second, upper, work = (
+                root / name for name in ("lower", "data:one", "data,two\\", "upper", "work")
+            )
+            for path in (lower, first, second, upper, work):
+                path.mkdir()
+            (first / "shared").write_bytes(b"first")
+            (second / "shared").write_bytes(b"other")
+            (second / "inherited").write_bytes(b"parent")
+            for name, redirect, size, mode, timestamp in (
+                ("a", "shared", 5, 0o640, 111),
+                ("b", "shared", 5, 0o755, 222),
+                ("c", "inherited", 6, 0o644, 333),
+            ):
+                path = lower / name
+                with path.open("wb") as stream:
+                    stream.truncate(size)
+                os.setxattr(path, "user.overlay.metacopy", b"")
+                os.setxattr(path, "user.overlay.redirect", ("/" + redirect).encode())
+                path.chmod(mode)
+                os.utime(path, ns=(timestamp, timestamp))
+            before = (first / "shared").stat()
+            target = root / "target"
+            with isolation.Overlay(
+                (lower,), upper, work, target, datadirs=(first, second), strict_unmount=True
+            ) as mounted:
+                mounted.mount()
+                self.assertEqual({path.name for path in target.iterdir()}, {"a", "b", "c"})
+                self.assertEqual((target / "a").read_bytes(), b"first")
+                self.assertEqual((target / "b").read_bytes(), b"first")
+                self.assertEqual((target / "c").read_bytes(), b"parent")
+                self.assertFalse((target / "a").samefile(target / "b"))
+                self.assertEqual((target / "a").stat().st_mode & 0o777, 0o640)
+                self.assertEqual((target / "b").stat().st_mtime_ns, 222)
+                self.assertFalse((upper / "a").exists())
+                (target / "a").chmod(0o600)
+                self.assertTrue((upper / "a").exists())
+                self.assertEqual((upper / "a").read_bytes(), b"first")
+                (target / "a").write_bytes(b"changed")
+                self.assertEqual((target / "b").read_bytes(), b"first")
+            self.assertEqual((first / "shared").read_bytes(), b"first")
+            self.assertEqual((first / "shared").stat().st_mode, before.st_mode)
+            self.assertEqual((first / "shared").stat().st_mtime_ns, before.st_mtime_ns)
+            self.assertEqual((second / "shared").read_bytes(), b"other")
+
     def test_overlay_without_an_upper_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
             root = Path(directory)

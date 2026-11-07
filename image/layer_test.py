@@ -90,7 +90,7 @@ class TestImageWrites(unittest.TestCase):
         (lower / "cache.pyc").write_text("image cache", encoding="utf-8")
         (self.project / "cache.pyc").write_text("cache", encoding="utf-8")
         stored = self.scratch / "stored"
-        storage.capture(lower, stored, epoch=CAPTURE_EPOCH)
+        storage.capture(storage.Root(lower), stored, epoch=CAPTURE_EPOCH)
 
         def run(tag: str, cmd: object, env: object, cwd: str | None = None) -> None:
             self.assertEqual(cwd, layer.PROJECT)
@@ -111,7 +111,8 @@ class TestImageWrites(unittest.TestCase):
             )
 
         command.assert_called_once()
-        with storage.root([stored, self.out]) as tree:
+        with storage.root([stored, self.out]) as restored:
+            tree = restored.path
             self.assertEqual((tree / "copied").read_text(encoding="utf-8"), "copied")
             self.assertFalse((tree / "cache.pyc").exists())
         self.assertTrue((self.project / "cache.pyc").exists())
@@ -126,7 +127,7 @@ class TestImageWrites(unittest.TestCase):
         os.utime(source / "file", ns=(123, 123))
         os.link(source / "file", source / "linked")
         parent = self.scratch / "parent"
-        storage.capture(source, parent, epoch=CAPTURE_EPOCH)
+        storage.capture(storage.Root(source), parent, epoch=CAPTURE_EPOCH)
         copied = self.scratch / "copied-parent"
         shutil.copytree(parent, copied, copy_function=shutil.copyfile)
 
@@ -140,7 +141,8 @@ class TestImageWrites(unittest.TestCase):
 
         with mock.patch.object(layer, "_run", side_effect=command):
             self._build([["run", ["command"], {}, False]], copied)
-        with storage.root([copied, self.out]) as tree:
+        with storage.root([copied, self.out]) as restored:
+            tree = restored.path
             self.assertEqual(stat.S_IMODE((tree / "file").stat().st_mode), 0o600)
             self.assertEqual((tree / "linked").stat().st_mtime_ns, 456)
         self.assertEqual(list((self.out / "blobs").iterdir()), [])
@@ -164,6 +166,28 @@ class TestImageWrites(unittest.TestCase):
                 os.close(descriptor)
                 if Path("/buildroot").is_mount():
                     umount2("/buildroot", 0)
+
+    def test_commands_create_hardlinks_to_inherited_files(self) -> None:
+        # A command links an inherited independent file and changes its data and mode. Capture
+        # must use upper inode identity so the next image keeps the new aliases hardlinked.
+        source = self.scratch / "source-root"
+        source.mkdir()
+        (source / "file").write_text("contents")
+        parent = self.scratch / "parent"
+        storage.capture(storage.Root(source), parent, epoch=CAPTURE_EPOCH)
+
+        def command(*args: object) -> None:
+            os.link("/buildroot/file", "/buildroot/linked")
+            Path("/buildroot/file").write_text("changed")
+            Path("/buildroot/linked").chmod(0o600)
+
+        with mock.patch.object(layer, "_run", side_effect=command):
+            self._build([["run", ["command"], {}, False]], parent)
+        with storage.root([parent, self.out]) as restored:
+            tree = restored.path
+            self.assertTrue((tree / "file").samefile(tree / "linked"))
+            self.assertEqual((tree / "linked").read_text(), "changed")
+            self.assertEqual(stat.S_IMODE((tree / "file").stat().st_mode), 0o600)
 
 
 class TestRemove(unittest.TestCase):
@@ -225,8 +249,8 @@ class TestNormalization(unittest.TestCase):
         # Terminal policy normalizes regular files and directories without following links or
         # changing special-file modes. Authored tmpfiles rules run after this normalization.
         with tempfile.TemporaryDirectory(prefix="layer-test.", dir="/var/tmp") as scratch:
-            tree = Path(scratch)
-            tree.chmod(0o700)
+            tree = Path(scratch) / "source"
+            tree.mkdir(mode=0o700)
             (tree / "sub").mkdir()
             (tree / "sub").chmod(0o1777)
             (tree / "sub/file").write_text("file")
@@ -240,7 +264,12 @@ class TestNormalization(unittest.TestCase):
             (tree / "link").symlink_to("sub/secret")
             os.mkfifo(tree / "fifo", 0o600)
 
-            finalize.normalize_modes(tree)
+            store = Path(scratch) / "store"
+            storage.capture(storage.Root(tree), store, epoch=CAPTURE_EPOCH)
+            snapshot = storage.Snapshot([store])
+            finalize.normalize_snapshot(snapshot)
+            tree = Path(scratch) / "normalized"
+            storage.restore(snapshot, tree)
 
             self.assertEqual(tree.stat().st_mode & 0o7777, 0o755)
             self.assertEqual((tree / "sub").stat().st_mode & 0o7777, 0o755)
@@ -249,7 +278,6 @@ class TestNormalization(unittest.TestCase):
             self.assertEqual((tree / "sub/script").stat().st_mode & 0o7777, 0o755)
             self.assertEqual((tree / "sub/mount").stat().st_mode & 0o7777, 0o755)
             self.assertTrue((tree / "link").is_symlink())
-            # not content: whatever it is, it is not ours to rewrite
             self.assertEqual((tree / "fifo").lstat().st_mode & 0o7777, 0o600)
 
 

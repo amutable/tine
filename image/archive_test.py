@@ -51,8 +51,60 @@ class TestArchive(unittest.TestCase):
         (source / "var/lib/database").mkdir(parents=True)
         (source / "var/lib/database/contents").write_text("database")
         self.store = self.scratch / "store"
-        storage.capture(source, self.store, epoch=CAPTURE_EPOCH)
+        storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
         self.spec = finalize.ImageSpec(lower=[str(self.store)], tmpfiles=[])
+
+    def test_archives_keep_hardlinks_created_by_commands(self) -> None:
+        # A command creates a hardlink to an inherited independent file. Upper-aware capture
+        # must preserve the group in tar and cpio without linking the equal-content file a.
+        child = self.scratch / "child"
+        with storage.root([self.store]) as restored:
+            tree = restored.path
+            os.link(tree / "b", tree / "new-link")
+            storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
+        spec = finalize.ImageSpec(lower=[str(self.store), str(child)], tmpfiles=[])
+
+        # The archive writers must group paths by the captured inodeToken rather than blob digest.
+        with finalize.snapshot(spec, program="test", epoch=EPOCH) as snapshot:
+            archive._archive(snapshot, self.scratch / "image.tar", "tar", EPOCH, "none")
+            archive._archive(snapshot, self.scratch / "image.cpio", "cpio", EPOCH, "none")
+        with tarfile.open(self.scratch / "image.tar") as packed:
+            self.assertTrue(packed.getmember("./new-link").islnk())
+            self.assertEqual(packed.getmember("./new-link").linkname, "./b")
+            self.assertTrue(packed.getmember("./b").isreg())
+        entries = {entry.name: entry for entry in cpio.read((self.scratch / "image.cpio").read_bytes())}
+        self.assertEqual(entries["b"].ino, entries["new-link"].ino)
+        self.assertNotEqual(entries["a"].ino, entries["b"].ino)
+
+    def test_terminal_readers_normalize_metadata_without_copying_contents(self) -> None:
+        # A terminal reader needs normalized modes and explicit hardlinks before it reads files.
+        # Preparing metadata before the read-only mount must avoid every blob copy.
+        (self.scratch / "source/tmp").mkdir(mode=0o700)
+        (self.scratch / "source/var/tmp").symlink_to("../empty-dir")
+        storage.capture(storage.Root(self.scratch / "source"), self.store, epoch=CAPTURE_EPOCH)
+        with mock.patch.object(storage, "clone_file", side_effect=AssertionError("unexpected copy")):
+            with finalize.image(self.spec, program="test", strategy="overlay") as tree:
+                self.assertEqual(stat.S_IMODE((tree / "a").stat().st_mode), 0o644)
+                self.assertEqual(stat.S_IMODE((tree / "b").stat().st_mode), 0o755)
+                self.assertEqual(stat.S_IMODE((tree / "tmp").stat().st_mode), 0o1777)
+                self.assertTrue((tree / "var/tmp").is_symlink())
+                self.assertEqual(stat.S_IMODE((tree / "empty-dir").stat().st_mode), 0o755)
+                self.assertEqual(stat.S_IMODE((tree / "fifo").stat().st_mode), 0o600)
+                self.assertTrue((tree / "a").samefile(tree / "linked"))
+                self.assertFalse((tree / "a").samefile(tree / "b"))
+                self.assertEqual((tree / "a").read_text(), "contents")
+                self.assertEqual((tree / "a").stat().st_mtime_ns, 123)
+
+    def test_terminal_readers_apply_tmpfiles_before_reading(self) -> None:
+        # Authored tmpfiles rules need a writable root even for a terminal reader. Their modes
+        # must override normalization and their new files must be present when the reader runs.
+        spec = finalize.ImageSpec(
+            lower=self.spec["lower"], tmpfiles=["z /a 0600 - - -", "f /created 0640 - - - authored"]
+        )
+        with finalize.image(spec, program="test") as tree:
+            self.assertEqual(stat.S_IMODE((tree / "a").stat().st_mode), 0o600)
+            self.assertEqual((tree / "created").read_text(), "authored")
+            self.assertTrue((tree / "a").samefile(tree / "linked"))
 
     def test_archive_writers_read_blobs_without_reconstruction(self) -> None:
         # A terminal without tmpfiles can package its snapshot directly. Tar must preserve
@@ -288,7 +340,7 @@ class TestArchive(unittest.TestCase):
             (source / "var/lib").unlink(missing_ok=True)
             (source / "var/lib").symlink_to(target)
             store = self.scratch / f"store-{index}"
-            storage.capture(source, store, epoch=CAPTURE_EPOCH)
+            storage.capture(storage.Root(source), store, epoch=CAPTURE_EPOCH)
             for rules in ([], ["d /empty-dir - - -"]):
                 with self.subTest(target=target, rules=rules):
                     spec = finalize.ImageSpec(lower=[str(store)], tmpfiles=rules)
@@ -308,7 +360,7 @@ class TestArchive(unittest.TestCase):
             if not present:
                 shutil.rmtree(source / "var/lib/database")
             os.utime(source, ns=(111, 111))
-            storage.capture(source, self.store, epoch=CAPTURE_EPOCH)
+            storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
             for rules in ([], ["d /empty-dir - - -"]):
                 with self.subTest(present=present, rules=rules):
                     spec = finalize.ImageSpec(lower=self.spec["lower"], tmpfiles=rules)
@@ -343,7 +395,7 @@ class TestArchive(unittest.TestCase):
         (source / "var/lib/keep").touch()
         os.utime(source / "var/lib", ns=(333, 333))
         os.utime(source, ns=(111, 111))
-        storage.capture(source, self.store, epoch=CAPTURE_EPOCH)
+        storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
         with finalize.snapshot(
             self.spec, program="test", epoch=EPOCH, pkgdb_paths=["var/lib/database"]
         ) as snapshot:

@@ -6,7 +6,7 @@ SPDX-License-Identifier: MPL-2.0
 # Building images
 
 How to declare, build, and run OS images. This is the user guide. The architecture behind it (the
-provider vocabulary, the delta layer model, and disk composition internals) is documented in
+provider vocabulary, image snapshots, and disk composition internals) is documented in
 [architecture.md](../design/architecture.md).
 
 ## Restrictions
@@ -20,6 +20,16 @@ writable directories such as `/etc` and `/var`.
 
 If you must have files with different permissions in your image, the escape hatch is the `tmpfiles`
 attribute of an image or composition.
+
+Image operations see the original supported modes, modification times, user extended attributes and explicit
+hardlinks from their parent snapshot. Permission normalization applies when producing terminal outputs,
+before authored `tmpfiles` rules. Snapshots keep nanosecond timestamps, and capture clamps them to
+`SOURCE_DATE_EPOCH`. Cpio stores whole seconds and has no extended attributes. Linux's
+initramfs unpacker recreates hardlinked symlinks as separate symlinks.
+
+Image paths must satisfy [UAPI.16](https://uapi-group.org/specifications/specs/file_manifest/): normalized
+relative UTF-8 paths without control characters. The top-level names `Uapi16Manifest` and
+`Uapi16Manifest.*` are reserved. Backslashes and literal `.wh.*` and `.esc.*` names work without escaping.
 
 A layer that adds a program or shared library which would run on an executable stack fails to build: one
 whose `PT_GNU_STACK` program header is executable, or which has none on x86, where glibc then falls back
@@ -398,7 +408,8 @@ at all. `install_docs = False` likewise installs no documentation, keeping the l
 Logical images and terminal outputs are separate rule families. Terminal rules merge the layer stack only
 when needed:
 
-- `image.directory` materializes a Buck directory artifact and provides `image.ImageDirectoryInfo`;
+- `image.directory` builds an authoritative manifest and content blobs and provides
+  `image.ImageDirectoryInfo`;
 - `image.uki` builds the unified kernel image for the image's single installed kernel from one or more cpio
   `image.ImageArchiveInfo` dependencies and provides `image.UkiInfo`, named `<image_id>_<version>_<arch>.efi`
   (defaults: target name and `0`; systemd architecture spelling, e.g. `x86-64`), the shape

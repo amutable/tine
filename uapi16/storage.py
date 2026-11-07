@@ -4,16 +4,21 @@
 """Store complete filesystem snapshots independently of artifact filesystem metadata."""
 
 import os
+import re
 import stat
 import tempfile
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
-from util import clone_file, fail
+from util import ReflinkUnavailable, clone_file, fail, reflink
 
 import uapi16
-from isolation import Overlay
+from isolation import Bind, Overlay
+
+type Strategy = Literal["auto", "copy", "overlay"]
 
 
 class Snapshot:
@@ -54,18 +59,34 @@ class Snapshot:
 
     def content(self, obj: uapi16.Object) -> Path:
         digest = obj["sha256"]
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or any(c not in "0123456789abcdef" for c in digest)
-        ):
+        if not isinstance(digest, str) or not re.fullmatch("[0-9a-f]{64}", digest):
             fail(f"storage: invalid SHA-256 digest {digest!r}")
         if digest not in self.blobs:
             fail(f"storage: missing blob {digest} for {obj['name']!r}")
         path = self.blobs[digest]
-        if not stat.S_ISREG(path.lstat().st_mode) or path.stat().st_size != obj["size"]:
+        st = path.lstat()
+        if not stat.S_ISREG(st.st_mode) or st.st_size != obj["size"]:
             fail(f"storage: invalid blob {digest} for {obj['name']!r}")
         return path
+
+
+@dataclass(frozen=True)
+class Root:
+    path: Path
+    upper: Path | None = None
+
+    def entries(self) -> Generator[uapi16.Entry]:
+        for entry in uapi16.entries(self.path):
+            if self.upper is not None and entry.st.st_nlink > 1 and not stat.S_ISDIR(entry.st.st_mode):
+                # OverlayFS can report different origin inodes for paths linked after copy-up.
+                # The upper inode identifies the hardlink group that commands actually modified.
+                try:
+                    st = (self.upper / entry.name).lstat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    entry = replace(entry, st=st)
+            yield entry
 
 
 def add_blob(source: Path, destination: Path) -> None:
@@ -74,14 +95,14 @@ def add_blob(source: Path, destination: Path) -> None:
         destination.chmod(0o444)
 
 
-def capture(tree: Path, out: Path, parents: Sequence[str | Path] = (), *, epoch: int) -> None:
+def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch: int) -> None:
     """Write the snapshot of `tree` to `out`, with modification times clamped to `epoch`."""
     parent = Snapshot(parents)
     blobs = out / "blobs"
     blobs.mkdir(parents=True, exist_ok=True)
-    found = list(uapi16.entries(tree))
+    found = list(tree.entries())
     tokens = uapi16.hardlink_tokens(found)
-    root = uapi16.file_object(uapi16.Entry("", tree, tree.lstat()), epoch=epoch)
+    root = uapi16.file_object(uapi16.Entry("", tree.path, tree.path.lstat()), epoch=epoch)
     root.pop("name")
     root["mediaType"] = uapi16.MEDIA_TYPE
     objects = [root]
@@ -155,27 +176,52 @@ def metadata(path: Path, obj: uapi16.Object) -> None:
         os.utime(path, ns=(obj["mTimeNSec"], obj["mTimeNSec"]), follow_symlinks=False)
 
 
-def restore(snapshot: Snapshot, tree: Path, *, hardlinks: bool | None = None) -> None:
-    """Restore private inodes, optionally selecting linked or independent files."""
+def restore(
+    snapshot: Snapshot,
+    tree: Path,
+    *,
+    metacopy: bool = False,
+    upper: Path | None = None,
+) -> None:
+    """Restore private files or prepare metadata and hardlinks for OverlayFS."""
     tree.mkdir(parents=True, exist_ok=True)
     groups: dict[int, Path] = {}
     directories = [(tree, snapshot.objects[0])]
+    linked_parents = set()
+    if upper is not None:
+        upper.mkdir()
+        directories.append((upper, snapshot.objects[0]))
+        linked_parents = {
+            str(parent)
+            for obj in snapshot.objects[1:]
+            if obj.get("inodeToken")
+            for parent in Path(obj["name"]).parents
+        }
     for obj in snapshot.objects[1:]:
-        path = tree / obj["name"]
         kind = obj["type"]
         token = obj.get("inodeToken")
+        # index=off breaks lower hardlinks on copy-up, so writable groups start in the upper.
+        private = upper is not None and token
+        path = (upper if private else tree) / obj["name"]
         if kind == "dir":
             path.mkdir()
             directories.append((path, obj))
-            continue
-        if hardlinks is not None and bool(token) != hardlinks:
+            if upper is not None and obj["name"] in linked_parents:
+                (upper / obj["name"]).mkdir()
+                directories.append((upper / obj["name"], obj))
             continue
         if token and token in groups:
             os.link(groups[token], path, follow_symlinks=False)
             continue
         if kind == "reg":
-            # Metadata restoration and writes must never change a cached blob's inode.
-            clone_file(snapshot.content(obj), path)
+            if metacopy and not private:
+                with path.open("wb") as stream:
+                    stream.truncate(obj["size"])
+                os.setxattr(path, "user.overlay.metacopy", b"")
+                os.setxattr(path, "user.overlay.redirect", ("/" + obj["sha256"]).encode())
+            else:
+                # Metadata restoration and writes must never change a cached blob's inode.
+                clone_file(snapshot.content(obj), path)
         elif kind == "lnk":
             path.symlink_to(uapi16.symlink_target(obj))
         elif kind == "fifo":
@@ -209,8 +255,28 @@ def _identities(objects: Sequence[uapi16.Object]) -> dict[str, tuple[uapi16.Obje
     return identities
 
 
+def _reflinks(snapshot: Snapshot, scratch: Path) -> bool:
+    # clone_file() reflinks through copy_file_range() where the filesystem supports reflinks. On other
+    # filesystems it copies every byte, and copying every blob is slower than an overlay mount.
+    blob = next(iter(snapshot.blobs.values()), None)
+    if blob is None:
+        return True
+    try:
+        reflink(blob, scratch / "reflink")
+    except ReflinkUnavailable:
+        return False
+    return True
+
+
 @contextmanager
-def root(stores: Sequence[str | Path], *, base: int = 0) -> Generator[Path]:
+def root(
+    stores: Sequence[str | Path],
+    *,
+    base: int = 0,
+    readonly: bool = False,
+    strategy: Strategy = "auto",
+    prepare: Callable[[Snapshot], None] | None = None,
+) -> Generator[Root]:
     snapshot = Snapshot(stores)
     if base:
         inherited = _identities(Snapshot(stores[:base]).objects[1:])
@@ -221,14 +287,32 @@ def root(stores: Sequence[str | Path], *, base: int = 0) -> Generator[Path]:
         snapshot.objects = [snapshot.objects[0]] + [
             obj for obj in snapshot.objects[1:] if obj["name"] in changed or obj["name"] in needed
         ]
-    with ExitStack() as stack:
-        scratch = Path(
-            stack.enter_context(tempfile.TemporaryDirectory(prefix="snapshot-root.", dir="/var/tmp"))
-        )
-        lower, upper, work, merged = (scratch / name for name in ("lower", "upper", "work", "root"))
-        restore(snapshot, lower, hardlinks=False)
-        # index=off splits lower hardlinks on copy-up. Upper hardlinks keep their inode on writes.
-        restore(snapshot, upper, hardlinks=True)
-        work.mkdir()
-        stack.enter_context(Overlay((lower,), upper, work, merged)).mount()
-        yield merged
+    if prepare is not None:
+        prepare(snapshot)
+    # Overlay refuses a read-only mount with one lower layer and no data layer. An empty snapshot
+    # has no blob directories to use as data layers.
+    if not snapshot.stores:
+        strategy = "copy"
+    with tempfile.TemporaryDirectory(prefix="snapshot-root.", dir="/var/tmp") as temporary:
+        scratch = Path(temporary)
+        tree = scratch / "root"
+        if strategy == "auto":
+            strategy = "copy" if _reflinks(snapshot, scratch) else "overlay"
+        if strategy == "copy":
+            restore(snapshot, tree)
+            with ExitStack() as stack:
+                if readonly:
+                    bound = stack.enter_context(Bind(tree, tree, readonly=True))
+                    bound.mount()
+                yield Root(tree)
+            return
+        lower = scratch / "lower"
+        upper = None if readonly else scratch / "upper"
+        work = None if readonly else scratch / "work"
+        restore(snapshot, lower, metacopy=True, upper=upper)
+        if work is not None:
+            work.mkdir()
+        datadirs = tuple(store / "blobs" for store in snapshot.stores)
+        with Overlay((lower,), upper, work, tree, datadirs=datadirs) as mounted:
+            mounted.mount()
+            yield Root(tree, upper)

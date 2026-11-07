@@ -260,14 +260,15 @@ def _extension_seed(identity: str, name: str, releases: list[Release]) -> uuid.U
     return uuid.uuid5(_EXTENSION_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _os_release(tree: Path) -> dict[str, str]:
+def _os_release(snapshot: storage.Snapshot) -> dict[str, str]:
     """Parse the parent image's os-release for strict extension matching."""
+    objects = storage.by_name(snapshot.objects)
     for candidate in ("usr/lib/os-release", "etc/os-release"):
-        path = tree / candidate
-        if not path.is_file():
+        obj = objects.get(storage.resolve(objects, candidate))
+        if obj is None or obj["type"] != "reg":
             continue
         fields = {}
-        for line in path.read_text().splitlines():
+        for line in snapshot.content(obj).read_text().splitlines():
             key, sep, value = line.strip().partition("=")
             if key and sep and not key.startswith("#"):
                 fields[key] = value.strip("\"'")
@@ -290,21 +291,18 @@ def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, st
     return strict | release
 
 
-def _extension_layers(spec: Spec, extension: ExtensionSpec) -> tuple[list[Release], list[str | Path]]:
-    """Pin release fields to the parent and retain every store needed to resolve contents."""
+def _extension_releases(spec: Spec, extension: ExtensionSpec) -> list[Release]:
     releases = extension["releases"]
     parent = extension["parent"]
-    lowers: list[str | Path] = list(spec["lower"])
     if not parent:
-        return releases, lowers
-    with storage.root(lowers[:parent]) as tree:
-        fields = _os_release(tree)
+        return releases
+    fields = _os_release(storage.Snapshot(spec["lower"][:parent]))
     if "ID" not in fields:
         util.fail("ddi: the parent os-release lacks ID")
     pinned = [
         Release(path=release["path"], fields=pin_release(fields, release["fields"])) for release in releases
     ]
-    return pinned, lowers
+    return pinned
 
 
 def empty_directories(tree: Path, directories: list[str]) -> None:
@@ -468,13 +466,15 @@ def main(argv: list[str] | None = None) -> None:
         for index, partition in enumerate(partitions, start=len(written))
     ]
     extension = spec["extension"]
-    releases: list[Release] = []
-    lowers = None
-    if extension:
-        releases, lowers = _extension_layers(spec, extension)
+    releases = _extension_releases(spec, extension) if extension else []
     with (
         finalize.image(
-            spec, program="ddi", lowers=lowers, binds=binds, base=extension["parent"] if extension else 0
+            spec,
+            program="ddi",
+            binds=binds,
+            base=extension["parent"] if extension else 0,
+            readonly=False,
+            strategy="copy",
         ) as tree,
         tempfile.TemporaryDirectory(prefix="repart.") as scratch_dir,
     ):

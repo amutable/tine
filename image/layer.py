@@ -293,9 +293,10 @@ def main(argv: list[str] | None = None) -> None:
 
     lower = spec["lower"]
     with (
-        storage.root(lower) as tree,
+        storage.root(lower) as restored,
         tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
     ):
+        tree = restored.path
         with rootfs.rootfs("/buildroot", bind=tree, apivfs=True, strict_unmount=True) as target:
             if install is not None:
                 _install(install, target, Path(scratch))
@@ -306,7 +307,7 @@ def main(argv: list[str] | None = None) -> None:
             util.fail(
                 "image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks)
             )
-        storage.capture(tree, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
+        storage.capture(restored, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
     print(
         f"image: applied {len(operations)} ops over {len(lower)} parent store(s) -> {out}", file=sys.stderr
     )

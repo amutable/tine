@@ -182,8 +182,8 @@ def installed_root(lowers: Sequence[str]) -> Generator[Path]:
     # A snapshot store contains `uapi16.MANIFEST` at its top level. A box layer is a plain directory
     # tree, and no package installs a file of that name into the root.
     if (Path(lowers[-1]) / uapi16.MANIFEST).exists():
-        with storage.root(lowers) as tree:
-            yield tree
+        with storage.root(lowers) as restored:
+            yield restored.path
     else:
         with rootfs.rootfs("/installroot", lowers=lowers) as tree:
             yield tree

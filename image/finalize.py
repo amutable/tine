@@ -15,7 +15,6 @@ import contextlib
 import gzip
 import os
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
@@ -37,32 +36,7 @@ class ImageSpec(TypedDict):
     tmpfiles: list[str]
 
 
-def _normalize_mode(path: Path) -> None:
-    """Normalize file permissions for path.
-
-    See docs/user/images.md.
-    """
-    mode = path.lstat().st_mode
-    desired = 0o755 if stat.S_ISDIR(mode) or mode & 0o111 else 0o644
-    if (stat.S_ISDIR(mode) or stat.S_ISREG(mode)) and stat.S_IMODE(mode) != desired:
-        path.chmod(desired)
-
-
-def normalize_modes(tree: Path) -> None:
-    _normalize_mode(tree)
-    for path in tree.rglob("*"):
-        _normalize_mode(path)
-
-
 _WORLD_WRITABLE = ("tmp", "var/tmp")
-
-
-def world_writable(tree: Path) -> None:
-    """Apply the temporary-directory exception to the image permission policy."""
-    for name in _WORLD_WRITABLE:
-        path = tree / name
-        if path.is_dir() and not path.is_symlink() and stat.S_IMODE(path.stat().st_mode) != 0o1777:
-            path.chmod(0o1777)
 
 
 @contextlib.contextmanager
@@ -70,20 +44,41 @@ def image(
     spec: ImageSpec,
     *,
     program: str,
-    lowers: Sequence[str | Path] | None = None,
     binds: Sequence[tuple[str | Path, str | Path]] | None = None,
     base: int = 0,
+    readonly: bool = True,
+    strategy: storage.Strategy = "auto",
 ) -> Generator[Path]:
     """Mount the image stack the spec names and yield the finalized tree."""
+    with _root(
+        spec, program=program, binds=binds, base=base, readonly=readonly, strategy=strategy
+    ) as restored:
+        yield restored.path
+
+
+@contextlib.contextmanager
+def _root(
+    spec: ImageSpec,
+    *,
+    program: str,
+    binds: Sequence[tuple[str | Path, str | Path]] | None = None,
+    base: int = 0,
+    readonly: bool = True,
+    strategy: storage.Strategy = "auto",
+) -> Generator[storage.Root]:
     with (
-        storage.root(spec["lower"] if lowers is None else lowers, base=base) as restored,
-        rootfs.rootfs("/buildroot", bind=restored, binds=binds) as tree,
+        storage.root(
+            spec["lower"],
+            base=base,
+            # Authored tmpfiles rules write into the root. They fail on a read-only root.
+            readonly=readonly and not spec["tmpfiles"],
+            strategy=strategy,
+            prepare=normalize_snapshot,
+        ) as restored,
+        rootfs.rootfs("/buildroot", bind=restored.path, binds=binds) as tree,
     ):
-        normalize_modes(tree)
-        # Before the snippets, so an image that states a mode of its own still wins.
-        world_writable(tree)
         apply_tmpfiles(tree, spec["tmpfiles"], program=program)
-        yield tree
+        yield storage.Root(tree, restored.upper)
 
 
 def apply_tmpfiles(tree: Path, snippets: list[str], *, program: str) -> None:
@@ -373,6 +368,14 @@ def locale_gen(tree: Path) -> None:
             fail(f"locale_gen: `{' '.join(cmd)}` failed (rc={rc})")
 
 
+def normalize_snapshot(snapshot: storage.Snapshot) -> None:
+    for obj in snapshot.objects:
+        if obj["type"] == "dir":
+            obj["mode"] = 0o1777 if obj.get("name") in _WORLD_WRITABLE else 0o755
+        elif obj["type"] == "reg":
+            obj["mode"] = 0o755 if obj["mode"] & 0o111 else 0o644
+
+
 def _remove(objects: dict[str, uapi16.Object], relative: str, epoch: int) -> None:
     path = Path(relative)
     name = storage.resolve(objects, relative, follow=False)
@@ -411,16 +414,12 @@ def snapshot(
     with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
         if spec["tmpfiles"]:
             out = Path(scratch) / "snapshot"
-            with image(spec, program=program) as tree:
-                storage.capture(tree, out, spec["lower"], epoch=epoch)
+            with _root(spec, program=program, readonly=False) as restored:
+                storage.capture(restored, out, spec["lower"], epoch=epoch)
             result = storage.Snapshot([*spec["lower"], out])
         else:
             result = storage.Snapshot(spec["lower"])
-            for obj in result.objects:
-                if obj["type"] == "dir":
-                    obj["mode"] = 0o1777 if obj.get("name") in _WORLD_WRITABLE else 0o755
-                elif obj["type"] == "reg":
-                    obj["mode"] = 0o755 if obj["mode"] & 0o111 else 0o644
+            normalize_snapshot(result)
         objects = storage.by_name(result.objects)
         for relative in pkgdb_paths:
             _remove(objects, relative, epoch)
