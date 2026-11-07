@@ -6,20 +6,30 @@ SPDX-License-Identifier: MPL-2.0
 # Building images
 
 How to declare, build, and run OS images. This is the user guide. The architecture behind it (the
-provider vocabulary, the delta layer model, and disk composition internals) is documented in
+provider vocabulary, image snapshots, and disk composition internals) is documented in
 [architecture.md](../design/architecture.md).
 
 ## Restrictions
 
-File permissions in built images are normalized: 0755 for directories and executables, 0644 for files.
-This deliberately breaks suid/sgid executables and the sticky bit: these need to be replaced with
-socket-activated services and other safer alternatives. `/tmp` and `/var/tmp` keep their `1777`, which is
-restored when the image is finalized. Nothing on a `/usr` partition ought to be a secret, and
-[`tmpfiles.d`](https://man7.org/linux/man-pages/man5/tmpfiles.d.5.html) handles permissions of files in
-writable directories such as `/etc` and `/var`.
+Images keep the modes that packages and operations set, except for the setuid and setgid bits, which tine
+clears. Every file in an image is owned by uid and gid 0, so a setgid `tty` binary would otherwise run with
+the root group. Replace suid and sgid executables with socket-activated services and other safer
+alternatives.
 
-If you must have files with different permissions in your image, the escape hatch is the `tmpfiles`
-attribute of an image or composition.
+`image.ops.copy` gives a copied file mode 0755 if it is executable and 0644 otherwise, and creates missing
+directories with mode 0755. git only stores the executable bit, so the image doesn't depend on the umask of
+your checkout. To give a file another mode, run `chmod` in an `image.ops.run()` operation.
+
+Image operations see the modes, modification times, user extended attributes and explicit hardlinks of their
+parent snapshot. Snapshots keep nanosecond timestamps, and capture clamps them to `SOURCE_DATE_EPOCH`. Cpio
+stores whole seconds and has no extended attributes.
+
+A layer that creates a character device with device number 0/0 fails to build, because overlayfs reads such
+a device as a deleted file.
+
+Image paths must satisfy [UAPI.16](https://uapi-group.org/specifications/specs/file_manifest/): normalized
+relative UTF-8 paths without control characters. The top-level names `Uapi16Manifest` and
+`Uapi16Manifest.*` are reserved. Backslashes and literal `.wh.*` and `.esc.*` names work without escaping.
 
 A layer that adds a program or shared library which would run on an executable stack fails to build: one
 whose `PT_GNU_STACK` program header is executable, or which has none on x86, where glibc then falls back
@@ -214,7 +224,7 @@ be trusted because procfs magic links can access paths outside the image.
 `image.layer` has two construction modes. An initial image takes `package_manager`, which defaults to the
 package manager of the distribution that the build chooses. A derived image takes `parent` and inherits the
 package manager of that image. A call with operations applies one ordered operation sequence in one action
-and persists exactly one delta:
+and persists exactly one snapshot:
 
 - `packages` and `package_sets` are rule attributes rather than operations: a layer installs them as one
   request before any of its operations run, so every operation sees what the layer adds. `package_sets`
@@ -235,7 +245,7 @@ and persists exactly one delta:
   project like any other artifact. It takes the same `env` and `chroot` arguments, so the script either
   sees the image
   at `/buildroot` or has it as its own root; in the chrooted case nothing of the interpreter reaches the
-  delta, because the project bind carrying it lives under `/run`.
+  snapshot, because the project bind carrying it lives under `/run`.
 - `image.ops.copy` introduces a declared Buck artifact at an absolute image path; `image.ops.mkdir` and
   `image.ops.symlink` mutate the same root. `image.ops.remove` treats its absolute path as a glob pattern,
   including recursive `**`, and removes every matching file, symlink, or directory tree. A pattern that
@@ -418,7 +428,7 @@ database whenever the image has a package manager. The same artifacts are expose
 ```
 
 The `version` attribute sets the SBOM source version and defaults to `"0"`. Merely building the image still
-produces only its latest delta. Selecting `[pkgdb]` runs the image's package system's capture driver;
+produces only its latest snapshot. Selecting `[pkgdb]` runs the image's package system's capture driver;
 selecting either nested SBOM format runs one shared scan of the completed stack.
 
 `[manifest]` is a [UAPI.16 File Manifest](https://uapi-group.org/specifications/): an RFC7464 JSON-SEQ
@@ -528,8 +538,7 @@ image.extension(
 )
 ```
 
-With `parent`, the DDI contains only what the target adds on top of `parent`. Only the `tmpfiles` lines that
-the target adds apply to the DDI, so a line of `parent` creates nothing in it. `parent` can be any image
+With `parent`, the DDI contains only what the target adds on top of `parent`. `parent` can be any image
 except another extension. Without `parent`, the DDI contains the whole tree of the image. The DDI is an
 erofs root partition, its verity hash partition and, with `verity_key`, a signature over the verity root
 hash. A host validates the signature against the certificates in its `/usr/lib/verity.d/`, and enforces it
@@ -620,8 +629,7 @@ described above.
 
 Required attributes:
 
-- `ops` (operation list) and `tmpfiles` (list of tmpfiles.d lines): Build the root filesystem layer;
-  passed on to `image.layer`.
+- `ops` (operation list): Build the root filesystem layer; passed on to `image.layer`.
 - `definitions` (list of `image.partition()` descriptors): Partition layout; `image.DEFAULT_ROOT_PARTITIONS`,
   `image.DEFAULT_USR_VERITY_PARTITIONS`, and `image.DEFAULT_SIGNED_USR_VERITY_PARTITIONS` are reusable
   conventional layouts; a bootable disk needs system and ESP partitions.
@@ -1281,7 +1289,7 @@ tine buck build //examples/image:demo-ext.fedora
 tine buck build //examples/image:demo-portable.fedora
 ```
 
-These validate package installation and commands sharing one delta, incremental layering, archive packing,
+These validate package installation and commands sharing one layer, incremental layering, archive packing,
 versioned UKI creation, semantic boot-artifact extraction, ESP-layer assembly, and disk composition.
 `demo-ext` is a system extension and `demo-confext` a configuration extension on top of `boot-demo`.
 `demo-portable` is a portable service image, and `demo-portable-ext` an extension for it. Running

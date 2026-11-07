@@ -117,8 +117,11 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
             inodes[entry.inode] = obj
         objects.append(obj)
     for obj in objects:
-        # Snapshot ownership is root even when a package manager installs another owner.
+        # "Filesystem layer representation" in docs/design/architecture.md says why capture clears the
+        # set-id bits.
         obj["uid"] = obj["gid"] = 0
+        if "mode" in obj:
+            obj["mode"] &= ~(stat.S_ISUID | stat.S_ISGID)
     uapi16.write_objects(objects, out / uapi16.MANIFEST)
 
 

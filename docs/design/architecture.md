@@ -1154,36 +1154,22 @@ package's directory does not exist when the tests run.
 
 ### Filesystem layer representation
 
-Buck directory artifacts cannot faithfully store overlay whiteout devices, opaque-directory xattrs, or a
-backslash in a path component. tine stores filesystem deltas in a regular-file representation:
-
-- `.wh.<name>` represents a whiteout;
-- `.wh..wh..opq` represents an opaque directory;
-- `.esc.<percent-escaped-name>` represents a path component Buck cannot store.
-
-`rootfs.capture()` translates a native overlay upper into this form after unmounting. Before a later mount,
-`rootfs.rootfs()` constructs sparse sidecar layers that translate the stored markers back to native
-overlayfs whiteouts/xattrs and thaw escaped names. Stored layers remain ordinary Buck artifacts and can
-therefore move through its CAS.
-
-Directory modes are made traversable so Buck can materialize/delete them, and Buck's artifact model does
-not preserve general ownership, capabilities, xattrs, or every mode bit. Authored tmpfiles snippets can
-recreate paths, modes, and xattrs during terminal assembly. Ownership is deliberately normalized to uid/gid
-zero rather than reconstructed. SELinux labels are not currently produced.
-
-A snapshot store keeps what a Buck directory artifact loses. Its UAPI.16 manifest lists logical paths, inode
-types, modes, nanosecond modification times, user extended attributes, symlink targets and explicit hardlink
-groups, and regular-file contents are immutable SHA-256 blobs. Each store contains only blobs absent from its
-parents; the ordered store list remains an explicit input to every consumer. Content references use
-`blobs/<sha256>` in the combined store namespace, resolved in store order. A store with parents therefore
-needs its declared parent stores to resolve its references. The root object of a snapshot also holds the
-metadata of the root directory.
+An image-producing action writes a complete UAPI.16 snapshot before Buck publishes its outputs. Logical
+paths, inode types, modes, nanosecond modification times, user extended attributes, symlink targets and
+explicit hardlink groups are in the manifest. Regular-file contents are immutable SHA-256 blobs. Each store
+contains only blobs absent from its parents; the ordered store list remains an explicit input to every
+consumer. Content references use `blobs/<sha256>` in the combined store namespace, resolved in store order. A
+store with parents therefore needs its declared parent stores to resolve its references. The root object of a
+snapshot also holds the metadata of the root directory. The listing of a partition has a root object with
+only the media type.
 
 Equal bytes share storage without sharing an inode. Reproducible `inodeToken` counters identify explicit
-hardlink groups independently of content digests. Capture reads the visible filesystem, so deletions,
-native OverlayFS whiteouts, opaque directories and file/directory replacements disappear from the next
-snapshot. Logical names never become the file names of a snapshot store. Capture clamps modification times
-to the action's `SOURCE_DATE_EPOCH`, so the same install at another time writes the same manifest.
+hardlink groups independently of content digests. A metadata-only change changes the manifest and therefore
+Buck's input digest. Capture reads the visible merged filesystem after scriptlets and authored operations;
+deletions disappear from the next snapshot, including native OverlayFS whiteouts, opaque directories and
+file/directory replacements. Logical names never become the file names of a snapshot store. Capture clamps
+modification times to the action's `SOURCE_DATE_EPOCH`, so the same install at another time writes the same
+manifest.
 
 Reconstruction first reflinks one blob into the temporary directory. If that works, it clones every file into
 a private root. Each independent file gets its own inode with shared data extents, and only declared hardlink
@@ -1214,8 +1200,20 @@ the visible tree and uses the upper inode to identify the actual hardlink group.
 retains the group when the root is reconstructed or exported.
 
 Read-only overlays use only metadata inodes in the normal lower, with aliases linked for declared groups.
-Temporary roots are removed when the operation exits, including on failure. There is no persistent
-materialized-root cache.
+Boot selection, UKI assembly, artifact extraction and SBOM scanning select between private reflinks and
+read-only overlays. Disk image and archive assembly get a writable root, because they change the tree before
+they read it. Temporary roots are removed when the operation exits, including on failure. There is no
+persistent materialized-root cache.
+
+Boxes and other directory-layer callers of `rootfs` retain their direct mounting path and marker encoding:
+`.wh.<name>` represents a whiteout, `.wh..wh..opq` an opaque directory and `.esc.<percent-escaped-name>` an
+unstorable component. Ordinary box startup does not parse image manifests or reconstruct image roots.
+
+Ownership remains uid/gid zero. Capture clears the setuid and setgid bits, because a set-id file owned by
+root would run as root even when its package installed it for another user or group. Capture clears the
+setgid bit of a directory too. The group of every directory is root, so on the booted image the bit would
+give every new file in the directory the root group. Every other mode stays as the package or operation set
+it. Security labels, capabilities and named ACL entries are unsupported.
 
 ### Selecting a distribution
 
@@ -1283,35 +1281,34 @@ whether the key is set or not, so CI does not depend on it.
 ### Image construction
 
 The `image.layer` rule creates either an initial image from a package manager, or a derived image from
-`parent`. `image.ImageInfo` carries the package manager, the box the image runs in, an ordered stack of
-filesystem deltas, deferred tmpfiles snippets, and the canonical lazy package-database and SBOM artifacts. A
-derived image inherits the construction configuration but declares fresh metadata for its completed stack, so
-one composition cannot silently switch package sources or tooling environments between stages.
+`parent`. `image.ImageInfo` carries the package manager, the box the image runs in, an ordered list of
+snapshot stores, and the canonical lazy package-database and SBOM artifacts. A derived image inherits the
+construction configuration but declares fresh metadata for its completed stack, so one composition cannot
+silently switch package sources or tooling environments between stages.
 
-Each `image.layer` call applies one ordered operation sequence in one action and persists exactly one overlay
-upper. A layer's `packages` and `package_sets` are rule attributes rather than operations: it installs them
-as one request before any operation runs, while `run`, `copy`, `mkdir`, `symlink`, and `remove` mutate the
-same root afterwards. A package set resolves its symbolic name through the image's package manager during
-analysis and joins the concrete names in the same request, deduplicated. Installation is a property of the
-layer rather than a position in it because a layer resolves one closure at analysis time over the stack below
-it: a second install could only ever be solved blind to what the first one added, so there is nothing an
-ordering could mean. Making it an attribute is also what lets operation sequences compose, since two lists
-that both need packages no longer collide, and what lets a sequence name a package set and extra packages
-together, which a set alone cannot express because its members are known only during analysis. Installing
-against the result of an earlier install is a second layer, which is where a closure resolved over that
-result becomes available. `copy` introduces a declared Buck artifact at an absolute image path, preserving
-its position relative to the other operations. `run` executes the image's own tools in a chroot by default;
-`chroot = False` instead executes box tooling with the image available at `/buildroot`. Its `env` argument
-overlays variables on the box or image environment for that command. Package installation runs outside the
-chroot. `copy`, `merge_os_release`, `mkdir`, `symlink`, `write_file` and `remove` run inside it, so ordinary
-absolute symlinks resolve relative to the image. The `image.layer()` declaration macro recursively flattens
-operation lists,
-allowing reusable helpers to return ordered groups of operations. Every rule that accepts operations is
-wrapped in a declaration macro that flattens them the same way, so a helper returning an ordered group
-works identically in `image.layer()` and in a composition; the underlying attribute stays a flat, typed
-list so Buck can track every embedded source dependency. An `image.install()` target carries `packages`
-beside its operations, so a reusable target declares what it needs and `image.ops.install_from()` folds that
-into the installing layer's own request.
+Each `image.layer` call applies one ordered operation sequence in one action and persists one complete
+snapshot with its new blobs. A layer's `packages` and `package_sets` are rule attributes rather than
+operations: it installs them as one request before any operation runs, while `run`, `copy`, `mkdir`,
+`symlink`, and `remove` mutate the same root afterwards. A package set resolves its symbolic name through the
+image's package manager during analysis and joins the concrete names in the same request, deduplicated.
+Installation is a property of the layer rather than a position in it because a layer resolves one closure at
+analysis time over the stack below it: a second install could only ever be solved blind to what the first one
+added, so there is nothing an ordering could mean. Making it an attribute is also what lets operation
+sequences compose, since two lists that both need packages no longer collide, and what lets a sequence name a
+package set and extra packages together, which a set alone cannot express because its members are known only
+during analysis. Installing against the result of an earlier install is a second layer, which is where a
+closure resolved over that result becomes available. `copy` introduces a declared Buck artifact at an
+absolute image path, preserving its position relative to the other operations. `run` executes the image's own
+tools in a chroot by default; `chroot = False` instead executes box tooling with the image available at
+`/buildroot`. Its `env` argument overlays variables on the box or image environment for that command. Package
+installation runs outside the chroot. `copy`, `merge_os_release`, `mkdir`, `symlink`, `write_file` and
+`remove` run inside it, so ordinary absolute symlinks resolve relative to the image. The `image.layer()`
+declaration macro recursively flattens operation lists, allowing reusable helpers to return ordered groups of
+operations. Every rule that accepts operations is wrapped in a declaration macro that flattens them the same
+way, so a helper returning an ordered group works identically in `image.layer()` and in a composition; the
+underlying attribute stays a flat, typed list so Buck can track every embedded source dependency. An
+`image.install()` target carries `packages` beside its operations, so a reusable target declares what it
+needs and `image.ops.install_from()` folds that into the installing layer's own request.
 
 `install_langs` narrows the install to the translated files of the named languages, and `install_docs`
 drops documentation while keeping licenses. Neither ever enters the tree, so the package database records
@@ -1320,7 +1317,7 @@ sequence, not the logical image's lifetime: an initrd needs neither, while the r
 want both. Each package system implements them in its own driver. A sequence that installs nothing ignores
 both, so a composition can forward them to a layer whose operations happen to skip installation.
 
-An `image.layer` exposes its newly persisted delta, the full stack and canonical metadata through
+An `image.layer` exposes its snapshot, parent stores and canonical metadata through
 `image.ImageInfo`, and the same metadata through lazy `[manifest]`, `[pkgdb]` and `[sbom]` subtargets.
 `image.ImageSbomInfo` gives typed consumers only the two SBOM formats. Declaring a logical image declares
 its metadata with it, because they are intrinsic metadata facets of every logical image: an
@@ -1378,27 +1375,24 @@ packages no package manager knows about, such as Go modules bundled into ELF bin
 Terminal rules leave the package database and other package state intact. An extension drops the database
 from the paths the image's package system declares, because a merged extension must not replace the host's.
 Image cleanup is an explicit, configurable layer so output formats do not silently alter image contents.
-Every terminal driver receives the ordered layer stack and the deferred tmpfiles snippets of its image. An
-extension receives only the snippets that it adds to its base, because a snippet of the base would create a
-file of the base in the extension. The driver applies the snippets with `systemd-tmpfiles --root` before
-reading or emitting image content; a missing tool is an error whenever finalization is needed. The directives
-run against a disposable overlay upper and can create paths or restore modes and xattrs. Image-shipped
-tmpfiles configuration is not applied implicitly; enabling it will be an explicit output option once its
-single-UID/GID behavior is defined. Ownership and named ACL entries are deliberately unsupported: all archive
-entries use uid/gid zero.
+Every terminal driver receives the ordered layer stack of its image. Image-shipped tmpfiles configuration
+is not applied at build time; enabling it will be an explicit output option once its single-UID/GID
+behavior is defined. Ownership and named ACL entries are deliberately unsupported: all archive entries use
+uid/gid zero.
 
 Tar uses deterministic PAX archives and stores Linux xattrs using `SCHILY.xattr.*` headers. The newc cpio
-format has no general xattr representation. Tar/cpio entries are ordered and mtimes are clamped to the fixed
-assembly epoch. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when possible
-so large archives can share extents on reflink-capable filesystems. `compression = "zstd"` compresses the
-finished archive in the same action, so the uncompressed form never becomes a Buck artifact; zstd's
-multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The initrd
-uses it, while the kernel-modules cpio that `uki.py` appends stays raw because the distribution already
-ships each module compressed; the kernel unpacks the concatenation as independently compressed segments.
+format has no general xattr representation. Tar/cpio entries are ordered. Mtimes are clamped to the fixed
+assembly epoch. Tar and cpio store whole seconds. The cpio reader/writer aligns regular-file payloads and
+uses `copy_file_range` when possible so large archives can share extents on reflink-capable filesystems.
+`compression = "zstd"` compresses the finished archive in the same action, so the uncompressed form never
+becomes a Buck artifact; zstd's multi-threaded output is byte-identical to its single-threaded output, so
+this stays reproducible. The initrd uses it, while the kernel-modules cpio that `uki.py` appends stays raw
+because the distribution already ships each module compressed; the kernel unpacks the concatenation as
+independently compressed segments.
 
 `declare_ddi()` in `ddi.bzl` deliberately distinguishes `definitions` from `partitions`. Definitions describe
-new partitions to populate directly from `image.ImageInfo`: repart mounts the delta stack with a disposable
-overlay upper instead of first copying a directory artifact. Partition inputs are `image.DdiInfo` outputs
+new partitions to populate directly from `image.ImageInfo`: repart reads a temporary root reconstructed
+from the snapshot and blobs. Partition inputs are `image.DdiInfo` outputs
 from an earlier split call; their blocks are copied into the new disk with their resolved type and UUID
 preserved. Calls emit a disk by default. `split = True` additionally exposes each newly defined partition
 with normalized metadata alongside its block artifact; `disk = False` makes such a call partition-only. No
@@ -1461,18 +1455,16 @@ never means restating what it already does, and `install_docs` and `install_lang
 image wants, since documentation and translations only cost an initrd boot memory. It generates before it
 prunes, so the hardware database it ships is compiled from the sources it then drops. The rule archives the
 image into the cpio itself, at the `compression` it declares, and returns both as `image.InitrdInfo`
-alongside the image's own providers. That cpio omits the package database from the paths the image's
-package system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel
-unpacks the whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]`, `[pkgdb]`
-and `[sbom]` views
-read the tree rather than the archive, so they still describe the complete installed set.
-A bootable `image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is
-the initrd target's own output and its compression is declared where the initrd is. A composition given
-no `initrd` declares `<name>.initrd` for itself through the same macro, inheriting its package manager,
-version, and distribution; the default is therefore an ordinary target that can be built and inspected on
-its own rather than an anonymous step inside the disk image. The composition publishes the provider it was
-given from `[initrd]` and returns the same
-instance directly, so both interfaces describe exactly the same initrd.
+alongside the image's own providers. That cpio omits the package database from the paths the image's package
+system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel unpacks the
+whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]`, `[pkgdb]` and `[sbom]`
+views read the tree rather than the archive, so they still describe the complete installed set. A bootable
+`image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is the initrd
+target's own output and its compression is declared where the initrd is. A composition given no `initrd`
+declares `<name>.initrd` for itself through the same macro, inheriting its package manager, version, and
+distribution; the default is therefore an ordinary target that can be built and inspected on its own rather
+than an anonymous step inside the disk image. The composition publishes the provider it was given from
+`[initrd]` and returns the same instance directly, so both interfaces describe exactly the same initrd.
 
 `uki.py` appends the kernel-modules cpio and runs `ukify`. On x86 it also packs the microcode the image
 ships under `/usr/lib/firmware/{amd,intel}-ucode` into a `.ucode` section: one concatenated file per vendor
@@ -1608,10 +1600,10 @@ A package installs configuration that describes state rather than carrying it: m
 index, `hwdb.d` with no compiled database, a locale list with no archive. On a running system scriptlets and
 boot-time units produce it; an image being assembled is neither, so tine builds it explicitly. Each generator
 is an operation of its own rather than a step of one pass, so it is positioned where the image wants it,
-configured on its own terms, and adopted one at a time; what it writes persists into the delta that captures
-it, so it is built once and cached with the layer rather than repeated by every terminal output. An `image`
-gets the content its operations ask for and nothing else, which is the same reason terminal rules leave
-package state alone.
+configured on its own terms, and adopted one at a time; what it writes persists into the snapshot that
+captures it, so it is built once and cached with the layer rather than repeated by every terminal output. An
+`image` gets the content its operations ask for and nothing else, which is the same reason terminal rules
+leave package state alone.
 
 Each generator is a no-op for an image that carries none of what it acts on, so none of them needs
 per-distribution knowledge: `image.ops.depmod()` is silent without kernels, `image.ops.hwdb()` without
@@ -1764,11 +1756,14 @@ spec schema. Both it and the snapshot driver keep `--out` there too: the box loc
 targets let a caller name the file to write, or `-` for stdout when it has nowhere to write one, and one
 calling convention per driver beats splitting the destination by verb.
 
-### Store image layers as deltas
+### Store image snapshots with shared blobs
 
-Copying a complete root for every image step scales with total image size rather than change size. Ordered
-overlay deltas let child layers and terminal outputs reuse their ancestors. Encoding whiteouts and opaque
-directories as regular files keeps those deltas compatible with Buck's artifact/CAS model.
+Complete manifests describe visible filesystem state independently of Buck's metadata and filename limits.
+Each action stores only newly introduced content blobs and retains its parent stores as Buck inputs. Buck
+cannot store the modes, mtimes and hardlinks of a directory artifact, so a layer stored as a Buck directory
+loses them. Reconstruction costs one inode per file for every action that needs a root, where an overlay of
+stored layers cost one mount per layer. Reflinks keep that cost low, and capture only reads changed files.
+Temporary reconstruction restores inode identity and metadata before commands run.
 
 ### Prefer exact transactions over package-manager network access
 
@@ -1875,8 +1870,8 @@ belong to one package system are listed in its own section instead:
   package in the seed could defeat the check for that box; every other box and every image verifies with a
   predecessor. Arch packages are not verified at all.
 - Archive ownership is intentionally normalized to uid/gid zero. Capabilities, xattrs, and SELinux labels do
-  not survive as Buck directory metadata; deferred tmpfiles can restore xattrs at terminal assembly, and tar
-  preserves them in PAX headers, but newc cpio cannot represent general xattrs.
+  not survive as Buck directory metadata; tar preserves them in PAX headers, but newc cpio cannot represent
+  general xattrs.
 - Directory image output cannot represent backslashes in names; archive outputs should be used instead.
 - The default `/usr`-only disk has a volatile root, so the `/etc` a build writes is not what such an image
   boots with; first-boot defaults come from credentials instead. Package and authored state outside `/usr`
@@ -1951,8 +1946,8 @@ Near-term image gaps are:
 - richer ordered operations for setting file metadata directly;
 - deciding whether package installation and image tooling eventually need distinct compatible boxes.
 
-The layer model should remain ordered operations captured as deltas. A provides/requires feature solver is
-unnecessary unless real composition requirements appear.
+The layer model should remain ordered operations captured as complete snapshots. A provides/requires feature
+solver is unnecessary unless real composition requirements appear.
 
 ### Scale, configuration, and testing
 

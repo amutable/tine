@@ -287,7 +287,6 @@ def declare_ddi(
     basename: str = "image",
     identifier: str | None = None,
     extension: dict[str, typing.Any] | None = None,
-    tmpfiles: list[str] | None = None,
     exclude: list[str] = [],
     virtual_size: str | None = None,
 ) -> DdiOutput:
@@ -297,9 +296,8 @@ def declare_ddi(
     keeps it, for a system nothing ever resolves packages in. The image's `[pkgdb]` and `[sbom]`
     subtargets still capture it from the tree itself. `strip_paths` drops further files by glob, for
     what the partitions do not need but a sibling target reading the same layer still does.
-    `extension` makes the driver package the tree as an extension (see extension.bzl). `tmpfiles`
-    replaces the tmpfiles lines of `image`. The partitions leave out the contents of the directories
-    in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
+    `extension` makes the driver package the tree as an extension (see extension.bzl). The partitions
+    leave out the contents of the directories in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
     """
     _check_definitions(
         definitions,
@@ -404,9 +402,6 @@ def declare_ddi(
         "signing": signing_key_spec(verity_key),
         "strip_paths": strip_paths,
     }
-
-    if tmpfiles != None:
-        spec["tmpfiles"] = tmpfiles
 
     out = None
     manifest = None

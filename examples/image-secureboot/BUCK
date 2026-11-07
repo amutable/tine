@@ -96,9 +96,9 @@ image.disk(
         image.ops.copy("sysext.conf", "/usr/lib/systemd/sysext.conf"),
         # Plain data for the boot smoke's negative proof: a DDI the policy must refuse.
         image.ops.copy(":demo-ext-unsigned", "/usr/share/tine-example/demo-ext-unsigned.raw"),
+        # disk-manifest-test checks that the mode of a directory on the ESP reaches the disk listing.
+        image.ops.run(["mkdir", "-p", "-m", "0700", "/buildroot/boot/tine-private"]),
     ],
-    # An ESP-only path makes deferred metadata cross root, identity, and ESP before repart applies it.
-    tmpfiles = ["d /boot/tine-tmpfiles 0700 - -"],
     # This key signs the UKIs and systemd-boot, puts auto-enrollment files onto the ESP, and signs
     # the verity root hash. For a key that caches across workspaces, see image.pem_signing_key() under
     # "Secure Boot signing" in images.md.
@@ -316,10 +316,10 @@ box.sh_test(
     box = "@tine//tools:dev.box",
     args = ["$(location :image[disk-manifest])"],
     script = """
-# Authored tmpfiles must set the boot directory mode in the disk's filesystem listing.
+# The mode that an operation sets on an ESP directory must reach the disk's filesystem listing.
 jq --seq -es '
     any(.[]; .name == "usr/bin/bash") and
-    any(.[]; .name == "boot/tine-tmpfiles" and .type == "dir" and .mode == 448) and
+    any(.[]; .name == "boot/tine-private" and .type == "dir" and .mode == 448) and
     any(.[]; .name | strings | startswith("boot/EFI/Linux"))
 ' "$1"
 """,
