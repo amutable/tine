@@ -6,10 +6,12 @@
 buck test tine//:test
 """
 
+import errno
 import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import util
 
@@ -82,3 +84,39 @@ class TestNamedFiles(unittest.TestCase):
         (source / "dangling").symlink_to("missing")
 
         self.assertEqual(util.named_files(source, "wanted"), [Path("nested/wanted"), Path("wanted")])
+
+
+class TestCloneFile(unittest.TestCase):
+    def test_a_byte_copy_keeps_the_holes_of_a_sparse_file(self) -> None:
+        # Without reflinks, clone_file() copies bytes. Copy a 64 MiB file that only has data at its
+        # end. The copy must have the same contents and allocate less than 1 MiB.
+        root = scratch(self)
+        source, destination = root / "source", root / "destination"
+        with source.open("wb") as stream:
+            stream.seek(64 << 20)
+            stream.write(b"end")
+        with mock.patch.object(util.os, "copy_file_range", side_effect=OSError(errno.EXDEV, "no reflinks")):
+            util.clone_file(source, destination)
+        self.assertEqual(destination.stat().st_size, source.stat().st_size)
+        with destination.open("rb") as stream:
+            stream.seek(64 << 20)
+            self.assertEqual(stream.read(), b"end")
+        self.assertLess(destination.stat().st_blocks * 512, 1 << 20)
+
+
+class TestReflink(unittest.TestCase):
+    def test_unsupported_reflinks_raise_reflink_unavailable(self) -> None:
+        # storage.root() falls back to an overlay when reflinks are unsupported, so it must tell an
+        # unsupported reflink from a successful clone. Each errno of an unsupported or denied clone
+        # must raise ReflinkUnavailable with that errno.
+        root = scratch(self)
+        source, destination = root / "source", root / "destination"
+        source.write_bytes(b"cached contents")
+        for number in (errno.EXDEV, errno.EOPNOTSUPP, errno.EPERM):
+            with (
+                self.subTest(errno=number),
+                mock.patch.object(util.fcntl, "ioctl", side_effect=OSError(number, "unavailable")),
+                self.assertRaises(util.ReflinkUnavailable) as error,
+            ):
+                util.reflink(source, destination)
+            self.assertEqual(error.exception.errno, number)

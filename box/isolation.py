@@ -562,9 +562,17 @@ def _tmpfs(mode: str = _TMPFS_DEFAULT_MODE) -> int:
         return _fsmount(fs)
 
 
-def _overlay(lowers: tuple[str, ...], upper: str | None, work: str | None, attributes: int = 0) -> int:
+def _overlay(
+    lowers: tuple[str, ...],
+    upper: str | None,
+    work: str | None,
+    attributes: int = 0,
+    *,
+    datadirs: tuple[str, ...] = (),
+) -> int:
     """Return a detached overlay. Without `upper` and `work`, the kernel makes it read-only."""
     layers = [("lowerdir+", lower) for lower in lowers]
+    layers += [("datadir+", data) for data in datadirs]
     layers += [(key, path) for key, path in (("upperdir", upper), ("workdir", work)) if path is not None]
     with Close(_fsopen("overlay")) as fs:
         _fsconfig(fs, FSCONFIG_SET_STRING, "source", "overlayfs")
@@ -997,20 +1005,22 @@ class Overlay(_Mount):
         workdir: StrPath | None,
         target: StrPath,
         *,
+        datadirs: tuple[StrPath, ...] = (),
         strict_unmount: bool = False,
     ) -> None:
         super().__init__(target, strict_unmount=strict_unmount)
         if (upperdir is None) != (workdir is None):
             raise ValueError("Overlay takes an upperdir and a workdir, or neither")
-        if upperdir is None and len(lowerdirs) < 2:
+        if upperdir is None and len(lowerdirs) + len(datadirs) < 2:
             raise ValueError("a read-only Overlay needs at least two lowerdirs")
         self.lowerdirs = tuple(os.fspath(path) for path in lowerdirs)
+        self.datadirs = tuple(os.fspath(path) for path in datadirs)
         self.upperdir = None if upperdir is None else os.fspath(upperdir)
         self.workdir = None if workdir is None else os.fspath(workdir)
 
     @override
     def _open(self) -> int:
-        return _overlay(self.lowerdirs, self.upperdir, self.workdir)
+        return _overlay(self.lowerdirs, self.upperdir, self.workdir, datadirs=self.datadirs)
 
 
 Filesystem = Bind | File | Devices | Tmpfs | Symlink | Overlay
@@ -1054,6 +1064,13 @@ def check_kernel() -> None:
             "tine needs open_tree_attr() (Linux 6.15 or newer); it is unavailable on "
             f"Linux {os.uname().release}. A seccomp filter can also block this system call.",
         )
+    # Snapshot roots on a filesystem without reflinks are overlays with data-only lower layers. An
+    # unprivileged overlay needs userxattr, which turns metacopy off, and Linux 6.15 refuses data-only
+    # layers without metacopy. Linux 6.16 accepts them.
+    release = os.uname().release
+    major, minor, *_ = (int(part) if part.isdigit() else 0 for part in release.replace("-", ".").split("."))
+    if (major, minor) < (6, 16):
+        raise SandboxOSError(errno.ENOSYS, f"tine needs Linux 6.16 or newer; this is Linux {release}.")
 
 
 def unshare_sandbox(

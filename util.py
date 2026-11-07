@@ -5,6 +5,7 @@
 
 import bz2
 import errno
+import fcntl
 import gzip
 import http.client
 import io
@@ -30,6 +31,10 @@ _LINK_FALLBACK_ERRNOS = frozenset({errno.EMLINK, errno.EOPNOTSUPP, errno.EPERM, 
 
 _TRANSIENT_HTTP_STATUS = frozenset((408, 429, 500, 502, 503, 504))
 _FETCH_ATTEMPTS = 4
+
+
+class ReflinkUnavailable(OSError):
+    pass
 
 
 def fail(message: str) -> NoReturn:
@@ -204,8 +209,33 @@ def clone_file(src: Path, dst: Path, allow_link: bool = False) -> None:
             if error.errno not in _LINK_FALLBACK_ERRNOS:
                 raise
     with open(src, "rb") as source, open(dst, "wb") as destination:
-        copy_range(destination.fileno(), 0, source.fileno(), 0, os.fstat(source.fileno()).st_size)
+        size = os.fstat(source.fileno()).st_size
+        os.ftruncate(destination.fileno(), size)
+        # copy_range() writes zeros for the holes of a sparse file when the filesystem can't clone
+        # it. Copy only the data segments, so the copy keeps the holes.
+        offset = 0
+        while offset < size:
+            try:
+                start = os.lseek(source.fileno(), offset, os.SEEK_DATA)
+            except OSError as error:
+                if error.errno != errno.ENXIO:
+                    raise
+                break
+            end = os.lseek(source.fileno(), start, os.SEEK_HOLE)
+            copy_range(destination.fileno(), start, source.fileno(), start, end - start)
+            offset = end
     shutil.copymode(src, dst)
+
+
+def reflink(src: Path, dst: Path) -> None:
+    """Raise ReflinkUnavailable instead of copying bytes when the filesystem cannot clone src."""
+    with open(src, "rb") as source, open(dst, "wb") as destination:
+        try:
+            fcntl.ioctl(destination.fileno(), fcntl.FICLONE, source.fileno())
+        except OSError as error:
+            if error.errno in _COPY_FALLBACK_ERRNOS | {errno.EACCES, errno.EBADF, errno.ENOTTY, errno.EPERM}:
+                raise ReflinkUnavailable(error.errno, error.strerror) from error
+            raise
 
 
 def named_files(source: Path, name: str) -> list[Path]:
