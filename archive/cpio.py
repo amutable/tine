@@ -11,11 +11,13 @@ import mmap
 import os
 import stat
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath, PurePosixPath
 from typing import NamedTuple, Self
 
 import util
+
+import uapi16
 
 # What an archive is read from, spelled concretely because the reader slices it: an mmap and a
 # `bytes` both hand back `bytes`, where the `Buffer` protocol promises no indexing at all.
@@ -236,6 +238,8 @@ class Writer:
         block_align: bool,
         ino: int | None = None,
         nlink: int = 1,
+        major: int = 0,
+        minor: int = 0,
     ) -> None:
         self._ino += 1
         if name == TRAILER:
@@ -258,8 +262,8 @@ class Writer:
             filesize,
             0,
             0,
-            0,
-            0,
+            major,
+            minor,
             namesize,
             0,
         )
@@ -278,11 +282,31 @@ class Writer:
     def add_dir(self, name: str, *, mode: int, mtime: int) -> None:
         self._header(name, stat.S_IFDIR | (mode & 0o7777), 0, mtime=mtime, block_align=False)
 
-    def add_symlink(self, name: str, target: str, *, mtime: int) -> None:
+    def add_symlink(
+        self, name: str, target: str, *, mtime: int, link: tuple[int, int] | None = None
+    ) -> None:
+        ino, nlink, _ = self._link(link)
         data = os.fsencode(target)
-        self._header(name, stat.S_IFLNK | 0o777, len(data), mtime=mtime, block_align=False)
+        self._header(
+            name, stat.S_IFLNK | 0o777, len(data), mtime=mtime, block_align=False, ino=ino, nlink=nlink
+        )
         self._write(data)
         self._pad(4)
+
+    def add_node(
+        self,
+        name: str,
+        *,
+        mode: int,
+        mtime: int,
+        major: int = 0,
+        minor: int = 0,
+        link: tuple[int, int] | None = None,
+    ) -> None:
+        ino, nlink, _ = self._link(link)
+        self._header(
+            name, mode, 0, mtime=mtime, block_align=False, major=major, minor=minor, ino=ino, nlink=nlink
+        )
 
     def add_file(
         self,
@@ -340,14 +364,14 @@ def _add(w: Writer, tree: Path, path: Path, link: tuple[int, int] | None = None)
     elif stat.S_ISREG(st.st_mode):
         w.add_file(name, path, mode=mode, mtime=mtime, link=link)
     else:
-        return False  # devices/fifos/sockets: unneeded in an initramfs (systemd mounts /dev)
+        return False
     return True
 
 
-def pack_tree(tree: Path, out: Path, epoch: int, *, block_align: bool = True) -> int:
-    """Pack a whole tree into `out`."""
+def pack_tree(tree: Path, out: Path, epoch: int) -> int:
+    """Pack a whole tree into `out` without block alignment, which the kernel's early cpio reader needs."""
     tree = Path(tree)
-    return _pack_paths(tree, out, epoch, sorted(tree.rglob("*")), block_align=block_align)
+    return _pack_paths(tree, out, epoch, sorted(tree.rglob("*")), block_align=False)
 
 
 def pack_paths(tree: Path, out: Path, epoch: int, paths: Iterable[str | PurePath]) -> int:
@@ -376,3 +400,34 @@ def _pack_paths(
                 link = (tokens.setdefault(inode, len(tokens) + 1), counts[inode])
             count += _add(w, tree, path, link)
     return count
+
+
+def pack_manifest(
+    objects: Sequence[uapi16.Object],
+    content: Callable[[uapi16.Object], Path],
+    out: Path,
+    epoch: int,
+) -> None:
+    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    kinds = {"fifo": stat.S_IFIFO, "chr": stat.S_IFCHR, "blk": stat.S_IFBLK, "sock": stat.S_IFSOCK}
+    with Writer(out, epoch) as w:
+        for obj in objects:
+            kind = obj["type"]
+            name, mtime = obj.get("name", "."), obj["mTimeNSec"] // 10**9
+            token = obj.get("inodeToken")
+            link = (token, counts[token]) if token else None
+            if kind == "reg":
+                w.add_file(name, content(obj), mode=obj["mode"], mtime=mtime, link=link)
+            elif kind == "dir":
+                w.add_dir(name, mode=obj["mode"], mtime=mtime)
+            elif kind == "lnk":
+                w.add_symlink(name, uapi16.symlink_target(obj), mtime=mtime, link=link)
+            else:
+                w.add_node(
+                    name,
+                    mode=kinds[kind] | obj["mode"],
+                    mtime=mtime,
+                    major=obj.get("major", 0),
+                    minor=obj.get("minor", 0),
+                    link=link,
+                )

@@ -260,14 +260,15 @@ def _extension_seed(identity: str, name: str, releases: list[Release]) -> uuid.U
     return uuid.uuid5(_EXTENSION_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _os_release(tree: Path) -> dict[str, str]:
+def _os_release(snapshot: storage.Snapshot) -> dict[str, str]:
     """Parse the parent image's os-release for strict extension matching."""
+    objects = storage.by_name(snapshot.objects)
     for candidate in ("usr/lib/os-release", "etc/os-release"):
-        path = tree / candidate
-        if not path.is_file():
+        obj = objects.get(storage.resolve(objects, candidate))
+        if obj is None or obj["type"] != "reg":
             continue
         fields = {}
-        for line in path.read_text().splitlines():
+        for line in snapshot.content(obj).read_text().splitlines():
             key, sep, value = line.strip().partition("=")
             if key and sep and not key.startswith("#"):
                 fields[key] = value.strip("\"'")
@@ -295,8 +296,7 @@ def _extension_releases(spec: Spec, extension: ExtensionSpec) -> list[Release]:
     parent = extension["parent"]
     if not parent:
         return releases
-    with storage.root(spec["lower"][:parent], readonly=True) as restored:
-        fields = _os_release(restored.path)
+    fields = _os_release(storage.Snapshot(spec["lower"][:parent]))
     if "ID" not in fields:
         util.fail("ddi: the parent os-release lacks ID")
     pinned = [

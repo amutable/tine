@@ -235,6 +235,31 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None, digest: s
     return obj
 
 
+def _b64decode(value: str) -> bytes:
+    # UAPI.16 lets a producer use the URL-safe alphabet. b64decode() drops `-` and `_` without an
+    # error and returns the wrong bytes for such a value.
+    return base64.b64decode(value.replace("-", "+").replace("_", "/"), validate=True)
+
+
+def symlink_target(obj: Object) -> str:
+    return os.fsdecode(_b64decode(obj["contents"][0]["literal"]))
+
+
+def xattr_value(value: Xattr) -> bytes:
+    return value["text"].encode() if "text" in value else _b64decode(value["base64"])
+
+
+def write_listing(objects: Sequence[Object], out: Path) -> int:
+    # The `contents` of a regular file names a blob, and the blob only exists inside a store.
+    listed: list[Object] = []
+    for obj in objects:
+        copy = obj.copy()
+        if copy.get("type") != "lnk":
+            copy.pop("contents", None)
+        listed.append(copy)
+    return write_objects(listed, out)
+
+
 def _record(obj: Object) -> bytes:
     return (
         _RS
@@ -317,11 +342,15 @@ def merge(sources: Sequence[Path], out: Path) -> int:
             objects[str(obj["name"])] = obj
         offset += highest
 
-    tokens: dict[int, int] = {}
-    counts = Counter(obj.get("inodeToken") for obj in objects.values() if obj.get("inodeToken"))
     ordered = [objects[name] for name in sorted(objects, key=order)]
-    for obj in ordered:
+    renumber(ordered)
+    return write_objects([{"mediaType": MEDIA_TYPE}, *ordered], out)
+
+
+def renumber(objects: Sequence[Object]) -> None:
+    tokens: dict[int, int] = {}
+    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    for obj in objects:
         token = obj.pop("inodeToken", None)
         if isinstance(token, int) and counts[token] > 1:
             obj["inodeToken"] = tokens.setdefault(token, len(tokens) + 1)
-    return write_objects([{"mediaType": MEDIA_TYPE}, *ordered], out)
