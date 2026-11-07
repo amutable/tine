@@ -57,10 +57,10 @@ python.binary(
     main = "ddi.py",
     deps = [
         ":finalize",
-        ":manifest-lib",
         "//:specs",
         "//:util",
         "//rootfs:rootfs",
+        "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
 )
@@ -124,8 +124,6 @@ python.test(
         "finalize_test.py",
         "layer.py",
         "layer_test.py",
-        "manifest.py",
-        "manifest_test.py",
         "preload.py",
         "preload_test.py",
         "substitute.py",
@@ -145,6 +143,7 @@ python.test(
         "//kmod:kmod",
         "//package:installer",
         "//rootfs:rootfs",
+        "//uapi16:uapi16",
     ],
 )
 
@@ -160,25 +159,17 @@ python.binary(
 
 python.binary(
     name = "manifest",
-    main = "manifest.py",
+    main = "manifest_main.py",
     deps = [
         ":finalize",
         "//:specs",
         "//:util",
+        "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
 )
 
 # A driver that packages a tree lists it from inside its own action, where the tree is final.
-python.library(
-    name = "manifest-lib",
-    srcs = ["manifest.py"],
-    deps = [
-        ":finalize",
-        "//:specs",
-        "//:util",
-    ],
-)
 
 python.library(
     name = "finalize",
@@ -220,6 +211,7 @@ python.binary(
         "//:specs",
         "//:util",
         "//kmod:kmod",
+        "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
 )

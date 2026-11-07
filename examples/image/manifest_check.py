@@ -27,7 +27,8 @@ def decode(data: bytes) -> list[dict[str, Any]]:
 
 
 objects = decode(Path(sys.argv[1]).read_bytes())
-root, files = objects[0], objects[1:]
+assert objects[-1] == {"mediaType": "application/vnd.uapi.16.trailer"}, "missing trailer"
+root, files = objects[0], objects[1:-1]
 assert root == {"mediaType": "application/vnd.uapi.16.manifest"}, f"bad root object: {root}"
 assert files, "the manifest lists no files at all"
 

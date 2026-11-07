@@ -54,13 +54,13 @@
       "sha256": "1dbd49e1af726cb9023fd1da842d5441736563c5dea426901a98e2b5e22c14cb"
     },
     "boot-demo.fedora[disk-manifest]": {
-      "sha256": "8c434b3a0a28f6c6eb6e1609bb766258dbf51c5e0b7e2c79b7161df918561713"
+      "sha256": "f2130ab8eb7af424c6be60b592f90015d757a24354af9fe103577b5a1d576619"
     },
     "boot-demo.fedora[manifests][esp]": {
-      "sha256": "a856a70ea0b09588e28798cf88250f550ae2475f705ed6d84cea88c076b79946"
+      "sha256": "16862b16926547262c44e1cc39de94e1136d1aa0b1ffa74fd4a1b25281db284b"
     },
     "boot-demo.fedora[manifests][usr]": {
-      "sha256": "0451b4a974d9376d975cf92902fc3a287e1a94679947cbddaebc540d838ba861"
+      "sha256": "456389b2e66d0a9dd1a60af74d1496cafffd89cd0141d0d166b1cd8a6135d949"
     },
     "boot-demo.fedora[partitions][usr-verity]": {
       "sha256": "8baac782ec9d31c05161bbf86cec6afab8b55d41faad269d932fd67c8680338f"

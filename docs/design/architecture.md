@@ -53,6 +53,8 @@ tine//box/                box bootstrap and sandbox command construction
 tine//rootfs/             bind/overlay mounting and stored-delta translation
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
+tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them
+tine//archive/            tar and cpio readers and writers
 tine//git/                pinned Git repositories with local checkout overrides
 tine//cargo/              vendored crate trees and offline Rust source builds
 tine//go/                 go.sum-verified module fetches and offline Go source builds

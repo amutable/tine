@@ -21,8 +21,8 @@ import specs
 import util
 
 import finalize
-import manifest
 import rootfs
+import uapi16
 
 _SEED_NAMESPACE = uuid.UUID("5af2de99-4f9f-4e0b-a04b-bde36b068c4f")
 
@@ -511,7 +511,7 @@ def main(argv: list[str] | None = None) -> None:
         listings = []
         for partition in written:
             if partition.manifest is not None:
-                manifest.write(tree, partition.manifest, epoch, roots=partition.definition.sources)
+                uapi16.write(tree, partition.manifest, epoch, roots=partition.definition.sources)
                 listings.append(partition.manifest)
 
         # An imported partition was listed by the invocation that filled it, and this one holds
@@ -519,7 +519,7 @@ def main(argv: list[str] | None = None) -> None:
         # partition this invocation mounts over a directory another one holds is the one on top.
         if spec["manifest"]:
             imported = [it.manifest for it in partitions if it.manifest is not None]
-            manifest.merge(imported + listings, Path(spec["manifest"]))
+            uapi16.merge(imported + listings, Path(spec["manifest"]))
 
         scratch = Path(scratch_dir)
         repart_definitions = scratch / "repart.d"
