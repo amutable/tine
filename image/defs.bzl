@@ -12,8 +12,8 @@ load(
     ":archive.bzl",
     "COMPRESSIONS",
     "ImageArchiveInfo",
-    "ImageDirectoryInfo",
-    "image_directory",
+    "ImageSnapshotInfo",
+    "image_snapshot",
 )
 load(":boot.bzl", "UkiInfo", "bootable", "uki", "uki_profile")
 load(
@@ -67,7 +67,7 @@ image = struct(
     layer = layer,
     ops = ops,
     # Terminal outputs.
-    directory = image_directory,
+    snapshot = image_snapshot,
     uki = uki,
     uki_profile = uki_profile,
     resolve_version = resolve_version,
@@ -105,7 +105,7 @@ image = struct(
     ImageInstallInfo = ImageInstallInfo,
     ImageSbomInfo = ImageSbomInfo,
     ImageArchiveInfo = ImageArchiveInfo,
-    ImageDirectoryInfo = ImageDirectoryInfo,
+    ImageSnapshotInfo = ImageSnapshotInfo,
     ExtensionInfo = ExtensionInfo,
     UkiInfo = UkiInfo,
     DdiInfo = DdiInfo,

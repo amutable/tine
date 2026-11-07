@@ -257,8 +257,7 @@ and persists exactly one snapshot:
 
 `image.layer()` recursively flattens operation lists, allowing reusable helpers to return ordered groups of
 operations; `image.archive`, `image.sysext`, `image.confext`, `image.extension`, `image.portable`
-and `image.disk` accept the same nested groups. Materialize a complete logical image explicitly with
-`image.directory`.
+and `image.disk` accept the same nested groups. Export a complete logical image with `image.snapshot`.
 
 ### Generating what packages only describe
 
@@ -431,14 +430,14 @@ The `version` attribute sets the SBOM source version and defaults to `"0"`. Mere
 produces only its latest snapshot. Selecting `[pkgdb]` runs the image's package system's capture driver;
 selecting either nested SBOM format runs one shared scan of the completed stack.
 
-`[manifest]` is a [UAPI.16 File Manifest](https://uapi-group.org/specifications/): an RFC7464 JSON-SEQ
-listing of every path the assembled tree holds, with the type, mode, ownership, clamped mtime and user
-extended attributes of each, a SHA256 over every regular file's contents, symlink targets carried inline, and
-one `inodeToken` per inode two names share. It answers what an image ships rather than what it was built
-from, so a consumer can compare the paths of two images against each other (a path in both a system extension
-and the /usr it merges onto shadows an OS file) or account for size per file. The artifact is named
-`Uapi16Manifest`, which is the name the format reserves, so it can be dropped beside a tree of the image it
-describes.
+The `[manifest]` of a logical image is a [UAPI.16 File
+Manifest](https://uapi-group.org/specifications/specs/file_manifest/): an RFC7464 JSON-SEQ listing of every
+path the assembled tree holds, with the type, mode, ownership, clamped mtime and user extended attributes of
+each, a SHA256 over every regular file's contents, symlink targets carried inline, and one `inodeToken` per
+inode two names share. It answers what an image ships rather than what it was built from, so a consumer can
+compare the paths of two images against each other (a path in both a system extension and the /usr it merges
+onto shadows an OS file) or account for size per file. The artifact is named `Uapi16Manifest`, which is the
+name the format reserves, so it can be dropped beside a tree of the image it describes.
 
 `image` also takes `install_langs`: keep translated files only for these languages, instead of all of them.
 Nothing matches a value that is not a language, so `install_langs = ["C.UTF-8"]` installs no translations
@@ -450,7 +449,8 @@ at all. `install_docs = False` likewise installs no documentation, keeping the l
 Logical images and terminal outputs are separate rule families. Terminal rules merge the layer stack only
 when needed:
 
-- `image.directory` materializes a Buck directory artifact and provides `image.ImageDirectoryInfo`;
+- `image.snapshot` stores a snapshot of the image and provides `image.ImageSnapshotInfo`. `buck run` on
+  the target exports the snapshot as a directory;
 - `image.uki` builds the unified kernel image for the image's single installed kernel from one or more cpio
   `image.ImageArchiveInfo` dependencies and provides `image.UkiInfo`, named `<image_id>_<version>_<arch>.efi`
   (defaults: target name and `0`; systemd architecture spelling, e.g. `x86-64`), the shape
@@ -579,7 +579,8 @@ name, such as `debug-tools.raw`. With `arch = "_any"`, the DDI is named `<name>_
 
 The target defaults to its DDI and provides `image.DdiInfo`, like `image.disk`, and
 `image.ExtensionInfo` with its classes and scope. `[roothash]` is the verity root hash, and
-`[disk-manifest]` lists the files the DDI contains. The rule publishes both with the DDI.
+`[disk-manifest]` lists the files the DDI contains, and `[manifest]` is the same listing. The rule
+publishes them with the DDI.
 
 ### image.portable
 
@@ -623,9 +624,9 @@ generators (see "Generating what packages only describe").
 The DDI is named `<name>_<version>_<arch>.raw`. portablectl takes the image name from the file name up to the
 first `_`, and attaches the units whose names start with that image name: `webapp.service`,
 `webapp-worker.service` or `webapp@.service`. The target defaults to its DDI and provides `image.DdiInfo`,
-with the same `[roothash]` and `[disk-manifest]` subtargets as an extension. It takes an optional
-`package_manager` or `parent`, the operations and packages of any composition, and `version`, `arch`,
-`seed` and `verity_key`.
+with the same `[roothash]`, `[disk-manifest]` and `[manifest]` subtargets as an extension. It takes an
+optional `package_manager` or `parent`, the operations and packages of any composition, and `version`,
+`arch`, `seed` and `verity_key`.
 
 ### image.disk
 
@@ -736,7 +737,7 @@ views and supply-chain artifacts are lazy subtargets:
 //examples/image:boot-demo
 ├── [uki]
 │   └── [modules]
-├── [directory]
+├── [snapshot]
 ├── [qcow2]
 ├── [raw.zst]
 ├── [vmdk]
@@ -771,7 +772,7 @@ raw, or a compressed (streamOptimized) VMDK for VMware and cloud importers on de
 subtargets, because one result cannot carry the same provider type twice. `[ami]` publishes the parameters
 an Amazon Machine Image of the raw disk is registered with, see [aws.md](aws.md). The target has no aggregate
 bootable-image provider: it returns `image.ImageInfo`, `image.DdiInfo`, `image.InitrdInfo`,
-`image.ImageDirectoryInfo`, `image.UkiInfo`, and `image.PublishedInfo` independently. A disk that does not
+`image.ImageSnapshotInfo`, `image.UkiInfo`, and `image.PublishedInfo` independently. A disk that does not
 boot has no `[uki]`, `[initrd]`, `[boot]` or `[ami]` subtargets, returns no `image.InitrdInfo` or
 `image.UkiInfo`, and publishes no UKI, kernel or initrd.
 
@@ -911,8 +912,28 @@ helper label. The same `image.InitrdInfo`, containing its logical `image.ImageIn
 `image.ImageArchiveInfo`, is the sole typed provider published by `[initrd]`. Merely carrying an artifact
 in a provider does not build it;
 optional actions run only when a consumer uses the artifact or a user selects its subtarget.
-`[directory]` has the same representability limit as `image.directory`: it fails when the completed tree
-contains a path, such as a systemd-escaped unit name, that Buck directory artifacts cannot store.
+`[snapshot]` contains a UAPI.16 manifest and content blobs. `buck run` on it exports the snapshot as a
+directory that keeps modes, times, user extended attributes, symlinks and hardlinks.
+
+Export requires read access to `/proc/sys/kernel/overflowuid`. Keep the stored manifest and blobs
+immutable while exporting. The destination must not exist. Its parent must be owned by you or root. A parent
+with group or other write permissions must have the sticky bit, as `/var/tmp` does. Use a parent owned by you
+if Buck runs in a user namespace that does not map its owner's uid. The exporter rejects a parent owned by
+the overflow uid, which is how a user namespace shows an owner that it does not map. The exporter creates a
+private user namespace when needed; uid/gid zero then maps to your host uid/gid. Device nodes require
+permission to create them on the destination filesystem.
+
+```sh
+tine buck run 'tine//examples/image:boot-demo.fedora[snapshot]' -- /var/tmp/tine-image-export/root
+```
+
+The stored manifest remains authoritative if you copy the Buck artifact elsewhere; copying an exported
+directory with a tool that drops metadata requires exporting it again from the stored snapshot.
+
+The `[manifest]` of an archive, initrd, extension, portable or disk replaces the listing of the logical
+image. It describes the terminal contents, including package-database removal. A disk that only imports
+verity partitions without a listing keeps the `[manifest]` of the logical image. `[pkgdb]` and `[sbom]`
+describe the installed package set.
 
 `[boot]` is what the disk boots, as files: the `bootable` rule run against the composition's own ESP, so a
 direct kernel boot or a publisher needs no second target pointing back at it. Its `[kernel]` and `[initrd]`

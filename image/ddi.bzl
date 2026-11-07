@@ -434,10 +434,10 @@ def declare_ddi(
     )
     sub_targets = manifest_sub_targets(manifests)
     if manifest != None:
-        # Qualified, unlike the provider field: a logical image publishes a `manifest` subtarget of
-        # its own (image.bzl:image_metadata_subtargets) listing its whole tree, and a composition
-        # merges both sets of subtargets into one namespace.
+        # `manifest` replaces the listing of the logical image (image_metadata_subtargets), so it
+        # lists what the DDI contains, like the `manifest` of an archive.
         sub_targets["disk-manifest"] = [DefaultInfo(default_output = manifest)]
+        sub_targets["manifest"] = [DefaultInfo(default_output = manifest)]
     if root_hash != None:
         sub_targets["roothash"] = [DefaultInfo(default_output = root_hash.hash), info]
 

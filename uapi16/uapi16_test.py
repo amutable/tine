@@ -181,6 +181,17 @@ class TestSymlinks(TreeTest):
         self.assertEqual(base64.b64decode(contents[0]["literal"]), b"\xff\xfe")
         self.assertEqual(self.named()["link"]["size"], 2)
 
+    def test_decodes_both_base64_alphabets(self) -> None:
+        # UAPI.16 allows the standard and the URL-safe base64 alphabet. The bytes 0xfb 0xff encode to
+        # `+/8=` in the standard alphabet and to `-_8=` in the URL-safe one. Both must decode to the
+        # same symlink target and xattr value.
+        for literal in ("+/8=", "-_8="):
+            with self.subTest(literal=literal):
+                self.assertEqual(
+                    os.fsencode(uapi16.symlink_target({"contents": [{"literal": literal}]})), b"\xfb\xff"
+                )
+                self.assertEqual(uapi16.xattr_value({"base64": literal}), b"\xfb\xff")
+
 
 class TestHardlinks(TreeTest):
     def test_two_names_for_one_inode_share_a_token(self) -> None:

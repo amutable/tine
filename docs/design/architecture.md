@@ -1186,10 +1186,10 @@ An image-producing action writes a complete UAPI.16 snapshot before Buck publish
 paths, inode types, modes, nanosecond modification times, user extended attributes, symlink targets and
 explicit hardlink groups are in the manifest. Regular-file contents are immutable SHA-256 blobs. Each store
 contains only blobs absent from its parents; the ordered store list remains an explicit input to every
-consumer. Content references use `blobs/<sha256>` in the combined store namespace, resolved in store order. A
-store with parents therefore needs its declared parent stores to resolve its references. The root object of a
-snapshot also holds the metadata of the root directory. The listing of a partition has a root object with
-only the media type.
+consumer. Content references use `blobs/<sha256>` in the combined store namespace, resolved in store order.
+A store with parents therefore needs its declared parent stores to resolve its references. Standalone
+directory exports include every referenced blob. The root object of a snapshot also holds the metadata of
+the root directory. The listing of a partition has a root object with only the media type.
 
 Equal bytes share storage without sharing an inode. Reproducible `inodeToken` counters identify explicit
 hardlink groups independently of content digests. A metadata-only change changes the manifest and therefore
@@ -1229,9 +1229,10 @@ retains the group when the root is reconstructed or exported.
 
 Read-only overlays use only metadata inodes in the normal lower, with aliases linked for declared groups.
 Boot selection, UKI assembly, artifact extraction and SBOM scanning select between private reflinks and
-read-only overlays. Disk image and archive assembly get a writable root, because they change the tree before
-they read it. Temporary roots are removed when the operation exits, including on failure. There is no
-persistent materialized-root cache.
+read-only overlays. Disk image assembly gets a writable root, because it edits the tree before repart reads
+it. Parent release inspection reads the os-release file from the parent snapshot without reconstructing a
+root. Temporary roots are removed when the operation exits, including on failure. There is no persistent
+materialized-root cache.
 
 Boxes and other directory-layer callers of `rootfs` retain their direct mounting path and marker encoding:
 `.wh.<name>` represents a whiteout, `.wh..wh..opq` an opaque directory and `.esc.<percent-escaped-name>` an
@@ -1381,7 +1382,7 @@ locally backed in later solves. Unlike a static `local_repository`, only the pac
 pulls in are built; the universe target itself never forces a package build.
 
 Logical images and terminal outputs are separate rule families. Terminal rules merge the stack only when
-needed. The catalog of terminal rules (`image.directory`, `image.uki`, `image.bootable`,
+needed. The catalog of terminal rules (`image.snapshot`, `image.uki`, `image.bootable`,
 and `image.vm`) and the `image.archive`, `image.sysext`, `image.confext`, `image.extension`,
 `image.portable`, and `image.disk` composition rules are documented in
 [images.md](../user/images.md). All of them, with the operation helpers and conventional partition layouts,
@@ -1408,10 +1409,11 @@ is not applied at build time; enabling it will be an explicit output option once
 behavior is defined. Ownership and named ACL entries are deliberately unsupported: all archive entries use
 uid/gid zero.
 
-Tar uses deterministic PAX archives and stores Linux xattrs using `SCHILY.xattr.*` headers. The newc cpio
-format has no general xattr representation. Tar/cpio entries are ordered and encode hardlinked regular files
-as hardlinks, independently of content identity. Mtimes are clamped to the fixed assembly epoch. Tar and cpio
-store whole seconds. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when
+Tar uses deterministic PAX archives and stores user xattrs using `SCHILY.xattr.user.*` headers. The newc cpio
+format has no general xattr representation. Tar/cpio entries are ordered and encode explicit hardlinks
+independently of content identity. Linux's initramfs unpacker [recreates hardlinked symlinks as separate
+symlinks][initramfs-symlinks]. Mtimes are clamped to the fixed assembly epoch. Tar retains nanoseconds; newc
+cpio uses whole seconds. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when
 possible so large archives can share extents on reflink-capable filesystems. `compression = "zstd"`
 compresses the finished archive in the same action, so the uncompressed form never becomes a Buck artifact;
 zstd's multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The
@@ -1427,7 +1429,7 @@ preserved. Calls emit a disk by default. `split = True` additionally exposes eac
 with normalized metadata alongside its block artifact; `disk = False` makes such a call partition-only. No
 partial disk is passed between actions. The partition artifacts are portable, so `image.DdiInfo` carries no
 box: repart and the format conversions use the destination `image.ImageInfo.box`, and `image.vm` uses the
-tools box of the image's release. `image.directory` is an independent terminal view and is never an input to
+tools box of the image's release. `image.snapshot` is an independent terminal view and is never an input to
 repart.
 
 Partition layouts are always explicit inputs; `image.disk` doesn't choose one
@@ -1486,13 +1488,13 @@ prunes, so the hardware database it ships is compiled from the sources it then d
 image into the cpio itself, at the `compression` it declares, and returns both as `image.InitrdInfo`
 alongside the image's own providers. That cpio omits the package database from the paths the image's package
 system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel unpacks the
-whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]`, `[pkgdb]` and `[sbom]`
-views read the tree rather than the archive, so they still describe the complete installed set. A bootable
-`image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is the initrd
-target's own output and its compression is declared where the initrd is. A composition given no `initrd`
-declares `<name>.initrd` for itself through the same macro, inheriting its package manager, version, and
-distribution; the default is therefore an ordinary target that can be built and inspected on its own rather
-than an anonymous step inside the disk image. The composition publishes the provider it was given from
+whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]` view describes the cpio
+after package-database removal. The `[pkgdb]` and `[sbom]` views describe the complete installed set. A
+bootable `image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is the
+initrd target's own output and its compression is declared where the initrd is. A composition given no
+`initrd` declares `<name>.initrd` for itself through the same macro, inheriting its package manager, version,
+and distribution; the default is therefore an ordinary target that can be built and inspected on its own
+rather than an anonymous step inside the disk image. The composition publishes the provider it was given from
 `[initrd]` and returns the same instance directly, so both interfaces describe exactly the same initrd.
 
 `uki.py` appends the kernel-modules cpio and runs `ukify`. On x86 it also packs the microcode the image
@@ -1544,7 +1546,7 @@ supply-chain metadata, and constituents are lazy subtargets:
 ```text
 //examples/image:boot-demo
 ├── [uki]
-├── [directory]
+├── [snapshot]
 ├── [qcow2]
 ├── [raw.zst]
 ├── [manifest]
@@ -1566,7 +1568,7 @@ supply-chain metadata, and constituents are lazy subtargets:
 
 Typed providers are the composition API; subtargets are the command-line interface. There is no aggregate
 bootable-image provider. The rule returns its completed `image.ImageInfo`, `image.DdiInfo`,
-`image.InitrdInfo`, `image.ImageDirectoryInfo`, and `image.UkiInfo` independently. `image.DdiInfo`
+`image.InitrdInfo`, `image.ImageSnapshotInfo`, and `image.UkiInfo` independently. `image.DdiInfo`
 holds the composed raw disk, its independent partitions, and optional `image.RootHashInfo`, rather than
 exposing separate top-level providers for these facets.
 Its qcow2 and compressed-raw encodings are reachable only through their subtargets, each publishing one
@@ -1612,8 +1614,8 @@ chooses the newest valid UKI by its embedded kernel release and writes a generic
 image artifact driver only extracts a named path or PE section from that manifest. Without a UKI, the
 selector chooses the newest standalone kernel. In either case, bootability requires an initrd matching that
 exact release. A UKI remains an optional extraction: requesting it fails if the selected image has only
-standalone artifacts. Selecting the `[directory]` subtarget does not assemble the disk, and repart never
-materializes the directory.
+standalone artifacts. Selecting the `[snapshot]` subtarget does not assemble the disk, and repart never
+reads its store.
 
 Repart derives stable UUID seeds from target identity and logical configuration; callers can override them
 explicitly. VM runners are declared separately from disk composition. Their execution box and runtime
@@ -1792,7 +1794,9 @@ Each action stores only newly introduced content blobs and retains its parent st
 cannot store the modes, mtimes and hardlinks of a directory artifact, so a layer stored as a Buck directory
 loses them. Reconstruction costs one inode per file for every action that needs a root, where an overlay of
 stored layers cost one mount per layer. Reflinks keep that cost low, and capture only reads changed files.
-Temporary reconstruction restores inode identity and metadata before commands run.
+Temporary reconstruction restores inode identity and metadata before commands run. Archive writers read
+manifests and blobs directly. Directory exports restore their authoritative snapshot after final Buck
+materialization.
 
 ### Prefer exact transactions over package-manager network access
 
@@ -1858,6 +1862,7 @@ root][initramfs-pivot] require booting from another root filesystem.
   https://docs.kernel.org/filesystems/overlayfs.html#specifying-layers-via-file-descriptors
 [overlay-data-only]: https://docs.kernel.org/6.16/filesystems/overlayfs.html
 [initramfs-pivot]: https://docs.kernel.org/6.15/filesystems/ramfs-rootfs-initramfs.html#what-is-initramfs
+[initramfs-symlinks]: https://github.com/torvalds/linux/blob/v6.16/init/initramfs.c
 
 ## Operating the current system
 
@@ -1898,10 +1903,9 @@ belong to one package system are listed in its own section instead:
 - A root box verifies its packages with the `rpmkeys` of its own unverified stage1, so a tampered rpm
   package in the seed could defeat the check for that box; every other box and every image verifies with a
   predecessor. Arch packages are not verified at all.
-- Archive ownership is intentionally normalized to uid/gid zero. Capabilities, xattrs, and SELinux labels do
-  not survive as Buck directory metadata; tar preserves them in PAX headers, but newc cpio cannot represent
-  general xattrs.
-- Directory image output cannot represent backslashes in names; archive outputs should be used instead.
+- Archive ownership is intentionally normalized to uid/gid zero. Snapshots keep user xattrs but no
+  capabilities, other xattr namespaces or SELinux labels. Tar preserves user xattrs in PAX headers, and newc
+  cpio cannot represent xattrs.
 - The default `/usr`-only disk has a volatile root, so the `/etc` a build writes is not what such an image
   boots with; first-boot defaults come from credentials instead. Package and authored state outside `/usr`
   is not yet translated into factory defaults or another persistent partition. How much `/etc` such an
