@@ -9,18 +9,19 @@ python.library(
     name = "cpio",
     srcs = ["cpio.py"],
     visibility = ["tine//..."],
-    deps = ["//:util"],
+    deps = ["//:util", "//uapi16:uapi16"],
 )
 
 python.library(
     name = "tar",
     srcs = ["tar.py"],
     visibility = ["tine//..."],
+    deps = ["//uapi16:uapi16"],
 )
 
 python.test(
     name = "test",
     box = "//tools:dev.box",
     srcs = ["cpio.py", "cpio_test.py", "tar.py", "tar_test.py"],
-    deps = ["//:util"],
+    deps = ["//:util", "//uapi16:uapi16"],
 )
