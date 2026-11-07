@@ -224,27 +224,3 @@ class TestLocales(unittest.TestCase):
                 "en_US.UTF-8",
             ],
         )
-
-
-class TestWorldWritable(unittest.TestCase):
-    @override
-    def setUp(self) -> None:
-        self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="finalize.")))
-
-    def test_restores_the_mode_a_layer_could_not_carry(self) -> None:
-        for name in ("tmp", "var/tmp"):
-            (self.tree / name).mkdir(parents=True, mode=0o755)
-        finalize.world_writable(self.tree)
-        for name in ("tmp", "var/tmp"):
-            self.assertEqual((self.tree / name).stat().st_mode & 0o7777, 0o1777)
-
-    def test_leaves_an_image_that_ships_neither_alone(self) -> None:
-        finalize.world_writable(self.tree)
-        self.assertFalse((self.tree / "tmp").exists())
-
-    def test_does_not_chmod_through_a_symlink(self) -> None:
-        (self.tree / "var").mkdir()
-        (self.tree / "elsewhere").mkdir(mode=0o755)
-        (self.tree / "var/tmp").symlink_to("../elsewhere")
-        finalize.world_writable(self.tree)
-        self.assertEqual((self.tree / "elsewhere").stat().st_mode & 0o7777, 0o755)

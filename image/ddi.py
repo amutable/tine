@@ -21,7 +21,7 @@ import specs
 import util
 
 import finalize
-import rootfs
+import storage
 import uapi16
 
 _SEED_NAMESPACE = uuid.UUID("5af2de99-4f9f-4e0b-a04b-bde36b068c4f")
@@ -290,25 +290,19 @@ def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, st
     return strict | release
 
 
-def _extension_layers(spec: Spec, extension: ExtensionSpec) -> tuple[list[Release], list[str | Path]]:
-    """Return the extension-release files and the layers the extension packages.
-
-    With a parent, the fields are pinned to the parent's os-release and the layers are the delta
-    above it. Without a parent, the function returns the releases and layers of the spec unchanged.
-    """
+def _extension_releases(spec: Spec, extension: ExtensionSpec) -> list[Release]:
     releases = extension["releases"]
     parent = extension["parent"]
-    lowers: list[str | Path] = list(spec["lower"])
     if not parent:
-        return releases, lowers
-    with rootfs.rootfs("/buildroot", lowers=lowers) as tree:
-        fields = _os_release(tree)
+        return releases
+    with storage.root(spec["lower"][:parent], readonly=True) as restored:
+        fields = _os_release(restored.path)
     if "ID" not in fields:
         util.fail("ddi: the parent os-release lacks ID")
     pinned = [
         Release(path=release["path"], fields=pin_release(fields, release["fields"])) for release in releases
     ]
-    return pinned, lowers[parent:]
+    return pinned
 
 
 def empty_directories(tree: Path, directories: list[str]) -> None:
@@ -472,12 +466,14 @@ def main(argv: list[str] | None = None) -> None:
         for index, partition in enumerate(partitions, start=len(written))
     ]
     extension = spec["extension"]
-    releases: list[Release] = []
-    lowers = None
-    if extension:
-        releases, lowers = _extension_layers(spec, extension)
+    releases = _extension_releases(spec, extension) if extension else []
     with (
-        finalize.image(spec, program="ddi", lowers=lowers, binds=binds) as tree,
+        finalize.image(
+            spec,
+            binds=binds,
+            base=extension["parent"] if extension else 0,
+            readonly=False,
+        ) as tree,
         tempfile.TemporaryDirectory(prefix="repart.") as scratch_dir,
     ):
         if extension:

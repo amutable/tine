@@ -3,12 +3,11 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Apply ordered operations against one mounted root and capture its overlay delta."""
+"""Apply ordered operations against one mounted root and capture its complete snapshot."""
 
 import glob  # noqa: F401  # Preload for Path.glob before entering the image chroot.
 import os
 import re
-import shutil
 import stat
 import struct
 import subprocess
@@ -25,6 +24,7 @@ import util
 import finalize
 import installer
 import rootfs
+import storage
 from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
@@ -41,7 +41,6 @@ class LayerInstall(TypedDict):
 class Spec(TypedDict):
     lower: list[str]
     out: str
-    work: str | None
     install: LayerInstall | None
     operations: list[object]
 
@@ -90,6 +89,33 @@ def _destination(value: str) -> Path:
     return Path(path)
 
 
+def _copy_file(source: Path, destination: Path) -> None:
+    # git only stores the executable bit, and a checkout gets the other bits from the umask of whoever
+    # checked it out. Give the copy the mode that a checkout under umask 0022 has, so that the image
+    # doesn't depend on that umask.
+    # A file in the image can have hardlinks. Replace it instead of writing into it, so that the other
+    # names keep their contents.
+    destination.unlink(missing_ok=True)
+    util.clone_file(source, destination)
+    destination.chmod(0o755 if source.stat().st_mode & 0o111 else 0o644)
+
+
+def _merge_directory(source: Path, destination: Path) -> None:
+    # copytree would give a directory that already exists in the image the mode and extended attributes of
+    # the directory in the checkout. Leave existing directories alone, and create missing ones with 0755.
+    if not destination.is_dir():
+        destination.mkdir()
+        destination.chmod(0o755)
+    for entry in sorted(source.iterdir()):
+        target = destination / entry.name
+        if entry.is_dir() and not entry.is_symlink():
+            if (target.exists() or target.is_symlink()) and not target.is_dir():
+                util.fail(f"cannot merge directory {entry} into non-directory {target}")
+            _merge_directory(entry, target)
+        else:
+            _copy(entry, target)
+
+
 def _copy(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source.is_symlink():
@@ -97,24 +123,18 @@ def _copy(source: Path, destination: Path) -> None:
             util.fail(f"cannot replace directory {destination} with symlink {source}")
         if destination.exists() or destination.is_symlink():
             destination.unlink()
-        shutil.copy2(source, destination, follow_symlinks=False)
+        # shutil.copy2() would keep the mtime of the symlink in the checkout. Capture keeps an mtime before
+        # the epoch, so the image would depend on when the checkout was made. A new symlink gets the
+        # current time, and capture clamps that to the epoch.
+        destination.symlink_to(source.readlink())
     elif source.is_dir():
         if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
             util.fail(f"cannot merge directory {source} into non-directory {destination}")
-        shutil.copytree(
-            source,
-            destination,
-            dirs_exist_ok=True,
-            # Reflink each regular file; copytree recreates symlinks itself
-            copy_function=lambda s, d: util.clone_file(Path(s), Path(d)),
-            symlinks=True,
-        )
+        _merge_directory(source, destination)
     else:
         if destination.is_dir() and not destination.is_symlink():
             util.fail(f"cannot replace directory {destination} with file {source}")
-        if destination.is_symlink():
-            destination.unlink()
-        util.clone_file(source, destination)
+        _copy_file(source, destination)
 
 
 def _merge_os_release(raw_fields: object) -> None:
@@ -147,25 +167,6 @@ def _remove_glob(tree: Path, value: str) -> None:
     matches = sorted(tree.glob(relative), key=lambda path: (len(path.parts), str(path)), reverse=True)
     for path in matches:
         util.remove_path(path)
-
-
-def _normalize_mode(path: Path) -> None:
-    """Normalize file permissions for path.
-
-    See docs/user/images.md.
-    """
-    mode = path.lstat().st_mode
-    if stat.S_ISDIR(mode):
-        path.chmod(0o755)
-    elif stat.S_ISREG(mode):
-        path.chmod(0o755 if mode & 0o111 else 0o644)
-    # ignore symlinks (meaningless mode), whiteout nodes, and non-files
-
-
-def _normalize_modes(tree: Path) -> None:
-    _normalize_mode(tree)
-    for path in tree.rglob("*"):
-        _normalize_mode(path)
 
 
 # The ELF fields the stack check reads; see elf(5). Per class: the header after e_ident up to
@@ -225,13 +226,18 @@ def _stack(path: Path) -> str | None:
     return "no PT_GNU_STACK" if e_machine in _EXECUTABLE_BY_DEFAULT else None
 
 
-def _executable_stacks(tree: Path) -> list[str]:
-    """Each program or shared library in `tree` that would run on an executable stack, and why."""
-    return [
-        f"/{path.relative_to(tree)}: {problem}"
-        for path in sorted(tree.rglob("*"))
-        if stat.S_ISREG(path.lstat().st_mode) and (problem := _stack(path)) is not None
-    ]
+def _executable_stacks(root: storage.Root) -> list[str]:
+    """Each program or shared library in `root` that would run on an executable stack, and why."""
+    found = []
+    # In an overlay, root.digests uses the upper inode of a hardlinked file, and root.entries() returns
+    # that inode. Path.lstat() would return the inode of the merged file, which misses the digest.
+    for entry in root.entries():
+        # A file that is unchanged since the restore belongs to a layer below, which checked it already.
+        if not stat.S_ISREG(entry.st.st_mode) or storage.identity(entry.st) in root.digests:
+            continue
+        if (problem := _stack(entry.path)) is not None:
+            found.append(f"/{entry.name}: {problem}")
+    return found
 
 
 def _apply_filesystem(operation: list[object]) -> None:
@@ -311,37 +317,25 @@ def main(argv: list[str] | None = None) -> None:
     install = spec["install"]
 
     lower = spec["lower"]
-    if lower:
-        if spec["work"] is None:
-            util.fail("image lower stack needs a work overlay directory")
-        mounted = rootfs.rootfs(
-            "/buildroot",
-            lowers=lower,
-            upperdir=out,
-            workdir=spec["work"],
-            apivfs=True,
-        )
-    else:
-        if spec["work"] is not None:
-            util.fail("image work overlay directory requires a lower stack")
-        mounted = rootfs.rootfs(
-            "/buildroot",
-            bind=out,
-            capture_bind=True,
-            apivfs=True,
-        )
-
-    with mounted as target, tempfile.TemporaryDirectory(prefix="layer.") as scratch:
-        # Packages land before the operations so every one of them sees what this layer installs.
-        if install is not None:
-            _install(install, target, Path(scratch))
-        for operation in operations:
-            _apply(operation, target)
-    _normalize_modes(out)
-    stacks = _executable_stacks(out)
-    if stacks:
-        util.fail("image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks))
-    print(f"image: applied {len(operations)} ops over {len(lower)} lower(s) -> {out}", file=sys.stderr)
+    with (
+        storage.root(lower) as restored,
+        tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
+    ):
+        tree = restored.path
+        with rootfs.rootfs("/buildroot", bind=tree, apivfs=True, strict_unmount=True) as target:
+            if install is not None:
+                _install(install, target, Path(scratch))
+            for operation in operations:
+                _apply(operation, target)
+        stacks = _executable_stacks(restored)
+        if stacks:
+            util.fail(
+                "image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks)
+            )
+        storage.capture(restored, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
+    print(
+        f"image: applied {len(operations)} ops over {len(lower)} parent store(s) -> {out}", file=sys.stderr
+    )
 
 
 if __name__ == "__main__":
