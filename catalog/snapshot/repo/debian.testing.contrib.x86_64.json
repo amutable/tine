@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
+        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-amd64/Packages.xz",
-        "sha256": "9c196febcc95ec1e1716081a4e52c51d9d410a939751c3ec206e6ec9285437a2",
-        "size": 48344,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/9c196febcc95ec1e1716081a4e52c51d9d410a939751c3ec206e6ec9285437a2"
+        "sha256": "6c6ed857eb5361bb80c3c5fef8812120292ce685f3f87529635cf77950eadad6",
+        "size": 48624,
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/6c6ed857eb5361bb80c3c5fef8812120292ce685f3f87529635cf77950eadad6"
       }
     ],
     "inline": {}
@@ -28,6 +28,7 @@
     "04b3c74f2eb24310c9e72642b78eba9c1dbfe5251c4110eb1c5ed9da0d42f538": {"location":"pool/contrib/b/bladerf/bladerf-fpga-hostedxa9_0.2025.10-2_all.deb","size":20592},
     "0550480c4a21c5ec159ae00e1f2ee0541676dcfd216748cf2cbc065eba2e645f": {"location":"pool/contrib/b/boinc/boinc-client-opencl_8.2.15+dfsg-10_amd64.deb","size":16244},
     "06e9abe2a7fb4e15179610ab00c8b381b06df386ff679ce1e2486f6800e34760": {"location":"pool/contrib/g/geogram/libgeogram-doc_1.9.6-1_all.deb","size":2254056},
+    "073f8bb2d1555825c8e8dbe0b23010e92acc703e71c99ce3c6c113cc4d2a3e63": {"location":"pool/contrib/p/python-cx-oracle/python3-cx-oracle_8.3.0-4_amd64.deb","size":83332},
     "07f81f533d678c857d05ddc8e887a3ded0b1a3288511964177e682d1b79d066b": {"location":"pool/contrib/a/alex4/alex4_1.1-10+b2_amd64.deb","size":61984},
     "08dd391439c484cb4f623aca259ed816a24453c87ae2f1dc99e69a794d1c6012": {"location":"pool/contrib/z/zsnapd/zsnapd_0.8.15-1_all.deb","size":30496},
     "09f6d434eaa87042746734217879f2a49325e6eaf5631cb03050a1959f96548c": {"location":"pool/contrib/g/game-data-packager/quake3_89_all.deb","size":98592},
@@ -44,6 +45,7 @@
     "18b0c696ea7b8ac1f4725b89b0dab662b587a253ef730b8c2c5ca3911d5cb920": {"location":"pool/contrib/n/nvidia-support/nvidia-kernel-common_20240109+1_amd64.deb","size":4572},
     "18e6ed2a3da4d1a5b632a6f761ce40f67cb69062de00b59877fcccf3cc9feb9c": {"location":"pool/contrib/s/speech-dispatcher-contrib/speech-dispatcher-baratinoo_0.12.1-3_amd64.deb","size":30976},
     "1989ad5ed8a8b1237a836657e4a5ad0454e36e25818bce4dad5c37a992f0f850": {"location":"pool/contrib/s/serious-engine/serious-sam-tse_0~git20250928+dfsg-2_amd64.deb","size":2027172},
+    "1d5713e279327e3e7beab590dcfa183e06d7fcac485a8d64957b6d4c72302e73": {"location":"pool/contrib/u/unrardll/python3-unrardll_0.1.7+ds1-7_amd64.deb","size":14276},
     "1e1452d858e6b04dcf497cdbe8d1c6c36e82ad8167729689ac6afc598dcf00d8": {"location":"pool/contrib/d/dunedynasty/dunedynasty_1.6.4+ds-1+b1_amd64.deb","size":375948},
     "1e17e31730aecf70688427f3f2fa86c79158da143b6c5385f416c1859ecac713": {"location":"pool/contrib/g/geogram/libgeogram-dev_1.9.6-1_amd64.deb","size":316360},
     "1eaf67e651212ed553cfc979b2f4e41fa5f9cf73abbe1ba42157def939e159cb": {"location":"pool/contrib/y/yquake2/yamagi-quake2-core_8.70+dfsg-1_amd64.deb","size":900204},
@@ -204,6 +206,7 @@
     "a986152f9eef0ba9b6bc54fd4b81503c9ab1a8cd3ba16a4d9fb8392899fe11d0": {"location":"pool/contrib/r/reminiscence/reminiscence_0.2.1-3_amd64.deb","size":114760},
     "a9a5434417d5e420c8a53b7fc2da05c9c50f44d6d9b2227ff89e9614e9f360ea": {"location":"pool/contrib/r/ruby-googlecharts/ruby-googlecharts_1.6.12-3_all.deb","size":16092},
     "adc9ffa75572adfd80d3b2b3cf8e1075f32f32d615b7ca26cae485954ccbb4b8": {"location":"pool/contrib/z/zfs-linux/zfs-dkms_2.4.4-1_all.deb","size":2519076},
+    "ade0ed912a3785d419b61a584f19aa58fd186a4545d4291454bb03235c44ff99": {"location":"pool/contrib/p/python-cx-oracle/python-cx-oracle-doc_8.3.0-4_all.deb","size":298236},
     "ae9c52524acebce76c0c4d24054041b453f492dd6ae727415343c86110d9a8f5": {"location":"pool/contrib/e/exult/exult-studio_1.12.1-3_amd64.deb","size":1626356},
     "b095e1b688f0a648b1b3403b3e20264000b3ccf09e30fad97b45abdc4e2c4347": {"location":"pool/contrib/n/nvidia-support/nvidia-installer-cleanup_20240109+1_amd64.deb","size":13924},
     "b0f6e9b035a70d52e1488a73d2b5889624592429cdf1b41b6751de00c1055889": {"location":"pool/contrib/h/hannah-foo2zjs/hannah-foo2zjs_6+b1_amd64.deb","size":16684},
@@ -224,7 +227,6 @@
     "c1a17e23610186a343a2e15d15b60cee0fee85a32533e3270c1763c6a421ce97": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate-data_0.9.4+dfsg-1_all.deb","size":98248},
     "c1b2a439c6ae4300447f258d08166264e427118cfe4aee2dedc220779e3322bb": {"location":"pool/contrib/s/speech-dispatcher-contrib/speech-dispatcher-voxin_0.12.1-3_amd64.deb","size":35884},
     "c1da785822162d3a7be4954d7c6e05926253ab3b3d39d27e0001fc616297cf9b": {"location":"pool/contrib/f/festvox-mbrola/festvox-us2_1.95-5_all.deb","size":11808},
-    "c39dceffd4d1dd8a1e01e1b09db1c73b1e571ae9f4f9311e99d208e9be050290": {"location":"pool/contrib/u/unrardll/python3-unrardll_0.1.7+ds1-6_amd64.deb","size":14112},
     "c3c9bfaf0765843c54d60c33b0aa327bad01ef2b3b9b96faf33e1f5e720f4ce4": {"location":"pool/contrib/f/fheroes2/fheroes2_1.1.17+dfsg-1_amd64.deb","size":3838524},
     "c4d5053511f99a8cb902e9d66378662d6ad390048bd5dbe8148483d00c1a2552": {"location":"pool/contrib/k/kinect-audio-setup/kinect-audio-setup_0.5-3_amd64.deb","size":15532},
     "c641eda1af89734e0d36222c8cb4ccd2cf025551f0675fb76e316e5fbf4cb8c9": {"location":"pool/contrib/g/geoipupdate/geoipupdate_7.1.1-1_amd64.deb","size":2213444},
