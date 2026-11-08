@@ -1,11 +1,11 @@
 [
   {
-    "package_id": "apt_3.3.3_arm64",
+    "package_id": "apt_3.3.6_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "74c2c24c37a240c95ed660213c9ee90abaa31863942b88cefcd385dfbe3c5d23",
+    "pkg_checksum": "d2655f45ebae92afe47117c1c487254b7cd9c93c6e749059cd22011b5151e757",
     "source": "repo",
-    "size": 1432120,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/apt/apt_3.3.3_arm64.deb"
+    "size": 1444744,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/apt/apt_3.3.6_arm64.deb"
   },
   {
     "package_id": "base-files_14.2_arm64",
@@ -13,7 +13,7 @@
     "pkg_checksum": "507d871e4bf46a9d2020de6cfcea26d4625b67e124ad236769502e88546415d9",
     "source": "repo",
     "size": 87928,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/b/base-files/base-files_14.2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/b/base-files/base-files_14.2_arm64.deb"
   },
   {
     "package_id": "base-passwd_3.6.8+b1_arm64",
@@ -21,7 +21,7 @@
     "pkg_checksum": "49d364984cc6cedaa905803a8da3756d9ed73779663e8d0b2324e5122fea0b4e",
     "source": "repo",
     "size": 54332,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/b/base-passwd/base-passwd_3.6.8+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/b/base-passwd/base-passwd_3.6.8+b1_arm64.deb"
   },
   {
     "package_id": "bash_5.3-4_arm64",
@@ -29,15 +29,15 @@
     "pkg_checksum": "835d62ce125b206e72f728b03afc9f5786b4e48443ec5bc3089ce8390833d448",
     "source": "repo",
     "size": 1501604,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/b/bash/bash_5.3-4_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/b/bash/bash_5.3-4_arm64.deb"
   },
   {
-    "package_id": "coreutils_9.10-1_arm64",
+    "package_id": "coreutils_9.12-0.3_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "adb3706665fe418549d4e0a4d53fdd5ccc1dc63ec2548d8c201d7d6101c99ac9",
+    "pkg_checksum": "1f81be0a06e645af36567860bd66f9460ec11b8061ae1a4b3bfc0b7388b9450b",
     "source": "repo",
-    "size": 3049384,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/c/coreutils/coreutils_9.10-1_arm64.deb"
+    "size": 3233752,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/c/coreutils/coreutils_9.12-0.3_arm64.deb"
   },
   {
     "package_id": "dash_0.5.12-12+b1_arm64",
@@ -45,7 +45,7 @@
     "pkg_checksum": "162f2e04e74793fd1512e426b7d5f03b202fc8069959143f0bd8e55c61b90128",
     "source": "repo",
     "size": 95612,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/dash/dash_0.5.12-12+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/dash/dash_0.5.12-12+b1_arm64.deb"
   },
   {
     "package_id": "debconf_1.5.92_all",
@@ -53,7 +53,7 @@
     "pkg_checksum": "cdee7273fe92dad870fa6c7e3a8aa5b4001a8ddeffccb0958e1607bf15879803",
     "source": "repo",
     "size": 122512,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/debconf/debconf_1.5.92_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/debconf/debconf_1.5.92_all.deb"
   },
   {
     "package_id": "debian-archive-keyring_2025.1_all",
@@ -61,7 +61,7 @@
     "pkg_checksum": "9ea7778e443144ca490668737a8ab22dd3e748bb99e805e22ec055abeb3c7fac",
     "source": "repo",
     "size": 179244,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb"
   },
   {
     "package_id": "debianutils_5.24_arm64",
@@ -69,7 +69,7 @@
     "pkg_checksum": "5b437cca5b7413ea8b281b4e250e48a5f650f1b2ee4ab662d4cc5cebd439490a",
     "source": "repo",
     "size": 93108,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/debianutils/debianutils_5.24_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/debianutils/debianutils_5.24_arm64.deb"
   },
   {
     "package_id": "diffutils_1:3.12-1+b1_arm64",
@@ -77,7 +77,7 @@
     "pkg_checksum": "fdb09c89f7a618de193404389058cb4aa2f96ff2483bca87f4aa7b9cdb0c1bc3",
     "source": "repo",
     "size": 397524,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/diffutils/diffutils_3.12-1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/diffutils/diffutils_3.12-1+b1_arm64.deb"
   },
   {
     "package_id": "dpkg_1.23.11_arm64",
@@ -85,7 +85,7 @@
     "pkg_checksum": "4ed40fc92f0197a6c9fbbb020d2adef07640acbc43d7ea04831de3d6caab697f",
     "source": "repo",
     "size": 1187304,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/dpkg/dpkg_1.23.11_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/dpkg/dpkg_1.23.11_arm64.deb"
   },
   {
     "package_id": "findutils_4.11.0-3_arm64",
@@ -93,7 +93,7 @@
     "pkg_checksum": "ee14007d1f5756cc8df4f229559d018ddd4c53d2f9b09a050d731d47690763b0",
     "source": "repo",
     "size": 769880,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/f/findutils/findutils_4.11.0-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/f/findutils/findutils_4.11.0-3_arm64.deb"
   },
   {
     "package_id": "gcc-16-base_16.2.0-3_arm64",
@@ -101,7 +101,7 @@
     "pkg_checksum": "c9c21cce3ac88d1e8bcf1b990c9589cb6ed7cf4cfb84d6eb7efd35a79896251a",
     "source": "repo",
     "size": 38700,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/gcc-16/gcc-16-base_16.2.0-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/gcc-16/gcc-16-base_16.2.0-3_arm64.deb"
   },
   {
     "package_id": "grep_3.12-1+b1_arm64",
@@ -109,7 +109,7 @@
     "pkg_checksum": "34f9a489d4cb19698521af3ebffc39da74da14ae9ba3feccde64e4868d301999",
     "source": "repo",
     "size": 440292,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/grep/grep_3.12-1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/grep/grep_3.12-1+b1_arm64.deb"
   },
   {
     "package_id": "gzip_1.14-1_arm64",
@@ -117,7 +117,7 @@
     "pkg_checksum": "3098d587ff64a18d52ada47cd38bcd4b834f9c4c8fe9f5178c734ea9931e9240",
     "source": "repo",
     "size": 140556,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/gzip/gzip_1.14-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/gzip/gzip_1.14-1_arm64.deb"
   },
   {
     "package_id": "hostname_3.25+b1_arm64",
@@ -125,7 +125,7 @@
     "pkg_checksum": "4ae87145db8532e31a54eb8057e406a73ee41f9e575aeff8d1043cc91439689c",
     "source": "repo",
     "size": 11224,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/h/hostname/hostname_3.25+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/h/hostname/hostname_3.25+b1_arm64.deb"
   },
   {
     "package_id": "init-system-helpers_1.69+nmu3_all",
@@ -133,7 +133,7 @@
     "pkg_checksum": "b1a4ebee265c4727cc95cb0555bd8c5af455303b272418bccf5d171913a60ba9",
     "source": "repo",
     "size": 37280,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/i/init-system-helpers/init-system-helpers_1.69+nmu3_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/i/init-system-helpers/init-system-helpers_1.69+nmu3_all.deb"
   },
   {
     "package_id": "libacl1_2.4.0-1_arm64",
@@ -141,15 +141,15 @@
     "pkg_checksum": "cb7ad26438a5429d93742107c8bef6efcbf3aa05bdd723c17913658ae4d2be26",
     "source": "repo",
     "size": 36000,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/acl/libacl1_2.4.0-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/acl/libacl1_2.4.0-1_arm64.deb"
   },
   {
-    "package_id": "libapt-pkg7.0_3.3.3_arm64",
+    "package_id": "libapt-pkg7.0_3.3.6_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "70d25f305703b5ca81362582e2ee483b50b8b7f00cc34579ea04569c1a6569f4",
+    "pkg_checksum": "361c5a12ba63bbfbd9d6e6804cb3ede9a44ad91f76aeaf59b066b1869b46aa55",
     "source": "repo",
-    "size": 1051136,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/apt/libapt-pkg7.0_3.3.3_arm64.deb"
+    "size": 1056820,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/apt/libapt-pkg7.0_3.3.6_arm64.deb"
   },
   {
     "package_id": "libattr1_1:2.6.0-1_arm64",
@@ -157,7 +157,7 @@
     "pkg_checksum": "9071102e4368251506d1fd7e7c342314a7a1e2515970f1255b1447fa37cdf3da",
     "source": "repo",
     "size": 24340,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/attr/libattr1_2.6.0-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/attr/libattr1_2.6.0-1_arm64.deb"
   },
   {
     "package_id": "libaudit-common_1:4.1.2-1_all",
@@ -165,7 +165,7 @@
     "pkg_checksum": "3d4206918b2c61e7b95bdd2f7e7d927afb1432ecb0deecdd0ade209ed6150c93",
     "source": "repo",
     "size": 14268,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/audit/libaudit-common_4.1.2-1_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/audit/libaudit-common_4.1.2-1_all.deb"
   },
   {
     "package_id": "libaudit1_1:4.1.2-1+b2_arm64",
@@ -173,7 +173,7 @@
     "pkg_checksum": "3015bbc1bfd5088ef33967e6c6fa9921f2ac994b82ebc6a2c93dc3ed1aaf3a9e",
     "source": "repo",
     "size": 57764,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/a/audit/libaudit1_4.1.2-1+b2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/a/audit/libaudit1_4.1.2-1+b2_arm64.deb"
   },
   {
     "package_id": "libblkid1_2.42.4-1_arm64",
@@ -181,7 +181,7 @@
     "pkg_checksum": "53ee740e15f0435ddfefc5a532208d0e984fcf1dcc6d19197211470c1ce32a61",
     "source": "repo",
     "size": 165704,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/u/util-linux/libblkid1_2.42.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/u/util-linux/libblkid1_2.42.4-1_arm64.deb"
   },
   {
     "package_id": "libbz2-1.0_1.0.8-6+b2_arm64",
@@ -189,7 +189,7 @@
     "pkg_checksum": "cca22caf6bcf0a547ee3d866aad175c88aab979065c179aa845b77724911c4bd",
     "source": "repo",
     "size": 36632,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/b/bzip2/libbz2-1.0_1.0.8-6+b2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/b/bzip2/libbz2-1.0_1.0.8-6+b2_arm64.deb"
   },
   {
     "package_id": "libc-bin_2.43-7_arm64",
@@ -197,7 +197,7 @@
     "pkg_checksum": "b38dff2bf08857153314c693506debbafef4ea3dec921335e22cc14c59456563",
     "source": "repo",
     "size": 530248,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/glibc/libc-bin_2.43-7_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/glibc/libc-bin_2.43-7_arm64.deb"
   },
   {
     "package_id": "libc-gconv-modules-extra_2.43-7_arm64",
@@ -205,7 +205,7 @@
     "pkg_checksum": "e6193371b9722624aa46ed45bca12ee219d092cf70b464f037645dfeb92bedd9",
     "source": "repo",
     "size": 1128656,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/glibc/libc-gconv-modules-extra_2.43-7_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/glibc/libc-gconv-modules-extra_2.43-7_arm64.deb"
   },
   {
     "package_id": "libc6_2.43-7_arm64",
@@ -213,7 +213,7 @@
     "pkg_checksum": "2315e75157bf67622bb435724de8be3c4c6f5bb33f3f26e8310842ea66093c74",
     "source": "repo",
     "size": 1458588,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/glibc/libc6_2.43-7_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/glibc/libc6_2.43-7_arm64.deb"
   },
   {
     "package_id": "libcap-ng0_0.9.6-1+b1_arm64",
@@ -221,7 +221,15 @@
     "pkg_checksum": "7307bb77a0edf4c170942ff2cf8d4c68cd32e87ed898b304c21d2bf6edfe71e7",
     "source": "repo",
     "size": 18832,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libc/libcap-ng/libcap-ng0_0.9.6-1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libc/libcap-ng/libcap-ng0_0.9.6-1+b1_arm64.deb"
+  },
+  {
+    "package_id": "libcap2_1:2.78-1+b1_arm64",
+    "repo": "debian.testing.main.repository",
+    "pkg_checksum": "68c21a1e98e87a1a36668beda788b20b94f116644b78a645f5599fe0fb5fbfec",
+    "source": "repo",
+    "size": 26728,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libc/libcap2/libcap2_2.78-1+b1_arm64.deb"
   },
   {
     "package_id": "libcrypt1_1:4.5.2+20251210-1_arm64",
@@ -229,15 +237,15 @@
     "pkg_checksum": "e4fa1fc3309a0aba140512467ddc487310444f8a2024f4bcc350c1851c1b053e",
     "source": "repo",
     "size": 92028,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libx/libxcrypt/libcrypt1_4.5.2+20251210-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libx/libxcrypt/libcrypt1_4.5.2+20251210-1_arm64.deb"
   },
   {
-    "package_id": "libdb5.3t64_5.3.28+dfsg2-11+b1_arm64",
+    "package_id": "libdb5.3t64_5.3.28+dfsg2-12_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "b1a647dcbbab145d20dceba0253256b05cbda683bc7b4d9ce74ed6d1b5e80643",
+    "pkg_checksum": "abb52d66b9875c65a25f4b5c011e87c571cbe9be302000d124ee9b8f89dab352",
     "source": "repo",
-    "size": 625772,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-11+b1_arm64.deb"
+    "size": 620736,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-12_arm64.deb"
   },
   {
     "package_id": "libdebconfclient0_0.283_arm64",
@@ -245,7 +253,7 @@
     "pkg_checksum": "9aa3de348b42d7409ea53cd500fddca2321f8c27f9b37b16eeff2653438017fc",
     "source": "repo",
     "size": 7736,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/c/cdebconf/libdebconfclient0_0.283_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/c/cdebconf/libdebconfclient0_0.283_arm64.deb"
   },
   {
     "package_id": "libexpat1_2.9.0-1_arm64",
@@ -253,7 +261,7 @@
     "pkg_checksum": "810a63c52c8ff78f30f04da8c78f133a34c24504caed3f9e673ddda0c878f53d",
     "source": "repo",
     "size": 115420,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/e/expat/libexpat1_2.9.0-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/e/expat/libexpat1_2.9.0-1_arm64.deb"
   },
   {
     "package_id": "libffi8_3.8.0-2_arm64",
@@ -261,7 +269,7 @@
     "pkg_checksum": "b6e6930ad3b9423237fb64bcf5fb65fdd36890613b7f083094fcf16041c5e851",
     "source": "repo",
     "size": 25888,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libf/libffi/libffi8_3.8.0-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libf/libffi/libffi8_3.8.0-2_arm64.deb"
   },
   {
     "package_id": "libgcc-s1_16.2.0-3_arm64",
@@ -269,7 +277,7 @@
     "pkg_checksum": "0b64848c56954c919709a045dc77972d5787922e3585795bfe2fcb1009647bad",
     "source": "repo",
     "size": 53248,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/gcc-16/libgcc-s1_16.2.0-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/gcc-16/libgcc-s1_16.2.0-3_arm64.deb"
   },
   {
     "package_id": "libgmp10_2:6.3.0+dfsg-5+b2_arm64",
@@ -277,7 +285,7 @@
     "pkg_checksum": "ceedd3ac17447facce0de2713b6f99d711fa41e7f26cb278778840054d93b6a7",
     "source": "repo",
     "size": 542872,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/gmp/libgmp10_6.3.0+dfsg-5+b2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/gmp/libgmp10_6.3.0+dfsg-5+b2_arm64.deb"
   },
   {
     "package_id": "libhogweed6t64_3.10.2-1+b1_arm64",
@@ -285,7 +293,7 @@
     "pkg_checksum": "3b61a8059b653c98019b959419060c79e061259a8b9ec39981050dda7059c003",
     "source": "repo",
     "size": 329904,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/nettle/libhogweed6t64_3.10.2-1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/nettle/libhogweed6t64_3.10.2-1+b1_arm64.deb"
   },
   {
     "package_id": "liblz4-1_1.10.0-10_arm64",
@@ -293,7 +301,7 @@
     "pkg_checksum": "c088f662f310c47a92b9120f6a6e7b430ce3f0a029d3d1a554a0d3acf753b8b7",
     "source": "repo",
     "size": 66504,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/l/lz4/liblz4-1_1.10.0-10_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/l/lz4/liblz4-1_1.10.0-10_arm64.deb"
   },
   {
     "package_id": "liblzma5_5.8.4-1_arm64",
@@ -301,7 +309,7 @@
     "pkg_checksum": "7f154b61a6dbeb833e8dcc8e0bce2fb3ba0e30a61e4c46179ee5fdbee05a9c41",
     "source": "repo",
     "size": 342208,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/x/xz-utils/liblzma5_5.8.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/x/xz-utils/liblzma5_5.8.4-1_arm64.deb"
   },
   {
     "package_id": "libmd0_1.3.0-1_arm64",
@@ -309,7 +317,7 @@
     "pkg_checksum": "7237eae7065e13453f7766f5bccb72cf7d062f87c59c783dfca391f5936f347e",
     "source": "repo",
     "size": 40064,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libm/libmd/libmd0_1.3.0-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libm/libmd/libmd0_1.3.0-1_arm64.deb"
   },
   {
     "package_id": "libmount1_2.42.4-1_arm64",
@@ -317,7 +325,7 @@
     "pkg_checksum": "75557252326f9a911a4a0b7f4ee99b61cb73d9a92a25b7c93dd8bab16373e048",
     "source": "repo",
     "size": 202288,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/u/util-linux/libmount1_2.42.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/u/util-linux/libmount1_2.42.4-1_arm64.deb"
   },
   {
     "package_id": "libncursesw6_6.6+20260608-2_arm64",
@@ -325,7 +333,7 @@
     "pkg_checksum": "a27d49cd2f7c3b02caf56b59d2c52f7bbf9d18dcbc8f96c412cf767b6b36c43e",
     "source": "repo",
     "size": 125308,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/ncurses/libncursesw6_6.6+20260608-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/ncurses/libncursesw6_6.6+20260608-2_arm64.deb"
   },
   {
     "package_id": "libnettle8t64_3.10.2-1+b1_arm64",
@@ -333,7 +341,7 @@
     "pkg_checksum": "b600dcf64a45508b39be31f8d415f177aa6a1c31af9b7e673063a0f4aea3875e",
     "source": "repo",
     "size": 303720,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/nettle/libnettle8t64_3.10.2-1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/nettle/libnettle8t64_3.10.2-1+b1_arm64.deb"
   },
   {
     "package_id": "libnss-systemd_262-1_arm64",
@@ -341,7 +349,7 @@
     "pkg_checksum": "082f1b835d187eff284ec04f4905d8566a00f55d6016daa567056d34e44882e6",
     "source": "repo",
     "size": 209272,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/systemd/libnss-systemd_262-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/systemd/libnss-systemd_262-1_arm64.deb"
   },
   {
     "package_id": "libpam-modules-bin_1.7.0-8_arm64",
@@ -349,7 +357,7 @@
     "pkg_checksum": "6fa2eadfc410f23bb402b0d0fd124642cb62fb82abee82d26ec3b6cd14eb8752",
     "source": "repo",
     "size": 44656,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/pam/libpam-modules-bin_1.7.0-8_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/pam/libpam-modules-bin_1.7.0-8_arm64.deb"
   },
   {
     "package_id": "libpam-modules_1.7.0-8_arm64",
@@ -357,7 +365,7 @@
     "pkg_checksum": "9c47983cc565522cc11cf11498e3d10206056e58dedf2b0520ee2199d600609f",
     "source": "repo",
     "size": 161088,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/pam/libpam-modules_1.7.0-8_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/pam/libpam-modules_1.7.0-8_arm64.deb"
   },
   {
     "package_id": "libpam-runtime_1.7.0-8_all",
@@ -365,7 +373,7 @@
     "pkg_checksum": "a428e8faf8fa126da17b3619e041603677da613bda804f881b86d2e4db0e3a7b",
     "source": "repo",
     "size": 245528,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/pam/libpam-runtime_1.7.0-8_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/pam/libpam-runtime_1.7.0-8_all.deb"
   },
   {
     "package_id": "libpam0g_1.7.0-8_arm64",
@@ -373,15 +381,15 @@
     "pkg_checksum": "8c3bf4a232a87b245dc4f6c72609db51c28e1435435382efdd92d2837fb9dfb9",
     "source": "repo",
     "size": 65116,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/pam/libpam0g_1.7.0-8_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/pam/libpam0g_1.7.0-8_arm64.deb"
   },
   {
-    "package_id": "libpcre2-8-0_10.48-3.1_arm64",
+    "package_id": "libpcre2-8-0_10.49-1_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "3aa4f507fdc563c197fa2e240a1f0ef2d9124880027d858b46532c4ead9bda6a",
+    "pkg_checksum": "3af37b066fb2b6ff7c6cc37c33f5144fa97650030b1b191cb082a93e0c5a5f8a",
     "source": "repo",
-    "size": 267308,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/pcre2/libpcre2-8-0_10.48-3.1_arm64.deb"
+    "size": 267540,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/pcre2/libpcre2-8-0_10.49-1_arm64.deb"
   },
   {
     "package_id": "libpython3-stdlib_3.14.7-3_arm64",
@@ -389,23 +397,23 @@
     "pkg_checksum": "98759771c0a51944cf6db4d03c5a1de66057e8d2532e8f5deba533e5441b688d",
     "source": "repo",
     "size": 8252,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3-defaults/libpython3-stdlib_3.14.7-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3-defaults/libpython3-stdlib_3.14.7-3_arm64.deb"
   },
   {
-    "package_id": "libpython3.14-minimal_3.14.8-1_arm64",
+    "package_id": "libpython3.14-minimal_3.14.10-1_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "83e298ea45ba9a0d497108f27d5096a1d73ca39f90f6807ee5b73ccc214c983f",
+    "pkg_checksum": "97086d9d8e58072d264382d7057aa475b0d319bbbdb809e95572e599e4ac9351",
     "source": "repo",
-    "size": 894364,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3.14/libpython3.14-minimal_3.14.8-1_arm64.deb"
+    "size": 895428,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3.14/libpython3.14-minimal_3.14.10-1_arm64.deb"
   },
   {
-    "package_id": "libpython3.14-stdlib_3.14.8-1_arm64",
+    "package_id": "libpython3.14-stdlib_3.14.10-1_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "9b9848c221ad036d80514872f860df3212de50799354ac426d652680bb657751",
+    "pkg_checksum": "58490213be801cb679ae755b6dffaed89d8866a74f6c9128a6f6667d1c0b7250",
     "source": "repo",
-    "size": 2230888,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3.14/libpython3.14-stdlib_3.14.8-1_arm64.deb"
+    "size": 2227656,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3.14/libpython3.14-stdlib_3.14.10-1_arm64.deb"
   },
   {
     "package_id": "libreadline8t64_8.3-4_arm64",
@@ -413,7 +421,7 @@
     "pkg_checksum": "c8f93840910ad4db3778e3b730193e8f50ad947a9f6c978fa941cb6202e934b6",
     "source": "repo",
     "size": 167636,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/r/readline/libreadline8t64_8.3-4_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/r/readline/libreadline8t64_8.3-4_arm64.deb"
   },
   {
     "package_id": "libseccomp2_2.6.1-1+b2_arm64",
@@ -421,7 +429,7 @@
     "pkg_checksum": "07819764387caeedc4a4be727b0b18625512620bb78e37ec58469dab113717ff",
     "source": "repo",
     "size": 48152,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libs/libseccomp/libseccomp2_2.6.1-1+b2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libs/libseccomp/libseccomp2_2.6.1-1+b2_arm64.deb"
   },
   {
     "package_id": "libselinux1_3.11-2.1+b1_arm64",
@@ -429,7 +437,7 @@
     "pkg_checksum": "69096c93ae439c34892f94a023aff6f944e5f1e4003c11b83558319a39444f02",
     "source": "repo",
     "size": 82064,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libs/libselinux/libselinux1_3.11-2.1+b1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libs/libselinux/libselinux1_3.11-2.1+b1_arm64.deb"
   },
   {
     "package_id": "libsmartcols1_2.42.4-1_arm64",
@@ -437,7 +445,7 @@
     "pkg_checksum": "c1462c27a61a078b58f72b1f4dce8e8e3c58238b0ba1d1851f09c586724946ff",
     "source": "repo",
     "size": 139064,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/u/util-linux/libsmartcols1_2.42.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/u/util-linux/libsmartcols1_2.42.4-1_arm64.deb"
   },
   {
     "package_id": "libsqlite3-0_3.53.4-2_arm64",
@@ -445,7 +453,7 @@
     "pkg_checksum": "e417fb0642502c090d84a6f5fce1a2e5961dfe18644415ddce77a1a67cd2fc89",
     "source": "repo",
     "size": 900900,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/sqlite3/libsqlite3-0_3.53.4-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/sqlite3/libsqlite3-0_3.53.4-2_arm64.deb"
   },
   {
     "package_id": "libssl3t64_3.6.5-1_arm64",
@@ -453,7 +461,7 @@
     "pkg_checksum": "76770c099cfb06cd48cb0764ac3a7771c8b38e17d25780010d55772dce6b36f8",
     "source": "repo",
     "size": 2793584,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/o/openssl/libssl3t64_3.6.5-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/o/openssl/libssl3t64_3.6.5-1_arm64.deb"
   },
   {
     "package_id": "libstdc++6_16.2.0-3_arm64",
@@ -461,7 +469,7 @@
     "pkg_checksum": "33c35ea990a913d6e7013d6845b7f4aaed65b70ee01ceb7da86aa25129f866c6",
     "source": "repo",
     "size": 700172,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/g/gcc-16/libstdc++6_16.2.0-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/g/gcc-16/libstdc++6_16.2.0-3_arm64.deb"
   },
   {
     "package_id": "libsystemd0_262-1_arm64",
@@ -469,7 +477,7 @@
     "pkg_checksum": "558f41b5b1f56d51e74d94ce4bd1d719875983613f809c49c83900c2bbd87149",
     "source": "repo",
     "size": 430684,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/systemd/libsystemd0_262-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/systemd/libsystemd0_262-1_arm64.deb"
   },
   {
     "package_id": "libtinfo6_6.6+20260608-2_arm64",
@@ -477,7 +485,7 @@
     "pkg_checksum": "2ba77e68fbadd96dd7aa83399ab681593d5b48e951ae63e69a7a0650dfdfaf76",
     "source": "repo",
     "size": 345352,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/ncurses/libtinfo6_6.6+20260608-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/ncurses/libtinfo6_6.6+20260608-2_arm64.deb"
   },
   {
     "package_id": "libudev1_262-1_arm64",
@@ -485,7 +493,7 @@
     "pkg_checksum": "cd4a42461675b178caa95623b31077583635886c2fca993d4ff3393c4148abea",
     "source": "repo",
     "size": 130116,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/systemd/libudev1_262-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/systemd/libudev1_262-1_arm64.deb"
   },
   {
     "package_id": "libuuid1_2.42.4-1_arm64",
@@ -493,7 +501,7 @@
     "pkg_checksum": "a328012faba3f0ce224a61571a77b0798dbd783303aa436277c7909ed77800a9",
     "source": "repo",
     "size": 33092,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/u/util-linux/libuuid1_2.42.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/u/util-linux/libuuid1_2.42.4-1_arm64.deb"
   },
   {
     "package_id": "libxxhash0_0.8.3-2+b2_arm64",
@@ -501,7 +509,7 @@
     "pkg_checksum": "4cf0681fffcf75305814bf2276a733f2cabd9bcf5fe18430c74441723343e467",
     "source": "repo",
     "size": 21488,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/x/xxhash/libxxhash0_0.8.3-2+b2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/x/xxhash/libxxhash0_0.8.3-2+b2_arm64.deb"
   },
   {
     "package_id": "libzstd1_1.5.7+dfsg-4_arm64",
@@ -509,7 +517,7 @@
     "pkg_checksum": "e99e6e244d6c80f1c8e96cb68bb04bffc6848b12e3dcc5a35f6a775e4332e936",
     "source": "repo",
     "size": 257980,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-4_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-4_arm64.deb"
   },
   {
     "package_id": "mawk_1.3.4.20260302-2_arm64",
@@ -517,7 +525,7 @@
     "pkg_checksum": "9405c5cf8a3bda860d0be5d74fac922f294ca994c1066033e1684709a75392c0",
     "source": "repo",
     "size": 133800,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/m/mawk/mawk_1.3.4.20260302-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/m/mawk/mawk_1.3.4.20260302-2_arm64.deb"
   },
   {
     "package_id": "media-types_14.0.0_all",
@@ -525,7 +533,7 @@
     "pkg_checksum": "c835983e7cfeac12fc5db143d5de009444e800ddc40eeb439fb556a6b9e99243",
     "source": "repo",
     "size": 30760,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/m/media-types/media-types_14.0.0_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/m/media-types/media-types_14.0.0_all.deb"
   },
   {
     "package_id": "ncurses-base_6.6+20260608-2_all",
@@ -533,7 +541,7 @@
     "pkg_checksum": "a0b409c94a8e3d0dd86c252b4c5ef243443745ec1d528e3fe0aa194ff29297b7",
     "source": "repo",
     "size": 276104,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/ncurses/ncurses-base_6.6+20260608-2_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/ncurses/ncurses-base_6.6+20260608-2_all.deb"
   },
   {
     "package_id": "ncurses-bin_6.6+20260608-2_arm64",
@@ -541,7 +549,7 @@
     "pkg_checksum": "b7e1a0c0e78296804f366ae4e8a6a676e83aa192afbcc14d880b2fc4503c59a5",
     "source": "repo",
     "size": 438220,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/ncurses/ncurses-bin_6.6+20260608-2_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/ncurses/ncurses-bin_6.6+20260608-2_arm64.deb"
   },
   {
     "package_id": "netbase_6.6_all",
@@ -549,7 +557,7 @@
     "pkg_checksum": "7bc354cb841d2e35cd8b581cfdf7383fbe6cfec95c54a619f756499ee3e10a4b",
     "source": "repo",
     "size": 10344,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/n/netbase/netbase_6.6_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/n/netbase/netbase_6.6_all.deb"
   },
   {
     "package_id": "openssl-provider-legacy_3.6.5-1_arm64",
@@ -557,7 +565,7 @@
     "pkg_checksum": "d20c164b2d206a1295df5c8b5cefe9b84846b1e3cfa057639b632245f867d426",
     "source": "repo",
     "size": 324052,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/o/openssl/openssl-provider-legacy_3.6.5-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/o/openssl/openssl-provider-legacy_3.6.5-1_arm64.deb"
   },
   {
     "package_id": "perl-base_5.42.3-1_arm64",
@@ -565,7 +573,7 @@
     "pkg_checksum": "3eeb538518a1366e4b9f466e5883a60823acd4f92a5da5cf41395d5c4141d109",
     "source": "repo",
     "size": 1691164,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/perl/perl-base_5.42.3-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/perl/perl-base_5.42.3-1_arm64.deb"
   },
   {
     "package_id": "python3-minimal_3.14.7-3_arm64",
@@ -573,23 +581,23 @@
     "pkg_checksum": "d3d3ce1fa5e078c4ea7480a4ddc70a835d04b34229a30be9992424dce1b744c0",
     "source": "repo",
     "size": 25272,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3-defaults/python3-minimal_3.14.7-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3-defaults/python3-minimal_3.14.7-3_arm64.deb"
   },
   {
-    "package_id": "python3.14-minimal_3.14.8-1_arm64",
+    "package_id": "python3.14-minimal_3.14.10-1_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "67a04b6550697a85c417544b58f24c8285e28209226dfe56c92581a2fe5f2b53",
+    "pkg_checksum": "8cb7d20c5ec46e17a3ad48c6e0afc2e1cc7de2d6da20cb0d74842d96a39321dc",
     "source": "repo",
-    "size": 2402136,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3.14/python3.14-minimal_3.14.8-1_arm64.deb"
+    "size": 2413544,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3.14/python3.14-minimal_3.14.10-1_arm64.deb"
   },
   {
-    "package_id": "python3.14_3.14.8-1_arm64",
+    "package_id": "python3.14_3.14.10-1_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "fc38c3c2a428714570949a9148d9a1140ffd9ab609904c91dbbc9403a5d7200f",
+    "pkg_checksum": "d7a763075b50c7aeddc66b44d90a1c8298f8bafd2259b76803b7d652bfc3e646",
     "source": "repo",
-    "size": 873608,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3.14/python3.14_3.14.8-1_arm64.deb"
+    "size": 883532,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3.14/python3.14_3.14.10-1_arm64.deb"
   },
   {
     "package_id": "python3_3.14.7-3_arm64",
@@ -597,7 +605,7 @@
     "pkg_checksum": "31a967473374986b4973dd850b1845b04d343ae8a4c6f3571abef3459cd379a0",
     "source": "repo",
     "size": 26016,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/p/python3-defaults/python3_3.14.7-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/p/python3-defaults/python3_3.14.7-3_arm64.deb"
   },
   {
     "package_id": "readline-common_8.3-4_all",
@@ -605,7 +613,7 @@
     "pkg_checksum": "0fbae1769293deda3cf2a349c472bc50302225812d8900def5c9dfa02404ad6d",
     "source": "repo",
     "size": 74828,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/r/readline/readline-common_8.3-4_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/r/readline/readline-common_8.3-4_all.deb"
   },
   {
     "package_id": "sed_4.9-3_arm64",
@@ -613,7 +621,7 @@
     "pkg_checksum": "8637cfc7ccb30c56970af22c0cd911153c9f4ae848daeade050ac16a1e3b9675",
     "source": "repo",
     "size": 325724,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/sed/sed_4.9-3_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/sed/sed_4.9-3_arm64.deb"
   },
   {
     "package_id": "sqv_1.5.0-1_arm64",
@@ -621,7 +629,7 @@
     "pkg_checksum": "032d887d1aa13d79229ab44d304e543e5a082c523980587eac3d65f3eeda36d3",
     "source": "repo",
     "size": 655068,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/r/rust-sequoia-sqv/sqv_1.5.0-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/r/rust-sequoia-sqv/sqv_1.5.0-1_arm64.deb"
   },
   {
     "package_id": "sysvinit-utils_3.18-1_arm64",
@@ -629,15 +637,15 @@
     "pkg_checksum": "eff5de69c0029cf4ef33fd6d1b951c9821f7888d9fc62504f472cbd1b604809a",
     "source": "repo",
     "size": 29600,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/s/sysvinit/sysvinit-utils_3.18-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/s/sysvinit/sysvinit-utils_3.18-1_arm64.deb"
   },
   {
-    "package_id": "tar_1.35+dfsg-6_arm64",
+    "package_id": "tar_1.35+dfsg-7_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "3d61213f060de991bf478bd84034c285d58d00b8a34dea54975a6db57977053d",
+    "pkg_checksum": "7c532c2eae31e34fad397b7596a9b83b61642e04b6913b76884107693639d5f6",
     "source": "repo",
-    "size": 801232,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/t/tar/tar_1.35+dfsg-6_arm64.deb"
+    "size": 801604,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/t/tar/tar_1.35+dfsg-7_arm64.deb"
   },
   {
     "package_id": "tzdata_2026f-1_all",
@@ -645,7 +653,7 @@
     "pkg_checksum": "7ef210d4dfaca780b16cfbd307c4a38d0408b24e6774bde541a45b8ffe742b9f",
     "source": "repo",
     "size": 263396,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/t/tzdata/tzdata_2026f-1_all.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/t/tzdata/tzdata_2026f-1_all.deb"
   },
   {
     "package_id": "util-linux_2.42.4-1_arm64",
@@ -653,15 +661,15 @@
     "pkg_checksum": "4041ef33dc098a173d32c01c80f7515f1edd97f07ec7f80db268a3fc614ee4c5",
     "source": "repo",
     "size": 1193324,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/u/util-linux/util-linux_2.42.4-1_arm64.deb"
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/u/util-linux/util-linux_2.42.4-1_arm64.deb"
   },
   {
-    "package_id": "zlib1g_1:1.3.dfsg+really1.3.2-3_arm64",
+    "package_id": "zlib1g_1:1.3.dfsg+really1.3.2-4_arm64",
     "repo": "debian.testing.main.repository",
-    "pkg_checksum": "a77a1a137da4f6e440fa638b00a60dc3d7124e9678402ea5335bc02e75bf267e",
+    "pkg_checksum": "aaf9e8cfc7d86771144c660d544806c886a5ae406f97bd50b62588a0718229ab",
     "source": "repo",
-    "size": 87884,
-    "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.2-3_arm64.deb"
+    "size": 88096,
+    "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.2-4_arm64.deb"
   },
   {
     "repo": "debian.testing.main.repository",
@@ -669,18 +677,18 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
+        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/main/binary-arm64/Packages.xz",
-        "sha256": "0338b78c5049284767b8a56524d1b29b73d02e3860d8534cc35348bcd3360bf9",
-        "size": 10044240,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/main/binary-arm64/by-hash/SHA256/0338b78c5049284767b8a56524d1b29b73d02e3860d8534cc35348bcd3360bf9"
+        "sha256": "f71612def4162038e1d8b3da4b2cb28225b233639aac76cbe46961781c743980",
+        "size": 10072252,
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/main/binary-arm64/by-hash/SHA256/f71612def4162038e1d8b3da4b2cb28225b233639aac76cbe46961781c743980"
       }
     ],
-    "pinned_at": "2026-10-31T20:28:58Z"
+    "pinned_at": "2026-11-07T20:54:37Z"
   },
   {
     "repo": "debian.testing.non-free-firmware.repository",
@@ -688,17 +696,17 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
+        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/non-free-firmware/binary-arm64/Packages.xz",
-        "sha256": "985c36cb807ad68dd0e2f74a05933be7039def834ab2cb37ac783f5af589f8a4",
+        "sha256": "8a501c84fa658d8f16a7ccf96d73924f2d009c4401315cb5baf158040402b044",
         "size": 10936,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/non-free-firmware/binary-arm64/by-hash/SHA256/985c36cb807ad68dd0e2f74a05933be7039def834ab2cb37ac783f5af589f8a4"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/non-free-firmware/binary-arm64/by-hash/SHA256/8a501c84fa658d8f16a7ccf96d73924f2d009c4401315cb5baf158040402b044"
       }
     ],
-    "pinned_at": "2026-10-31T20:28:58Z"
+    "pinned_at": "2026-11-07T20:54:37Z"
   }
 ]

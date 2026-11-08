@@ -3,28 +3,28 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "40e6563e46ecacb844bdcaa4d59f0bb57f91aa9040c4346c6ef2fb9e34317088",
+        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/non-free-firmware/binary-amd64/Packages.xz",
-        "sha256": "dc857af70bc0b9234559112ddf586f39235e6959e5531316f906c71673e4e257",
+        "sha256": "a413dbf458236cd02b2eb59b50c24b5c35c4a790f4efe24f2172b8f27641c9d2",
         "size": 11332,
-        "url": "https://snapshot.debian.org/archive/debian/20261031T202858Z/dists/testing/non-free-firmware/binary-amd64/by-hash/SHA256/dc857af70bc0b9234559112ddf586f39235e6959e5531316f906c71673e4e257"
+        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/non-free-firmware/binary-amd64/by-hash/SHA256/a413dbf458236cd02b2eb59b50c24b5c35c4a790f4efe24f2172b8f27641c9d2"
       }
     ],
     "inline": {}
   },
   "packages": {
     "004982ca7759673f694ce030f66bde43e066d61dc322081bbd550d114d91b6ac": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-linux-nonfree_20260916-1_all.deb","size":76928},
-    "00e6b139c0abe9935d700265196ffea7147ebfcd6e1e96dcbdf4609e3df42599": {"location":"pool/non-free-firmware/a/amd64-microcode/amd64-microcode_3.20251202.1_amd64.deb","size":440560},
     "0122578476af1ab548d08abcb1f0fd6461e05530d522850a0bf5a2878b04155c": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-eliza-cqs-evk_0~20261019-1_all.deb","size":19280},
     "046a40e9a1f6bf61c6b7782d6bd5843b71bde4ae1123a3c1076c204abb3572ed": {"location":"pool/non-free-firmware/l/linux-board-support-package-rb3gen2/firmware-qcom-rb3gen2_1.1-1_all.deb","size":6163688},
     "0b19202678f57b0f859e61f28604de460ca6299b5ca6659f038024aba6e5fa96": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-maili-mtp_0~20261019-1_all.deb","size":7103692},
     "0d76e29fe9a7c5195db48b42e80999404d05538b69f2693f96092d1e223a4539": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-sm8750-mtp_0~20261019-1_all.deb","size":11307164},
     "0ea6826bef6a31f7f457f209833182bff618ac2095c1b9c099444c0f51a2820f": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-thundercomm-rb5_0~20261019-1_all.deb","size":6187192},
     "1f2d852bc0a52bb2ff8f4e5ebafa903e13524dd6e6fe01be827d69d34767096c": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-shikra-cqm-evk_0~20261019-1_all.deb","size":19292},
+    "23d75f3b4cb6e85a0a9d47d6644e5142820e13887120dcdc81326c8229ae2485": {"location":"pool/non-free-firmware/i/intel-microcode/intel-microcode_3.20260925.1_amd64.deb","size":13055608},
     "26b6f09806c0c420b8021f1b9c97aa589bc487d5eeb02524acd03346d545aa99": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-siano_20260916-1_all.deb","size":382076},
     "2bed705612d4821c4b3b33fa30f3fbe61f98de007ba83a717b31b99ca8f4e309": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-kaanapali-mtp_0~20261019-1_all.deb","size":16719628},
     "2e63d6ffa9a596280a80144307f9aa02ed4cb6e79f75c93a9597784508700bbe": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-ivtv_20260916-1_all.deb","size":166028},
@@ -41,6 +41,7 @@
     "438dea065c930a4626c9cb711635149507471307f9d7ede9b981c61f963e0d68": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-nvidia-graphics_20260916-1_all.deb","size":104167816},
     "444a090ad50ba13260000a20fe502c3da4bfaeb477f84180771f80718fdae299": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-cirrus_20260916-1_all.deb","size":503896},
     "46673c544dd06ad8cf2c1bcfd458acc49d413bbd8591ea69bfd50cd03aa0a12e": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-purwa-iot-evk_0~20261019-1_all.deb","size":19316},
+    "497051b808e85dd363593d49285481c7c3f901c91ce6040d5900777b352e4408": {"location":"pool/non-free-firmware/n/nvidia-graphics-drivers/firmware-nvidia-gsp_550.163.01-6_amd64.deb","size":37124832},
     "4dba886ff82067c814f81ec9d675aa0631b497ca8e7d7985694bac6cfe61e825": {"location":"pool/non-free-firmware/b/bluez-firmware/bluez-firmware_1.2-13_all.deb","size":189732},
     "533ccaad2f6a1f90cbcc7c57573551f1b38150cc70ac0dc1752ee1b74678bbb2": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-ti-connectivity_20260916-1_all.deb","size":1472192},
     "5853b263dc0c5c6d0790b847dd2051fa270affcebfe864938b38eb038e98ec26": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-arduino-imola_0~20261019-1_all.deb","size":19300},
@@ -55,9 +56,9 @@
     "72540a921af70b9147db7b42757907e34abb63367949fa7588f30e5ab61c2f43": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-shikra-cqs-evk_0~20261019-1_all.deb","size":3750068},
     "74648294138981113593178de4831f734e8ec6b9f15f0e337532bc54f9969186": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-db820c_0~20261019-1_all.deb","size":1727044},
     "74e92568e9e5faa7572ae4fcfc25746b7cb63fd55717c25c22e9e89355e4910a": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-realtek_20260916-1_all.deb","size":4008360},
+    "7a384224622b2638431afeaff20fe5e33d0a5d5c1fc4eadb371da7665ff8a048": {"location":"pool/non-free-firmware/a/amd64-microcode/amd64-microcode_3.20260923.1_amd64.deb","size":505940},
     "7c1a901ddbd14fecc49efcc2dc77b84fcae348e1b070879810a0217ad5a79815": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries_0~20261019-1_all.deb","size":19672},
     "824eba95a5a132505803f30e17aab312b5f5820d1f45ad5c40b4ac910e6271ce": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-amd-graphics_20260916-1_all.deb","size":16889304},
-    "8b0763a4e68017bf01362014dd12f02fd272eb07351bd2621ebe6ea379feb6a0": {"location":"pool/non-free-firmware/i/intel-microcode/intel-microcode_3.20260227.1_amd64.deb","size":13606152},
     "901df24c24641d679dafdd193f1d4de3942ad400cca9994cee0b913d5a354b60": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-iwlwifi_20260916-1_all.deb","size":25720304},
     "91b820df833c955faf336fe11cc072fc907dc828948564c8401ed7a005187dbc": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-ipw2x00_20260916-1_all.deb","size":307100},
     "92729c2490438a4290b46a81c3d6fe45aec3014a064750d26e0681ac312614ca": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-qualcomm-hamoa-iot-evk_0~20261019-1_all.deb","size":5475792},
@@ -67,7 +68,6 @@
     "a20d3acb3920c2702326011b057003143152fe87248ca30519f15c38d83d8357": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-marvell-prestera_20260916-1_all.deb","size":61327648},
     "a658b6f8f8d8929251ac41cd4a71bb9148db10a5c5e462092f05b8c5c6c80f79": {"location":"pool/non-free-firmware/l/live-tasks-non-free-firmware/live-task-non-free-firmware-pc_12.0.1_all.deb","size":2224},
     "a97f787051cc73401aafb0bbca350b0bca0a87269292ed1c15c9ee57fc0b38de": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-misc-nonfree_20260916-1_all.deb","size":5805344},
-    "ab9377414627e25ed0db166d2d0ef02dc194add3cbaf25eb02dbfa6fe54bb45c": {"location":"pool/non-free-firmware/n/nvidia-graphics-drivers/firmware-nvidia-gsp_550.163.01-5.1_amd64.deb","size":37124352},
     "ae5a87588822d2ff555663ba13a28d647b993debf44604ccf8e78a3542f1af45": {"location":"pool/non-free-firmware/f/firmware-nonfree/firmware-libertas_20260916-1_all.deb","size":3628044},
     "afcde0b5ec41b6c55293a1b3b50bb1c0b4db4676be59334a974908023148e846": {"location":"pool/non-free-firmware/a/atmel-firmware/atmel-firmware_1.3-7.1_all.deb","size":146648},
     "b0cb42ed6ad7c079d1b342f7e66f37b857d6b649e525239d40fe3a9889693bf1": {"location":"pool/non-free-firmware/h/hexagon-dsp-binaries/hexagon-dsp-binaries-arduino-monza_0~20261019-1_all.deb","size":19348},
