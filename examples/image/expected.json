@@ -1,7 +1,7 @@
 {
   "arm64": {
     "boot-demo.fedora": {
-      "sha256": "5f456c1828f64b0cdec56a21784c8a9b5944764ac8590d2560aee3a8c0b3345f"
+      "sha256": "e3377bc790d7f40a25bd0126b5d18904d29bcc9cbb287047113019845d971b1f"
     },
     "boot-demo.fedora[boot][initrd]": {
       "sha256": "0658f07f0ba724f1531c7e7a18b05730399747996d2640e8356da7ba6098452b"
@@ -13,10 +13,10 @@
       "sha256": "49e38b1fba57b2bb1d9b6d84482b6660f761541c5c7e40d0f62771e6c551c2ad"
     },
     "boot-demo.fedora[disk-manifest]": {
-      "sha256": "ae88a339d4ad33388c093ecd7a4156312893dd04306d2a894513d77dd38d4321"
+      "sha256": "be8c8333741efd20eb61b061aeba2105bc7e5fe63755fbe350d3709326bd585e"
     },
     "boot-demo.fedora[manifests][esp]": {
-      "sha256": "5594b01e4c5bf835ea7295120a54956856cc4c44825f636c15f712ee1c540083"
+      "sha256": "29b830548a2783755d2c469d2ba975a0ab9bc6202b4c289b77a9882b5daf18b2"
     },
     "boot-demo.fedora[manifests][usr]": {
       "sha256": "314c1e4341d5c5ab22d18519c374c76b5001e2718daed02edbc0e854d5b069b6"
@@ -36,7 +36,7 @@
   },
   "x86_64": {
     "boot-demo.fedora": {
-      "sha256": "ba218d33589f4629a4581f2ed96acbb4e48a94409fccca628462413e8029caee"
+      "sha256": "810f4d8cd0ae75dd5d58c09784615409a4c0c5983f44b9a7e68b3e2b758aaab0"
     },
     "boot-demo.fedora[boot][initrd]": {
       "sha256": "92c4e74ec361a81e7dcb0484dfb97ba060f2c3199f790c0524c2811f21306254"
@@ -48,10 +48,10 @@
       "sha256": "1dbd49e1af726cb9023fd1da842d5441736563c5dea426901a98e2b5e22c14cb"
     },
     "boot-demo.fedora[disk-manifest]": {
-      "sha256": "9459f750204275ee3e1ceac18bacc5eb4503f75eb887e0bfac38f40209d11120"
+      "sha256": "8c434b3a0a28f6c6eb6e1609bb766258dbf51c5e0b7e2c79b7161df918561713"
     },
     "boot-demo.fedora[manifests][esp]": {
-      "sha256": "a3fa648dedce1f695ab51f67fbe6f5c6cf77e88d11d0c18ccbf2e8d8c3898fde"
+      "sha256": "a856a70ea0b09588e28798cf88250f550ae2475f705ed6d84cea88c076b79946"
     },
     "boot-demo.fedora[manifests][usr]": {
       "sha256": "0451b4a974d9376d975cf92902fc3a287e1a94679947cbddaebc540d838ba861"
