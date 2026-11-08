@@ -3342,6 +3342,19 @@ class TestProjectIgnores(unittest.TestCase):
         self.assertIn("packages/project/nested/ignored.tmp", ignores)
         self.assertNotIn("packages/project/nested/kept.tmp", ignores)
 
+    def test_gitignored_buck_configuration_remains_visible(self) -> None:
+        for ignore in ("/.buckconfig.d/tine-box\n", "/.buckconfig.d/\n"):
+            with self.subTest(ignore=ignore):
+                checkout = self.checkout()
+                (checkout / ".gitignore").write_text(f"/.buckconfig.local\n{ignore}/output\n")
+                (checkout / ".buckconfig.local").write_text("")
+                (checkout / ".buckconfig.d" / "nested").mkdir(parents=True)
+                (checkout / ".buckconfig.d" / "tine-box").write_text("")
+                (checkout / ".buckconfig.d" / "nested" / "settings").write_text("")
+                (checkout / "output").mkdir()
+
+                self.assertEqual(tine.git_ignored_paths(checkout), ["output"])
+
     def test_an_ignored_root_suppresses_its_reported_descendants(self) -> None:
         checkout = self.checkout()
         generated = checkout / "generated"
