@@ -122,6 +122,8 @@ class Spec(finalize.ImageSpec):
     root_hash_out: str | None
     # Image paths holding the package database, stripped from the partitions.
     pkgdb_paths: list[str]
+    # Globs, relative to the image root, of further files to strip from the partitions.
+    strip_paths: list[str]
     # Image directories whose contents the partitions leave out. The directories stay, empty.
     exclude: list[str]
     # Where to list what the composed disk carries, its partitions taken together.
@@ -318,6 +320,14 @@ def empty_directories(tree: Path, directories: list[str]) -> None:
                 util.remove_path(child)
 
 
+def strip_files(tree: Path, patterns: list[str]) -> None:
+    """Remove everything below `tree` that one of the globs in `patterns` matches."""
+    for pattern in patterns:
+        # Sorted so a failure reports the same path every run, whatever order the tree is read in.
+        for path in sorted(tree.glob(pattern.lstrip("/"))):
+            util.remove_path(path)
+
+
 def _write_definitions(
     directory: Path,
     written: list[WrittenPartition],
@@ -479,6 +489,7 @@ def main(argv: list[str] | None = None) -> None:
         # subtargets capture from the tree, so partitions nothing resolves packages in can drop it.
         for relative in spec["pkgdb_paths"]:
             util.remove_path(tree / relative, with_parents=True)
+        strip_files(tree, spec["strip_paths"])
         empty_directories(tree, spec["exclude"])
 
         if extension:

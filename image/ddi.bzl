@@ -282,6 +282,7 @@ def declare_ddi(
     seed: str | None = None,
     verity_key: SigningKeyInfo | None = None,
     strip_pkgdb: bool = False,
+    strip_paths: list[str] = [],
     mkfs_options: dict[str, list[str]] = {},
     basename: str = "image",
     identifier: str | None = None,
@@ -294,10 +295,11 @@ def declare_ddi(
 
     With strip_pkgdb, the partitions omit the package database wherever the image's package system
     keeps it, for a system nothing ever resolves packages in. The image's `[pkgdb]` and `[sbom]`
-    subtargets still capture it from the tree itself. `extension` makes the driver package the tree
-    as an extension (see extension.bzl). `tmpfiles` replaces the tmpfiles lines of `image`. The
-    partitions leave out the contents of the directories in `exclude`. `virtual_size` goes into the
-    provider, see DdiInfo.
+    subtargets still capture it from the tree itself. `strip_paths` drops further files by glob, for
+    what the partitions do not need but a sibling target reading the same layer still does.
+    `extension` makes the driver package the tree as an extension (see extension.bzl). `tmpfiles`
+    replaces the tmpfiles lines of `image`. The partitions leave out the contents of the directories
+    in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
     """
     _check_definitions(
         definitions,
@@ -400,6 +402,7 @@ def declare_ddi(
         "root_hash_out": None,
         "seed": seed,
         "signing": signing_key_spec(verity_key),
+        "strip_paths": strip_paths,
     }
 
     if tmpfiles != None:
@@ -480,6 +483,11 @@ DDI_ATTRS = {
         attrs.list(attrs.string()),
         default = {},
         doc = "filesystem -> the options mkfs is given when formatting a partition of that type",
+    ),
+    "strip_paths": attrs.list(
+        attrs.string(),
+        default = [],
+        doc = "globs, relative to the image root, to leave out of the partitions; the image still carries them",
     ),
     "strip_pkgdb": attrs.bool(
         default = False,

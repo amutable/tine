@@ -422,6 +422,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             mkfs_options = ctx.attrs.mkfs_options,
             seed = ctx.attrs.disk_seed,
             split = True,
+            strip_paths = ctx.attrs.strip_paths,
             strip_pkgdb = ctx.attrs.strip_pkgdb,
             verity_key = resolve_signing_key(ctx.attrs.verity_key),
         )
@@ -508,6 +509,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             mkfs_options = ctx.attrs.mkfs_options,
             seed = ctx.attrs.disk_seed,
             split = True,
+            strip_paths = ctx.attrs.strip_paths,
             strip_pkgdb = ctx.attrs.strip_pkgdb,
             verity_key = resolve_signing_key(ctx.attrs.verity_key),
             virtual_size = ctx.attrs.virtual_size,

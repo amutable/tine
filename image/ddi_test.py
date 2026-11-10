@@ -185,5 +185,44 @@ class TestEmptyDirectories(unittest.TestCase):
             self.assertEqual((tree / "usr/os-release").read_text(), "ID=test")
 
 
+class TestStripFiles(unittest.TestCase):
+    def _tree(self, scratch_dir: str) -> Path:
+        tree = Path(scratch_dir)
+        for version in ("6.17.0", "6.18.0"):
+            modules = tree / "usr/lib/modules" / version
+            (modules / "kernel/fs").mkdir(parents=True)
+            (modules / "vmlinuz").write_text("kernel")
+            (modules / "modules.dep").write_text("deps")
+            (modules / "kernel/fs/xfs.ko").write_text("module")
+        return tree
+
+    def test_removes_every_match_and_nothing_else(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
+            tree = self._tree(scratch_dir)
+            ddi.strip_files(tree, ["usr/lib/modules/*/vmlinuz"])
+            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/vmlinuz")), [])
+            self.assertEqual(len(sorted(tree.glob("usr/lib/modules/*/modules.dep"))), 2)
+
+    def test_takes_a_directory_with_its_contents(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
+            tree = self._tree(scratch_dir)
+            ddi.strip_files(tree, ["usr/lib/modules/*/kernel"])
+            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/kernel")), [])
+            self.assertTrue((tree / "usr/lib/modules/6.17.0").is_dir())
+
+    def test_reads_a_leading_slash_as_the_image_root(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
+            tree = self._tree(scratch_dir)
+            ddi.strip_files(tree, ["/usr/lib/modules/*/vmlinuz"])
+            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/vmlinuz")), [])
+
+    def test_ignores_a_pattern_that_matches_nothing(self) -> None:
+        # A glob holds for every image the rule builds, so one without the file is not an error.
+        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
+            tree = self._tree(scratch_dir)
+            ddi.strip_files(tree, ["usr/lib/modules/*/.vmlinuz.hmac"])
+            self.assertEqual(len(sorted(tree.glob("usr/lib/modules/*/vmlinuz"))), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
