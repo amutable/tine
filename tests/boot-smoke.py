@@ -123,6 +123,13 @@ def drain_terminal() -> None:
         pass
 
 
+def guest_output(console: Console) -> str:
+    """Return the output that the last guest command wrote to /tmp/smoke."""
+    console.send("printf 'SMOKE_OUTPUT[%s]\\n' \"$(base64 -w0 </tmp/smoke)\"")
+    output = console.expect(OUTPUT, STEP_TIMEOUT)
+    return base64.b64decode(output.group(1)).decode(errors="replace") if output else ""
+
+
 def fail(console: Console, message: str) -> NoReturn:
     print(f"\n[boot-smoke] FAIL: {message}", file=sys.stderr)
     console.close()
@@ -177,10 +184,7 @@ def main(argv: list[str]) -> None:
             fail(console, f"check produced no result: {command}")
         status = match.group(1).decode()
         if status != "0":
-            console.send("printf 'SMOKE_OUTPUT[%s]\\n' \"$(base64 -w0 </tmp/smoke)\"")
-            output = console.expect(OUTPUT, STEP_TIMEOUT)
-            captured = base64.b64decode(output.group(1)).decode(errors="replace") if output else ""
-            fail(console, f"check exited {status}: {command}\n{captured}")
+            fail(console, f"check exited {status}: {command}\n{guest_output(console)}")
         print(f"[boot-smoke] check passed: {command}", file=sys.stderr)
 
     print("[boot-smoke] powering off...", file=sys.stderr)
