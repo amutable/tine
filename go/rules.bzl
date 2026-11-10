@@ -311,19 +311,7 @@ def _go_toolchains_impl(actions: AnalysisActions, arch: str, snapshot: ArtifactV
             fail("go.releases {}: the snapshot contains no {} archive for {}".format(target, release, arch))
         download = actions.declare_output(release + ".tar.gz")
         actions.download_file(download.as_output(), archive["url"], sha256 = archive["sha256"], size_bytes = archive["size"])
-        root = actions.declare_output(release, dir = True)
-
-        # TODO: Unpack with ctx.actions.extract_archive once the pinned buck2 has it, so that the build
-        # doesn't need the host's tar.
-        # GNU tar applies --strip-components after it removes a leading slash. With
-        # --strip-components=1, a member named go//home/user/.bashrc is written to /home/user/.bashrc.
-        # A plain extraction keeps every member inside the output, and the Go root is its go/ directory.
-        actions.run(
-            cmd_args("/bin/sh", "-c", 'mkdir -p "$1" && tar -xzf "$2" -C "$1"', "sh", root.as_output(), download),
-            category = "go_unpack",
-            identifier = release,
-        )
-        toolchains[release] = root.project("go")
+        toolchains[release] = actions.extract_archive(release, download, strip_prefix = "go")
     return [GoToolchainsInfo(toolchains = toolchains)]
 
 _go_toolchains = dynamic_actions(
