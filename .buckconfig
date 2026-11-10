@@ -38,6 +38,8 @@ sqlite_materializer_state = true
 # Persist the dep-file cache too, so local actions still hit it after a daemon restart.
 sqlite_dep_file_state = true
 defer_write_actions = true
+# Unpack http_archive downloads in Buck itself rather than with the host's tar, gzip and xz.
+extract_archives_in_daemon = true
 
 [buck2_resource_control]
 # A host without a systemd user manager, such as a container, runs the daemon without cgroups.
