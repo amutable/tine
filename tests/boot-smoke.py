@@ -30,6 +30,9 @@ from typing import NoReturn
 # A first boot runs firstboot credential setup and mounts the sysext, so allow a generous window.
 BOOT_TIMEOUT = float(os.environ.get("SMOKE_BOOT_TIMEOUT", "300"))
 STEP_TIMEOUT = float(os.environ.get("SMOKE_STEP_TIMEOUT", "30"))
+# The autologin shell does not mean the boot finished: getty only waits for
+# systemd-user-sessions.service, so other startup jobs can still be running.
+SETTLE_TIMEOUT = float(os.environ.get("SMOKE_SETTLE_TIMEOUT", "120"))
 POWEROFF_TIMEOUT = float(os.environ.get("SMOKE_POWEROFF_TIMEOUT", "90"))
 
 # `systemctl is-system-running` is degraded today (a known bug); accept it until the boot is clean.
@@ -43,7 +46,8 @@ PROMPT = re.compile(rb"-?(?:bash|sh)-[0-9.]+[#$]|\][#$]|@[^\s:]+:[^\s]*[#$]")
 # Sentinels the guest echoes back; the bracketed value only appears in printf's output, never in the
 # echoed command line, so matching it can't trip over the command itself.
 READY = re.compile(rb"TINE_READY\[ok\]")
-STATE = re.compile(rb"SMOKE_STATE\[([a-z-]+)\]")
+# Empty when the state query timed out.
+STATE = re.compile(rb"SMOKE_STATE\[([a-z-]*)\]")
 # A failed --check command's base64-encoded output: the marker carries arbitrary multi-line text on
 # a single line, and base64's alphabet excludes '%', so the echoed printf (literal SMOKE_OUTPUT[%s])
 # cannot match ahead of the real output.
@@ -165,15 +169,22 @@ def main(argv: list[str]) -> None:
     # Capture the state via a bracketed token so the echoed command (which contains "running") can't
     # match. Redirect the query so only our printf reaches the console.
     console.send(
-        "systemctl is-system-running >/tmp/smoke 2>&1; printf 'SMOKE_STATE[%s]\\n' \"$(cat /tmp/smoke)\""
+        f"timeout {SETTLE_TIMEOUT:g} systemctl is-system-running --wait >/tmp/smoke 2>&1; "
+        "printf 'SMOKE_STATE[%s]\\n' \"$(cat /tmp/smoke)\""
     )
-    match = console.expect(STATE, STEP_TIMEOUT)
+    match = console.expect(STATE, SETTLE_TIMEOUT + STEP_TIMEOUT)
     if match is None:
         fail(console, "system state query produced no result")
     state = match.group(1).decode()
     print(f"\n[boot-smoke] system state: {state}", file=sys.stderr)
     if state not in ACCEPT:
-        fail(console, f"unacceptable system state {state!r} (accepting {sorted(ACCEPT)})")
+        console.send("systemctl list-jobs --no-pager >/tmp/smoke 2>&1")
+        problem = (
+            f"unacceptable system state {state!r}"
+            if state
+            else f"boot not finished after {SETTLE_TIMEOUT:g}s"
+        )
+        fail(console, f"{problem} (accepting {sorted(ACCEPT)})\n{guest_output(console)}")
 
     # Each sentinel carries its index: expect() matches against everything seen so far, so a
     # repeated bare marker would re-match an earlier check's result.
