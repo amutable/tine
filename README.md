@@ -21,7 +21,7 @@ The host needs only:
    `kernel.apparmor_restrict_unprivileged_userns=0`.
  * A host root that supports `pivot_root()`; some kernels cannot pivot an initramfs root
  * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against
- * `/usr/bin/python3` ≥ 3.14, or ≥ 3.12 together with `zstd`
+ * `python3` ≥ 3.14 on `PATH`, or ≥ 3.12 together with `zstd`
  * `git`
  * `/bin/sh`, which runs the fetch of a Rust project's git dependencies
  * `/dev/kvm` to run VMs for testing; without it, you can still build everything
