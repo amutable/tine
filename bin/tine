@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -SIB
+#!/usr/bin/env -S python3 -SIB
 
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
