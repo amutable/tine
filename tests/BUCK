@@ -40,6 +40,26 @@ python.binary(
     deps = ["//:util"],
 )
 
+# The bootstrap toolchain on the host's python3 (`tine.use_host_python`), in an isolation dir of its
+# own. It runs nested `tine buck` commands, so tools/ci.sh runs it as a group instead of as a test suite.
+python.binary(
+    name = "host-python-driver",
+    main = "host_python.py",
+    deps = ["//:util"],
+)
+
+command_alias(
+    name = "host-python",
+    args = ["--fallback", "$(location_exec //tools:python3)"],
+    exe = ":host-python-driver",
+)
+
+# What the driver above runs under the toolchain it switched.
+python.binary(
+    name = "host-python-probe",
+    main = "host_python_probe.py",
+)
+
 # Assert an artifact mentions what it should. Shared because "these things must appear in that
 # file" is the same test whether the file is an SBOM or a module manifest.
 export_file(

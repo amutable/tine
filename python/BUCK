@@ -16,7 +16,7 @@ python.test(
     deps = ["//archive:cpio"],
     env = {
         "PYTHON_TEST_INPUT": "$(location :test-input)",
-        "PYTHON_TEST_INTERPRETER": "$(location_exec //tools:python3)",
+        "PYTHON_TEST_INTERPRETER": python.bootstrap_interpreter(),
         "PYTHON_TEST_VALUE": "spaces 'quotes' \"double quotes\" $literal;",
     },
 )

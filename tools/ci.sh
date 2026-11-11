@@ -240,4 +240,6 @@ if [ -z "${TINE_TEST_DISTRO:-}" ]; then
     group rebuild-reproducibility -- "${buck[@]}" run tine//tests:rebuild-reproducibility
     # The shared cache with a real Buck on both ends; in its own isolation dir.
     group remote-cache -- "${buck[@]}" run tine//tests:cache-roundtrip
+    # The bootstrap toolchain on the host's python3; in its own isolation dir.
+    group host-python -- "${buck[@]}" run tine//tests:host-python
 fi
