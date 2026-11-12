@@ -119,6 +119,10 @@ def _retained_metadata(id: str, box_locks: list[ArtifactValue], current: list, p
             generations[json.encode(files)] = entry
     return [generations[key] for key in sorted(generations)]
 
+# A package's checksum doesn't name its algorithm, so the length of the checksum identifies the algorithm.
+# Keep this in sync with DIGEST_LENGTHS in package/snapshotter.py.
+_DIGEST_ALGORITHMS = {64: "sha256", 128: "sha512"}
+
 def _download(actions: AnalysisActions, arch: str, path: str, file: dict) -> Artifact:
     # The path of a content-based output contains no configuration. The configurations of one repository
     # for two architectures download an identical file, such as a noarch package, to the same path. Two
@@ -126,7 +130,7 @@ def _download(actions: AnalysisActions, arch: str, path: str, file: dict) -> Art
     out = actions.declare_output(arch, path)
 
     # A repository may serve a file larger than a Starlark i32, which arrives as a float.
-    actions.download_file(out, file["url"], sha256 = file["sha256"], size_bytes = int(file["size"]))
+    actions.download_file(out, file["url"], sha256 = file.get("sha256"), sha512 = file.get("sha512"), size_bytes = int(file["size"]))
     return out
 
 def _materialize_metadata_impl(
@@ -187,7 +191,7 @@ def _materialize_package_pool_impl(
     pool = {}
     for checksum, package in pool_transports(id, baseurl, snapshot, box_locks).items():
         url = package["url"]
-        artifact = _download(actions, arch, "packages/" + checksum + suffix, {"sha256": checksum, "size": package["size"], "url": url})
+        artifact = _download(actions, arch, "packages/" + checksum + suffix, {_DIGEST_ALGORITHMS[len(checksum)]: checksum, "size": package["size"], "url": url})
         pool[checksum] = PackageArtifactInfo(artifact = artifact, name = url.rsplit("/", 1)[-1])
     return [PackagePoolValueInfo(packages = pool)]
 
@@ -773,7 +777,12 @@ def _select_package_artifacts_impl(
         package_id = entry["package_id"]
         if type(rid) != type("") or not rid or type(package_id) != type("") or not package_id:
             fail("transaction entry has invalid repo/package_id: {}".format(entry))
-        if type(checksum) != type("") or len(checksum) != 64 or checksum != checksum.lower() or not _contains_only(checksum, "0123456789abcdef"):
+        if (
+            type(checksum) != type("")
+            or len(checksum) not in _DIGEST_ALGORITHMS
+            or checksum != checksum.lower()
+            or not _contains_only(checksum, "0123456789abcdef")
+        ):
             fail("transaction entry has invalid pkg_checksum: {}".format(entry))
         # Skip if it's already in the layer below.
         if below.pop(checksum, None) != None:

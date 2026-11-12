@@ -71,5 +71,22 @@ class TestWrite(unittest.TestCase):
         )
 
 
+class TestEntry(unittest.TestCase):
+    REPOSITORY = transaction.Repository("repo", Path("repo"), 1, "https://mirror.invalid/repo")
+
+    def test_a_package_is_keyed_by_its_sha256_or_sha512(self) -> None:
+        # Fedora, Arch and Debian state a sha256 for each package and openSUSE a sha512. entry()
+        # must accept both digests as the key of a package and store them in lower case.
+        for digest in ("AB" * 32, "AB" * 64):
+            package = transaction.entry("pkg", self.REPOSITORY, digest, "pkg.rpm", size=1)
+            self.assertEqual(package["pkg_checksum"], digest.lower())
+
+    def test_a_digest_of_another_length_fails(self) -> None:
+        # Buck can't check a download against a digest of another length, such as a sha1, so
+        # entry() must refuse it.
+        with self.assertRaisesRegex(SystemExit, "invalid sha256 or sha512"):
+            transaction.entry("pkg", self.REPOSITORY, "ab" * 20, "pkg.rpm", size=1)
+
+
 if __name__ == "__main__":
     unittest.main()

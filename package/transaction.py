@@ -83,8 +83,10 @@ def load_repositories(spec: Spec, *, absolute: bool = False) -> list[Repository]
 def checksum(what: str, value: str) -> str:
     """Check that a package's digest is one a pool can be keyed by."""
     digest = value.lower()
-    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-        fail(f"{what} has invalid sha256 {value!r}")
+    if len(digest) not in snapshotter.DIGEST_LENGTHS.values() or any(
+        character not in "0123456789abcdef" for character in digest
+    ):
+        fail(f"{what} has invalid sha256 or sha512 {value!r}")
     return digest
 
 

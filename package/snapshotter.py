@@ -17,12 +17,16 @@ import json
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import IO, Any, TypedDict
+from typing import IO, Any, NotRequired, TypedDict
 
 import specs
 from util import fail, text_destination, urlopen, with_retries
 
 AGENT = "tine-snapshot"
+
+# A package's checksum doesn't name its algorithm. The number of hex digits in the checksum identifies
+# the algorithm.
+DIGEST_LENGTHS = {"sha256": 64, "sha512": 128}
 
 
 class PackageEntry(TypedDict):
@@ -31,11 +35,15 @@ class PackageEntry(TypedDict):
 
 
 class MetadataFile(TypedDict):
-    """One pinned file, named by where it lands in the materialized repository directory."""
+    """One pinned file, named by where it lands in the materialized repository directory.
+
+    It contains the one digest that its repository states for it, `sha256` or `sha512`.
+    """
 
     out: str
     url: str
-    sha256: str
+    sha256: NotRequired[str]
+    sha512: NotRequired[str]
     size: int
 
 
@@ -110,16 +118,18 @@ class Vouching[T]:
 def pool_checksum(prog: str, package: str) -> str:
     """The checksum a pool artifact is named by, ahead of its package system's suffix."""
     checksum, suffix, _ = Path(package).name.partition(".")
-    if not suffix or len(checksum) != 64:
+    if not suffix or len(checksum) not in DIGEST_LENGTHS.values():
         fail(f"{prog}: {package} is not named by its checksum")
     return checksum.lower()
 
 
-def checksum(rid: str, what: str, value: str | None) -> str:
-    """Normalize and validate a sha256 a repository states about its own contents."""
+def checksum(rid: str, what: str, value: str | None, algorithm: str = "sha256") -> str:
+    """Normalize and validate a digest a repository states about its own contents."""
     digest = "" if value is None else value.strip().lower()
-    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-        fail(f"{rid}: {what} has invalid sha256 {digest!r}")
+    if len(digest) != DIGEST_LENGTHS[algorithm] or any(
+        character not in "0123456789abcdef" for character in digest
+    ):
+        fail(f"{rid}: {what} has invalid {algorithm} {digest!r}")
     return digest
 
 
@@ -136,11 +146,12 @@ def download(
     *,
     size: int | None = None,
     sha256: str | None = None,
+    sha512: str | None = None,
 ) -> tuple[str, int]:
-    """Stream one file into `output`, returning its digest and size.
+    """Stream one file into `output`, returning its sha256 and size.
 
-    Where the repository has already stated both, they are checked, and an oversized response is
-    cut off as it arrives rather than after an unbounded endpoint has filled the disk.
+    Where the repository has already stated a size or digests, they are checked, and an oversized
+    response is cut off as it arrives rather than after an unbounded endpoint has filled the disk.
     """
 
     def fetch() -> tuple[str, int]:
@@ -148,6 +159,7 @@ def download(
         output.seek(0)
         output.truncate()
         digest = hashlib.sha256()
+        stated = hashlib.sha512() if sha512 is not None else None
         total = 0
         with urlopen(url, agent=AGENT, timeout=_TIMEOUT) as response:
             try:
@@ -156,6 +168,8 @@ def download(
                     if size is not None and total > size:
                         fail(f"{rid}: {what} is larger than the stated {size} bytes")
                     digest.update(chunk)
+                    if stated is not None:
+                        stated.update(chunk)
                     output.write(chunk)
             except http.client.IncompleteRead as error:
                 raise ConnectionError(f"the transfer ended early: {error}") from error
@@ -166,6 +180,8 @@ def download(
         if size is not None and total != size:
             fail(f"{rid}: {what} is {total} bytes, not the stated {size}")
         if sha256 is not None and digest.hexdigest() != sha256:
+            fail(f"{rid}: {what} does not match the checksum stated for it")
+        if stated is not None and stated.hexdigest() != sha512:
             fail(f"{rid}: {what} does not match the checksum stated for it")
         return digest.hexdigest(), total
 
