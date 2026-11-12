@@ -58,7 +58,7 @@ class TestArchive(unittest.TestCase):
         # A command creates a hardlink to an inherited independent file. Upper-aware capture
         # must preserve the group in tar and cpio without linking the equal-content file a.
         child = self.scratch / "child"
-        with storage.root([self.store]) as restored:
+        with storage.root(storage.Snapshot([self.store])) as restored:
             tree = restored.path
             os.link(tree / "b", tree / "new-link")
             storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)

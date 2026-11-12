@@ -44,7 +44,7 @@ _OPAQUE_XATTR = b"user.overlay.opaque"  # an opaque dir's native form (userxattr
 # OCI delta to native overlay translation.
 
 
-def _escape(name: str) -> str:
+def escape(name: str) -> str:
     """Escape a path component Buck cannot store, preserving injectivity."""
     if "\\" not in name and not name.startswith(_ESC):
         return name
@@ -81,7 +81,7 @@ def deletions(delta: Path) -> list[Path]:
 
 def _whiteout_marker(name: str) -> str:
     """Encode a possibly unstorable whiteout target."""
-    return _escape(_WH + name)
+    return escape(_WH + name)
 
 
 def _whiteout(directory: Path, name: str) -> None:
@@ -159,7 +159,7 @@ def _in_lower(lower: Path, rel: Path) -> bool:
     for part in rel.parts:
         if path.is_symlink() or not path.is_dir():
             return False
-        path = path / _escape(part)
+        path = path / escape(part)
         if not os.path.lexists(path):
             return False
     return True
@@ -192,7 +192,7 @@ def capture(tree: Path, lowers: Sequence[Path] | None = None) -> None:
             rel = p.relative_to(tree)
             if lowers is None or any(_in_lower(lower, rel) for lower in lowers):
                 (p / _OPAQUE).write_bytes(b"")
-        escaped = _escape(p.name)
+        escaped = escape(p.name)
         if escaped != p.name:
             p.rename(p.parent / escaped)
 

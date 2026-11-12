@@ -111,7 +111,7 @@ class TestImageWrites(unittest.TestCase):
             )
 
         command.assert_called_once()
-        with storage.root([stored, self.out]) as restored:
+        with storage.root(storage.Snapshot([stored, self.out])) as restored:
             tree = restored.path
             self.assertEqual((tree / "copied").read_text(encoding="utf-8"), "copied")
             self.assertFalse((tree / "cache.pyc").exists())
@@ -141,7 +141,7 @@ class TestImageWrites(unittest.TestCase):
 
         with mock.patch.object(layer, "_run", side_effect=command):
             self._build([["run", ["command"], {}, False]], copied)
-        with storage.root([copied, self.out]) as restored:
+        with storage.root(storage.Snapshot([copied, self.out])) as restored:
             tree = restored.path
             self.assertEqual(stat.S_IMODE((tree / "file").stat().st_mode), 0o600)
             self.assertEqual((tree / "linked").stat().st_mtime_ns, 456)
@@ -183,7 +183,7 @@ class TestImageWrites(unittest.TestCase):
 
         with mock.patch.object(layer, "_run", side_effect=command):
             self._build([["run", ["command"], {}, False]], parent)
-        with storage.root([parent, self.out]) as restored:
+        with storage.root(storage.Snapshot([parent, self.out])) as restored:
             tree = restored.path
             self.assertTrue((tree / "file").samefile(tree / "linked"))
             self.assertEqual((tree / "linked").read_text(), "changed")

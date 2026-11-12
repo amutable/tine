@@ -7,7 +7,7 @@ import os
 import re
 import stat
 import tempfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
@@ -15,6 +15,7 @@ from typing import Literal
 
 from util import ReflinkUnavailable, clone_file, fail, reflink
 
+import rootfs
 import uapi16
 from isolation import Bind, Overlay
 
@@ -268,27 +269,42 @@ def _reflinks(snapshot: Snapshot, scratch: Path) -> bool:
     return True
 
 
+def delta(snapshot: Snapshot, base: int) -> list[str]:
+    """Keep the objects that differ from the first `base` stores, and their parent directories.
+
+    Return the names that the first `base` stores contain and the snapshot does not.
+    """
+    inherited = _identities(Snapshot(snapshot.stores[:base]).objects[1:])
+    current = _identities(snapshot.objects[1:])
+    changed = {name for name, obj in current.items() if inherited.get(name) != obj}
+    needed = {str(parent) for name in changed for parent in Path(name).parents}
+    snapshot.objects = [snapshot.objects[0]] + [
+        obj for obj in snapshot.objects[1:] if obj["name"] in changed or obj["name"] in needed
+    ]
+    return sorted(inherited.keys() - current.keys())
+
+
+def write_buck_tree(snapshot: Snapshot, out: Path) -> None:
+    """Write the snapshot as a directory that contains only what Buck stores."""
+    out.mkdir(parents=True, exist_ok=True)
+    out.chmod(0o755)
+    for obj in snapshot.objects[1:]:
+        path = out.joinpath(*map(rootfs.escape, obj["name"].split("/")))
+        kind = obj["type"]
+        if kind == "dir":
+            path.mkdir()
+            path.chmod(0o755)
+        elif kind == "reg":
+            clone_file(snapshot.content(obj), path)
+            path.chmod(0o755 if obj["mode"] & 0o111 else 0o644)
+        elif kind == "lnk":
+            path.symlink_to(uapi16.symlink_target(obj))
+        else:
+            fail(f"storage: Buck cannot store the {kind} inode {obj['name']!r}")
+
+
 @contextmanager
-def root(
-    stores: Sequence[str | Path],
-    *,
-    base: int = 0,
-    readonly: bool = False,
-    strategy: Strategy = "auto",
-    prepare: Callable[[Snapshot], None] | None = None,
-) -> Generator[Root]:
-    snapshot = Snapshot(stores)
-    if base:
-        inherited = _identities(Snapshot(stores[:base]).objects[1:])
-        changed = {
-            name for name, obj in _identities(snapshot.objects[1:]).items() if inherited.get(name) != obj
-        }
-        needed = {str(parent) for name in changed for parent in Path(name).parents}
-        snapshot.objects = [snapshot.objects[0]] + [
-            obj for obj in snapshot.objects[1:] if obj["name"] in changed or obj["name"] in needed
-        ]
-    if prepare is not None:
-        prepare(snapshot)
+def root(snapshot: Snapshot, *, readonly: bool = False, strategy: Strategy = "auto") -> Generator[Root]:
     # Overlay refuses a read-only mount with one lower layer and no data layer. An empty snapshot
     # has no blob directories to use as data layers.
     if not snapshot.stores:

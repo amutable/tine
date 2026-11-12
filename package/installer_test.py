@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import installer
+import storage
 
 
 class TestPathRules(unittest.TestCase):
@@ -38,6 +39,20 @@ class TestConfigureBox(unittest.TestCase):
             installer._configure_box(root)
 
             self.assertEqual(nsswitch.readlink(), Path("/etc/authselect/nsswitch.conf"))
+
+
+def _snapshot(root: Path, name: str, files: dict[str, str]) -> Path:
+    """Capture a tree with `files` as the snapshot store `name` under `root`, with the epoch of the tests."""
+    tree = root / f"{name}.tree"
+    # A box root contains the mount points of the API filesystems. Without them, the install would create
+    # them and a box layer would export them.
+    for path in ("etc", "dev", "proc", "run", "tmp", "var/tmp"):
+        (tree / path).mkdir(parents=True)
+    for path, content in files.items():
+        (tree / path).write_text(content)
+    store = root / name
+    storage.capture(storage.Root(tree), store, epoch=0)
+    return store
 
 
 class TestRun(unittest.TestCase):
@@ -87,16 +102,17 @@ class TestRun(unittest.TestCase):
                     installer.run("install", install, [])
 
     def test_a_box_layer_may_add_but_not_delete(self) -> None:
+        # The sandbox mounts the directories of a box's layers without decoding deletions. Install a box
+        # layer over a lower snapshot that adds a file, and once more so that it also deletes a file of the
+        # lower snapshot. The first install must write only the added file, the second must fail.
         for deletes in (False, True):
             with (
                 self.subTest(deletes=deletes),
                 tempfile.TemporaryDirectory(dir="/var/tmp") as scratch,
-                mock.patch.dict(os.environ),
+                mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "0"}),
             ):
                 root = Path(scratch)
-                lower = root / "lower"
-                (lower / "etc").mkdir(parents=True)
-                (lower / "doomed").write_text("")
+                lower = _snapshot(root, "lower", {"doomed": ""})
                 (root / "packages").mkdir()
                 (root / "packages" / "systemd.rpm").write_text("")
                 spec = installer.InstallSpec(
@@ -105,8 +121,9 @@ class TestRun(unittest.TestCase):
                     target=str(root / "target"),
                     installroot=None,
                     lower=[str(lower)],
-                    work=str(root / "work"),
-                    box_config=True,
+                    work=None,
+                    snapshot=str(root / "snapshot"),
+                    box_config=False,
                     langs=[],
                     docs=True,
                 )
@@ -124,10 +141,11 @@ class TestRun(unittest.TestCase):
 
                 with mock.patch.object(installer.specs, "parse", return_value=spec):
                     if deletes:
-                        with self.assertRaisesRegex(SystemExit, r"cannot delete .*\.wh\.doomed"):
+                        with self.assertRaisesRegex(SystemExit, "cannot delete .*doomed"):
                             installer.run("install", install, [])
                     else:
                         installer.run("install", install, [])
+                        self.assertEqual([path.name for path in (root / "target").iterdir()], ["added"])
 
     def test_an_empty_closure_leaves_the_layer_empty(self) -> None:
         # A layered install with no packages to install must not run the package manager. Buck still

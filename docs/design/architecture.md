@@ -544,7 +544,7 @@ The host contract is intentionally small; its short list of requirements is docu
 
 ### Box layers
 
-If a box and its `parent` come from the same repositories, the box is a delta layer over its parent's
+If a box and its `parent` come from the same repositories, the box is a layer over its parent's
 layers, like with images. It enforces addition only, and fails if its lock would update or remove parent
 packages. One likely cause is an outdated committed lock, which needs a catalog refresh. The other is that
 resolving both package lists together picks other packages than the parent got, for example

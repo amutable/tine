@@ -293,7 +293,7 @@ def main(argv: list[str] | None = None) -> None:
 
     lower = spec["lower"]
     with (
-        storage.root(lower) as restored,
+        storage.root(storage.Snapshot(lower)) as restored,
         tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
     ):
         tree = restored.path

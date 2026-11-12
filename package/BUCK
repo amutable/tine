@@ -29,7 +29,7 @@ python.library(
 python.library(
     name = "installer",
     srcs = ["installer.py"],
-    deps = ["//:specs", "//:util", "//rootfs:rootfs"],
+    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//uapi16:storage"],
     visibility = ["PUBLIC"],
 )
 

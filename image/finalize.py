@@ -66,14 +66,16 @@ def _root(
     readonly: bool = True,
     strategy: storage.Strategy = "auto",
 ) -> Generator[storage.Root]:
+    snapshot = storage.Snapshot(spec["lower"])
+    if base:
+        storage.delta(snapshot, base)
+    normalize_snapshot(snapshot)
     with (
         storage.root(
-            spec["lower"],
-            base=base,
+            snapshot,
             # Authored tmpfiles rules write into the root. They fail on a read-only root.
             readonly=readonly and not spec["tmpfiles"],
             strategy=strategy,
-            prepare=normalize_snapshot,
         ) as restored,
         rootfs.rootfs("/buildroot", bind=restored.path, binds=binds) as tree,
     ):

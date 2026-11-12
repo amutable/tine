@@ -15,7 +15,7 @@ python.library(
 python.library(
     name = "storage",
     srcs = ["storage.py"],
-    deps = [":uapi16", "//:util", "//box:isolation"],
+    deps = [":uapi16", "//:util", "//box:isolation", "//rootfs:rootfs"],
     visibility = ["tine//..."],
 )
 
