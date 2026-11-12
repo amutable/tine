@@ -42,8 +42,11 @@ def image(
     readonly: bool = True,
 ) -> Generator[Path]:
     """Reconstruct the root of the image the spec names and mount it at /buildroot."""
+    snapshot = storage.Snapshot(spec["lower"])
+    if base:
+        storage.delta(snapshot, base)
     with (
-        storage.root(spec["lower"], base=base, readonly=readonly) as restored,
+        storage.root(snapshot, readonly=readonly) as restored,
         rootfs.rootfs("/buildroot", bind=restored.path, binds=binds) as tree,
     ):
         yield tree
