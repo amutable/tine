@@ -9,6 +9,7 @@ load("@prelude//decls:toolchains_common.bzl", "toolchains_common")
 load("@prelude//python_bootstrap:python_bootstrap.bzl", "PythonBootstrapSources")
 load("@prelude//python_bootstrap:toolchain.bzl", "PythonBootstrapToolchainInfo")
 load("@prelude//test:inject_test_run_info.bzl", "inject_test_run_info")
+load("@prelude//toolchains:python.bzl", "python_bootstrap_toolchain")
 load("@prelude//utils:selects.bzl", "selects")
 load("//box:defs.bzl", "box")
 
@@ -204,8 +205,58 @@ def _test(
     _python_test(name = name, box = box, srcs = srcs, deps = deps, **kwargs)
     ty_check(name = name + "-ty", srcs = srcs, deps = deps, boxes = selects.apply(box, lambda value: [] if value == None else [value]))
 
+def _host_python() -> list[str] | None:
+    """The command of the host's python3 that `tine.use_host_python` selects, or None for the pinned one.
+
+    bin/tine resolves the interpreter into the generated config, with an identity of its build.
+    """
+    if read_root_config("tine", "use_host_python") != "true":
+        return None
+    path = read_root_config("tine", "host-python")
+    identity = read_root_config("tine", "host-python-identity")
+    if path == None or identity == None:
+        fail("tine.use_host_python is set, but bin/tine has not resolved the host's python3; run Buck through `tine buck`")
+
+    # -E, -s and -S keep the host's PYTHON* variables, user site directory and sitecustomize out of
+    # the build. Python only records an -X option it does not know, so this one puts the
+    # interpreter's build on every command line and an upgrade reruns the actions.
+    return [path, "-B", "-E", "-s", "-S", "-X", "tine-host-python=" + identity]
+
+def _host_python_toolchain_impl(ctx: AnalysisContext) -> list[Provider]:
+    return [DefaultInfo(), PythonBootstrapToolchainInfo(interpreter = cmd_args(ctx.attrs.command))]
+
+_host_python_toolchain = rule(
+    impl = _host_python_toolchain_impl,
+    attrs = {"command": attrs.list(attrs.string())},
+    is_toolchain_rule = True,
+)
+
+def _bootstrap_toolchain(name: str, **kwargs) -> None:
+    """Declare the bootstrap toolchain on the pinned interpreter, or on the host's `python3` if asked to.
+
+    The pinned interpreter needs a glibc loader at the standard path. A host without one sets
+    `tine.use_host_python = true` in the project's config.
+    """
+    host = _host_python()
+    if host == None:
+        python_bootstrap_toolchain(name = name, interpreter = read_config("tine", "python_interpreter", "tine//tools:python3"), **kwargs)
+    elif read_config("tine", "python_interpreter") != None:
+        fail("tine.use_host_python and tine.python_interpreter both choose the bootstrap interpreter; set only one")
+    else:
+        _host_python_toolchain(name = name, command = host, **kwargs)
+
+def _bootstrap_interpreter() -> str:
+    """The path of the interpreter the bootstrap toolchain runs, for an attribute that expands macros.
+
+    ty only reads the pinned interpreter's tree and never runs it, so its checks keep that one.
+    """
+    host = _host_python()
+    return "$(location_exec tine//tools:python3)" if host == None else host[0]
+
 python = struct(
     binary = _binary,
+    bootstrap_interpreter = _bootstrap_interpreter,
+    bootstrap_toolchain = _bootstrap_toolchain,
     flat_tree = flat_tree,
     library = _library,
     test = _test,

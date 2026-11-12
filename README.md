@@ -20,8 +20,9 @@ The host needs only:
  [sysctl](https://www.freedesktop.org/software/systemd/man/latest/sysctl.d.html):
    `kernel.apparmor_restrict_unprivileged_userns=0`.
  * A host root that supports `pivot_root()`; some kernels cannot pivot an initramfs root
- * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against
- * `/usr/bin/python3` ≥ 3.14, or ≥ 3.12 together with `zstd`
+ * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against, unless the project
+   [uses the host's Python](#hosts-without-a-glibc-loader)
+ * `python3` ≥ 3.14 on `PATH`, or ≥ 3.12 together with `zstd`
  * `git`
  * `/bin/sh`, which runs the fetch of a Rust project's git dependencies
  * `/dev/kvm` to run VMs for testing; without it, you can still build everything
@@ -32,6 +33,24 @@ version an image derives from it. A build also runs the host's `git` to fetch gi
 The first [`tine`](bin/tine) invocation that runs Buck fetches and verifies the pinned Buck2 binary into
 `${XDG_CACHE_HOME:-~/.cache}/tine/buck2` (one directory per pin, safe to delete); everything else is fetched
 and cached by Buck itself.
+
+### Hosts without a glibc loader
+
+The pinned Python that runs tine's drivers on the host needs a glibc loader at the standard path, such as
+`/lib64/ld-linux-x86-64.so.2`. On a host without one, such as NixOS or a musl-based distribution, set this
+in the project's configuration, for example in `.buckconfig.local`:
+
+```ini
+[tine]
+use_host_python = true
+```
+
+`tine` then runs the drivers with the `python3` on `PATH`, which must be 3.14 or newer, and fails before
+the build if it is not. It runs that interpreter isolated from `PYTHONPATH`, `sitecustomize` and the user's
+site directory. A driver that runs in a box still uses the pinned Python, on the box's own loader. Every
+action names the host interpreter's path and build, so upgrading it reruns the actions. That also keys
+them apart from the pinned interpreter's, so a shared cache filled by builds with it does not serve them.
+The setting replaces `tine.python_interpreter`, and the two cannot be combined.
 
 ### HOME directory
 

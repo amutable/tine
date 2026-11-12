@@ -392,6 +392,73 @@ class TestRenderLocalConfigBlock(RepositoryTestCase):
         self.assertNotIn(tine.RE_CLIENT, tine.read_project_buckconfig(self.repo))
 
 
+class TestHostPython(unittest.TestCase):
+    """`use_host_python` resolves the python3 on PATH into the generated block."""
+
+    @override
+    def setUp(self) -> None:
+        self.root = scratch(self)
+        self.path = scratch(self, "tine-test-path.")
+        patched = unittest.mock.patch.dict(os.environ, {"PATH": str(self.path)})
+        patched.start()
+        self.addCleanup(patched.stop)
+
+    def use_host_python(self) -> None:
+        (self.root / tine.LOCAL).write_text(f"[{tine.SECTION}]\n{tine.USE_HOST_PYTHON} = true\n")
+
+    def python3(self, script: str | None = None) -> None:
+        """Put this test's interpreter on PATH as python3, or a shell script standing in for one."""
+        command = self.path / "python3"
+        if script is None:
+            command.symlink_to(sys.executable)
+        else:
+            command.write_text(f"#!/bin/sh\n{script}\n")
+            command.chmod(0o755)
+
+    def test_nothing_without_the_setting(self) -> None:
+        self.python3()
+        self.assertEqual(tine.host_python(self.root), {})
+
+    def test_resolves_the_interpreter_and_its_build(self) -> None:
+        self.use_host_python()
+        self.python3()
+        resolved = tine.host_python(self.root)
+        self.assertEqual(resolved[tine.HOST_PYTHON], os.path.realpath(sys.executable))
+        version = re.escape("{}.{}.{}".format(*sys.version_info[:3]))
+        self.assertRegex(resolved[tine.HOST_PYTHON_IDENTITY], rf"^{version}-[0-9a-f]{{12}}$")
+
+    def test_lands_in_the_generated_block(self) -> None:
+        self.use_host_python()
+        self.python3()
+        tine.refresh_local_buckconfig(self.root, [])
+        generated = read_generated_buckconfig(self.root / tine.LOCAL)[tine.SECTION]
+        self.assertEqual(generated[tine.HOST_PYTHON], os.path.realpath(sys.executable))
+        self.assertIn(tine.HOST_PYTHON_IDENTITY, generated)
+        # The setting itself stays the developer's.
+        project = tine.read_project_buckconfig(self.root)[tine.SECTION]
+        self.assertEqual(project, {tine.USE_HOST_PYTHON: "true"})
+
+    def test_no_python3_on_path(self) -> None:
+        self.use_host_python()
+        with self.assertRaisesRegex(SystemExit, "no python3 on PATH"):
+            tine.host_python(self.root)
+
+    def test_an_interpreter_without_compression_zstd_is_rejected(self) -> None:
+        self.use_host_python()
+        self.python3("echo \"ModuleNotFoundError: No module named 'compression'\" >&2; exit 1")
+        rejected = "needs python 3.14 or newer(.|\n)*No module named 'compression'"
+        with self.assertRaisesRegex(SystemExit, rejected):
+            tine.host_python(self.root)
+
+    def test_runs_the_probe_isolated_from_the_host(self) -> None:
+        # The build runs the interpreter with these flags, so the probe sees what the build will.
+        self.use_host_python()
+        self.python3()
+        with unittest.mock.patch.dict(os.environ, {"PYTHONPATH": str(scratch(self))}):
+            (Path(os.environ["PYTHONPATH"]) / "hashlib.py").write_text("raise ImportError('shadowed')\n")
+            self.assertIn(tine.HOST_PYTHON, tine.host_python(self.root))
+
+
 class TestMergeGeneratedConfigBlock(unittest.TestCase):
     """The block is this command's; the rest of the file stays the developer's."""
 
