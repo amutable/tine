@@ -63,6 +63,8 @@ _BoxRootInfo = provider(
         # resolves its own layers.
         "resolver": provider_field(Dependency | None),
         "selected": provider_field(list[Dependency]),
+        # The snapshot stores of the box's layers, lowest first.
+        "snapshots": provider_field(list[Artifact]),
         "transaction": provider_field(Artifact),
     },
 )
@@ -146,10 +148,12 @@ def _install(
     arch: str,
     lower: list[Artifact],
     installed: Artifact | None,
+    store: Artifact | None,
 ) -> Artifact:
-    """Install `transaction` with `box`, which also verifies its packages, into a layer over `lower`.
+    """Install `transaction` with `box`, which also verifies its packages, into a layer over the snapshots `lower`.
 
-    The layer leaves out the packages of `installed`.
+    The layer leaves out the packages of `installed`. Write the snapshot of the layer to `store` if it is set,
+    and return the directory that the sandbox mounts.
     """
     system = package_system[PackageSystemInfo]
 
@@ -166,7 +170,6 @@ def _install(
 
     # Use the predecessor or bootstrapped root to install the box, or its layer over the parent.
     stage2 = _layer_dir(ctx.actions, "stage2")
-    work = _layer_dir(ctx.actions, "stage2.work") if lower else None
     ctx.actions.run(
         cmd_args(
             box_run(
@@ -184,8 +187,9 @@ def _install(
                     "langs": [],
                     "lower": lower,
                     "packages_dir": packages,
+                    "snapshot": store.as_output() if store else None,
                     "target": stage2.as_output(),
-                    "work": work.as_output() if work != None else None,
+                    "work": None,
                 },
             ),
         ),
@@ -263,10 +267,14 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
     # See "Box layers" in docs/design/architecture.md.
     repository_labels = _repository_labels(repositories)
     lower = []
+    snapshots = []
     installed = None
     if parent != None and ctx.attrs.layered and _repository_labels(parent[_BoxRootInfo].selected) == repository_labels:
         lower = parent[BoxInfo].layers
+        snapshots = parent[_BoxRootInfo].snapshots
         installed = parent[_BoxRootInfo].transaction
+
+    snapshot = _layer_dir(ctx.actions, "stage2.snapshot")
 
     # With the resolver box as a dependency, the keyrings are anonymous targets. Every box that resolves
     # through the same resolver box shares them. A root box has no resolver box and verifies with its stage1
@@ -278,8 +286,9 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
         repositories,
         transaction,
         ctx.attrs._arch,
-        lower,
+        snapshots,
         installed,
+        store = snapshot,
     )
     info = BoxInfo(
         layers = lower + [stage2],
@@ -289,6 +298,7 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
         arch = ctx.attrs._arch,
         resolver = resolver_dep,
         selected = repositories,
+        snapshots = snapshots + [snapshot],
         transaction = transaction,
     )
     sub_targets = {
@@ -370,8 +380,9 @@ def _box_layer_impl(ctx: AnalysisContext) -> list[Provider]:
         root.selected,
         transaction,
         root.arch,
-        parent[BoxInfo].layers,
+        root.snapshots,
         root.transaction,
+        store = None,
     )
     return [DefaultInfo(default_output = layer)]
 

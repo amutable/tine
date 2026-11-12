@@ -12,15 +12,17 @@ transaction itself.
 
 import os
 import shutil
+import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import specs
 from util import fail
 
 import rootfs
+import storage
 
 # A fixed install path avoids embedding Buck hashes and supports scriptlet chroots.
 BUILDROOT = "/buildroot"
@@ -66,6 +68,10 @@ class InstallSpec(TypedDict):
     installroot: str | None
     lower: list[str]
     work: str | None
+    # Only a box install sets `snapshot`. The install then restores the snapshot stores in `lower`,
+    # captures its own snapshot store at `snapshot` and writes the directory that the sandbox mounts to
+    # `target`. A `box.layer()` layer sets `snapshot` to None, because no other layer stacks on it.
+    snapshot: NotRequired[str | None]
     box_config: bool
     langs: list[str]
     docs: bool
@@ -175,6 +181,18 @@ def run(
     if spec["target"] is None:
         fail(f"{prog}: one of target and installroot is required")
 
+    if "snapshot" in spec:
+        snapshot = spec["snapshot"]
+        _install_box(
+            prog,
+            install,
+            packages_dir,
+            spec,
+            None if snapshot is None else Path(snapshot),
+            Path(spec["target"]),
+        )
+        return
+
     # Bind sources must exist.
     target = Path(spec["target"])
     target.mkdir(parents=True, exist_ok=True)
@@ -208,3 +226,30 @@ def run(
     if layered and spec["box_config"] and (deleted := rootfs.deletions(target)):
         markers = ", ".join(map(str, deleted))
         fail(f"{prog}: a box layer cannot delete from the layers below it, but has {markers}")
+
+
+def _install_box(
+    prog: str,
+    install: Callable[[Path, Path, InstallSpec, bool], None],
+    packages_dir: Path,
+    spec: InstallSpec,
+    out: Path | None,
+    target: Path,
+) -> None:
+    lowers = spec["lower"]
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+        out = out or Path(scratch) / "snapshot"
+        with storage.root(storage.Snapshot(lowers)) as restored:
+            with rootfs.rootfs(BUILDROOT, bind=restored.path, apivfs=True, strict_unmount=True):
+                install(packages_dir, Path(BUILDROOT), spec, bool(lowers))
+                _normalize(Path(BUILDROOT), spec)
+            storage.capture(restored, out, lowers, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
+        snapshot = storage.Snapshot([*lowers, out])
+        # The sandbox stacks the directories of a box's layers and decodes no whiteouts. A file that a
+        # layer deletes would still show up from the layer below.
+        if deleted := storage.delta(snapshot, len(lowers)):
+            fail(
+                f"{prog}: a box layer cannot delete from the layers below it, "
+                f"but deletes {', '.join(deleted)}"
+            )
+        rootfs.write_buck_tree(snapshot, target)

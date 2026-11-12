@@ -5,6 +5,7 @@
 
 import errno
 import os
+import stat
 import tempfile
 import unittest
 from contextlib import ExitStack, chdir, nullcontext
@@ -13,6 +14,7 @@ from typing import override
 from unittest import mock
 
 import rootfs
+import storage
 from isolation import Bind
 
 
@@ -416,6 +418,48 @@ class TestDeletions(unittest.TestCase):
                 rootfs.deletions(delta),
                 [Path(".esc..wh.esc%5Caped"), Path("etc/.wh.removed"), Path("etc/opaque/.wh..wh..opq")],
             )
+
+
+class TestWriteBuckTree(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp")))
+        self.tree = self.scratch / "tree"
+        self.tree.mkdir()
+        self.store = self.scratch / "store"
+
+    def test_buck_tree_contains_only_what_buck_stores(self) -> None:
+        # A box layer directory must contain only regular files, directories and symlinks with modes
+        # that Buck stores. Capture a tree with a hardlink, an extended attribute, a private directory
+        # and a name containing a backslash. The Buck tree must contain separate files with normalized
+        # modes, no extended attributes and the escaped name.
+        (self.tree / "a").write_text("identical")
+        (self.tree / "a").chmod(0o640)
+        (self.tree / "b").write_text("identical")
+        (self.tree / "b").chmod(0o755)
+        os.link(self.tree / "a", self.tree / "linked")
+        os.setxattr(self.tree / "a", "user.example", b"value")
+        (self.tree / "private").mkdir(mode=0o700)
+        (self.tree / "back\\slash").write_text("escaped")
+        (self.tree / "link").symlink_to("a")
+        storage.capture(storage.Root(self.tree), self.store, epoch=0)
+        out = self.scratch / "out"
+        rootfs.write_buck_tree(storage.Snapshot([self.store]), out)
+        self.assertEqual(stat.S_IMODE((out / "a").stat().st_mode), 0o644)
+        self.assertEqual(stat.S_IMODE((out / "b").stat().st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE((out / "private").stat().st_mode), 0o755)
+        self.assertFalse((out / "a").samefile(out / "linked"))
+        self.assertEqual((out / "linked").read_text(), "identical")
+        self.assertEqual(os.listxattr(out / "a"), [])
+        self.assertEqual((out / ".esc.back%5Cslash").read_text(), "escaped")
+        self.assertEqual(os.readlink(out / "link"), "a")
+
+    def test_buck_tree_rejects_special_files(self) -> None:
+        # Buck cannot store a FIFO. Writing the Buck tree of a snapshot that contains one must fail.
+        os.mkfifo(self.tree / "fifo")
+        storage.capture(storage.Root(self.tree), self.store, epoch=0)
+        with self.assertRaises(SystemExit):
+            rootfs.write_buck_tree(storage.Snapshot([self.store]), self.scratch / "out")
 
 
 if __name__ == "__main__":

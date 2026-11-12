@@ -300,23 +300,23 @@ def _reflinks(snapshot: Snapshot, scratch: Path) -> bool:
     return reflink(blob, scratch / "reflink")
 
 
+def delta(snapshot: Snapshot, base: int) -> list[str]:
+    """Keep the objects that differ from the first `base` stores, and their parent directories.
+
+    Return the names that the first `base` stores contain and the snapshot does not.
+    """
+    inherited = _identities(Snapshot(snapshot.stores[:base]).objects[1:])
+    current = _identities(snapshot.objects[1:])
+    changed = {name for name, obj in current.items() if inherited.get(name) != obj}
+    needed = {str(parent) for name in changed for parent in Path(name).parents}
+    snapshot.objects = [snapshot.objects[0]] + [
+        obj for obj in snapshot.objects[1:] if obj["name"] in changed or obj["name"] in needed
+    ]
+    return sorted(inherited.keys() - current.keys())
+
+
 @contextmanager
-def root(
-    stores: Sequence[str | Path],
-    *,
-    base: int = 0,
-    readonly: bool = False,
-) -> Generator[Root]:
-    snapshot = Snapshot(stores)
-    if base:
-        inherited = _identities(Snapshot(stores[:base]).objects[1:])
-        changed = {
-            name for name, obj in _identities(snapshot.objects[1:]).items() if inherited.get(name) != obj
-        }
-        needed = {str(parent) for name in changed for parent in Path(name).parents}
-        snapshot.objects = [snapshot.objects[0]] + [
-            obj for obj in snapshot.objects[1:] if obj["name"] in changed or obj["name"] in needed
-        ]
+def root(snapshot: Snapshot, *, readonly: bool = False) -> Generator[Root]:
     with tempfile.TemporaryDirectory(prefix="snapshot-root.", dir="/var/tmp") as temporary:
         scratch = Path(temporary)
         tree = scratch / "root"

@@ -577,16 +577,22 @@ The host contract is intentionally small; its short list of requirements is docu
 
 ### Box layers
 
-If a box and its `parent` come from the same repositories, the box is a delta layer over its parent's
+If a box and its `parent` come from the same repositories, the box is a layer over its parent's
 layers, like with images. It enforces addition only, and fails if its lock would update or remove parent
 packages. One likely cause is an outdated committed lock, which needs a catalog refresh. The other is that
 resolving both package lists together picks other packages than the parent got, for example
 `libcurl` for a box that needs it where the parent has `libcurl-minimal`; `layered = False` then installs
 the box on its own.
 
-The sandbox merges the layers per top-level directory with a read-only overlay. Unlike `rootfs()`, it does
-not decode stored whiteout markers, as that would walk every layer on every action, so the installer refuses
-a box layer that deletes from the layers below.
+Each box layer except a `box.layer()` is a snapshot over the snapshots of its parent's layers, like an image
+layer. A child box installs over its restored parent snapshot, so it sees the modes, hardlinks and extended
+attributes that the package manager wrote. The installer also writes the objects that differ from the parent
+as a plain directory with only what Buck stores: directories, symlinks and regular files with mode 0755 or
+0644. The sandbox merges these directories per top-level directory with a read-only overlay. A plain
+directory cannot express a deletion, so the installer refuses a box layer that deletes from the layers below.
+Buck cannot store fifos, sockets or device nodes, so a box layer that contains one fails to build. No box
+installs over a `box.layer()`, such as the build box of a Cargo or Go build, so it keeps only the plain
+directory.
 
 If the parent has different repositories, the box only shares the parent's package list and is installed
 on its own. A child box also installs from the local repositories of its parent, so it
@@ -1206,9 +1212,11 @@ it. Parent release inspection reads the os-release file from the parent snapshot
 root. Temporary roots are removed when the operation exits, including on failure. There is no persistent
 materialized-root cache.
 
-Boxes and other directory-layer callers of `rootfs` retain their direct mounting path and marker encoding:
-`.wh.<name>` represents a whiteout, `.wh..wh..opq` an opaque directory and `.esc.<percent-escaped-name>` an
-unstorable component. Ordinary box startup does not parse image manifests or reconstruct image roots.
+Box layers other than a `box.layer()` are snapshots too, but the sandbox mounts the plain directory that the
+installer writes from each snapshot. In that directory, `.esc.<percent-escaped-name>` encodes a name that
+Buck cannot store. Nothing decodes it, so a box shows the escaped name. A box layer can't delete files of the
+layers below it, because the directory has no whiteouts. Ordinary box startup does not parse image manifests
+or reconstruct image roots.
 
 Ownership remains uid/gid zero. Capture clears the setuid and setgid bits, because a set-id file owned by
 root would run as root even when its package installed it for another user or group. Capture clears the
