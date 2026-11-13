@@ -148,7 +148,8 @@ def vouched_packages(
     # sqv refuses to overwrite a file, so each generation gets its own output file.
     message = authenticated(keys, suite / release.INRELEASE, scratch / generation.name, at)
     stanza = release.stanza(release.INRELEASE, message)
-    release.named(release.INRELEASE, stanza, suite.name)
+    if suite.parents[0].name == deb822.SUITES:
+        release.named(release.INRELEASE, stanza, suite.name)
     unexpired(release.INRELEASE, stanza, at)
     vouched(release.stated(release.INRELEASE, stanza), suite, index)
     return {package.sha256: package.size for package in deb822.packages(index, release.INRELEASE)}
