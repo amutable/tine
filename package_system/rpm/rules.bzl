@@ -7,7 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:build.bzl", "PACKAGE_BUILD_ATTRS", "package_build", "package_build_source")
-load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot", "recipe_delta")
+load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot", "recipe_snapshot")
 load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
@@ -136,7 +136,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
             source_tree,
             stack,
         )
-        stack = stack + [recipe_delta(ctx, "rpm_package", base_buildroot, stack, ctx.attrs.buildroot_packages, buildrequires)]
+        stack = stack + [recipe_snapshot(ctx, "rpm_package", base_buildroot, stack, ctx.attrs.buildroot_packages, buildrequires)]
 
     return package_build(
         ctx,
