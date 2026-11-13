@@ -36,12 +36,20 @@ class Source:
 
 
 def pe_sections(path: Path) -> dict[str, Section]:
+    """Return the base sections of a PE binary, by name.
+
+    A UKI with profiles repeats sections such as `.cmdline` after each `.profile`, and systemd-stub
+    applies a profile's on top of the base. What precedes the first `.profile` is what boots without
+    one, so that is the only set read here.
+    """
     try:
         with pefile.PE(str(path), fast_load=True) as image:
             sections: dict[str, Section] = {}
             file_size = path.stat().st_size
             for pe_section in image.sections:
                 name = pe_section.Name.partition(b"\0")[0].decode("ascii", "strict")
+                if name == ".profile":
+                    break
                 virtual_size = pe_section.Misc_VirtualSize
                 raw_size = pe_section.SizeOfRawData
                 offset = pe_section.PointerToRawData
@@ -118,12 +126,29 @@ def _extract(tree: Path, source: Source, out: Path) -> None:
     _copy_section(path, section, out)
 
 
+def _extract_text(tree: Path, source: Source, out: Path) -> None:
+    path = _image_path(tree, source.path)
+    section = pe_sections(path).get(source.section) if source.section is not None else None
+    if section is None:
+        util.fail(f"artifacts: {path} has no {source.section} section")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(section_text(path, section) + "\n", encoding="utf-8")
+
+
+# Artifacts that are text, written without the NUL terminator the PE section carries, so a consumer
+# can read them as they are.
+_TEXT_ARTIFACTS = {"cmdline"}
+
+
 def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "artifacts", argv)
 
     source = _read_source(Path(spec["manifest"]), spec["artifact"])
     with finalize.image(spec, program="artifacts") as tree:
-        _extract(tree, source, Path(spec["out"]))
+        if spec["artifact"] in _TEXT_ARTIFACTS:
+            _extract_text(tree, source, Path(spec["out"]))
+        else:
+            _extract(tree, source, Path(spec["out"]))
 
 
 if __name__ == "__main__":
