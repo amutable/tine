@@ -8,6 +8,7 @@ The tests replace the HTTP response.
 buck test tine//package:test
 """
 
+import hashlib
 import http.client
 import io
 import unittest
@@ -43,9 +44,11 @@ class Download(unittest.TestCase):
         self.enterContext(mock.patch("time.sleep"))
         self.output = io.BytesIO()
 
-    def download(self, *responses: Response) -> None:
+    def download(self, *responses: Response, sha512: str | None = None) -> None:
         with mock.patch.object(snapshotter, "urlopen", side_effect=responses):
-            snapshotter.download("repo", "archive", "https://repo.invalid/archive", self.output)
+            snapshotter.download(
+                "repo", "archive", "https://repo.invalid/archive", self.output, sha512=sha512
+            )
 
     def test_a_cut_off_chunked_transfer_is_retried(self) -> None:
         # http.client raises IncompleteRead when a chunked transfer ends early. download() must retry
@@ -64,6 +67,26 @@ class Download(unittest.TestCase):
         # names the number of missing bytes.
         with self.assertRaisesRegex(ConnectionError, "ended 4 bytes early"):
             self.download(*(Response(b"arch", missing=4) for _ in range(4)))
+
+    def test_a_stated_sha512_is_checked(self) -> None:
+        # openSUSE states a sha512 for each file of its repository metadata. download() must accept
+        # content that matches the sha512 and fail on content that does not.
+        self.download(Response(b"archive\n"), sha512=hashlib.sha512(b"archive\n").hexdigest())
+        self.assertEqual(self.output.getvalue(), b"archive\n")
+        with self.assertRaisesRegex(SystemExit, "does not match the checksum"):
+            self.download(Response(b"archive\n"), sha512=hashlib.sha512(b"other\n").hexdigest())
+
+
+class Checksum(unittest.TestCase):
+    def test_the_algorithm_sets_the_length(self) -> None:
+        # checksum() must accept a digest of the length of its algorithm, store it in lower case and
+        # refuse a digest of another algorithm's length.
+        self.assertEqual(snapshotter.checksum("repo", "file", "AB" * 64, "sha512"), "ab" * 64)
+        self.assertEqual(snapshotter.checksum("repo", "file", "ab" * 32), "ab" * 32)
+        with self.assertRaisesRegex(SystemExit, "invalid sha256"):
+            snapshotter.checksum("repo", "file", "ab" * 64)
+        with self.assertRaisesRegex(SystemExit, "invalid sha512"):
+            snapshotter.checksum("repo", "file", "ab" * 32, "sha512")
 
 
 if __name__ == "__main__":

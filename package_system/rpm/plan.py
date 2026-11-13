@@ -195,8 +195,8 @@ def plan(
         if pkg.get_arch() in MULTILIB_ARCHES:
             fail(f"refusing multilib package {pkg.get_nevra()} (32-bit in a {arch} closure)")
         chk = pkg.get_checksum()
-        if chk.get_type_str() != "sha256":
-            fail(f"expected sha256 repodata checksum for {pkg.get_nevra()}")
+        if chk.get_type_str() not in ("sha256", "sha512"):
+            fail(f"expected a sha256 or sha512 repodata checksum for {pkg.get_nevra()}")
         repo = repositories[pkg.get_repo_id()]
         resolved.append(
             transaction.entry(

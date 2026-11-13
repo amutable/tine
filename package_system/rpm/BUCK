@@ -76,6 +76,13 @@ python.binary(
     main = "snapshot.py",
 )
 
+python.test(
+    name = "snapshot-test",
+    box = "//tools:dev.box",
+    srcs = ["snapshot.py", "snapshot_test.py"],
+    deps = ["//:util", "//package:href", "//package:snapshotter"],
+)
+
 python.library(name = "rpmkeys", srcs = ["rpmkeys.py"])
 
 python.binary(

@@ -83,9 +83,10 @@ def _parse_primary(rid: str, source: BinaryReader) -> dict[str, PackageEntry]:
         size = element.find(f"{{{_PRIMARY_NS}}}size")
         if checksum is None or checksum.text is None:
             fail(f"{rid}: primary package {count} lacks a checksum")
-        if checksum.get("type") != "sha256" or checksum.get("pkgid") != "YES":
-            fail(f"{rid}: primary package {count} does not have a sha256 pkgid")
-        pkgid = snapshotter.checksum(rid, f"primary package {count} pkgid", checksum.text)
+        algorithm = checksum.get("type")
+        if algorithm not in snapshotter.DIGEST_LENGTHS or checksum.get("pkgid") != "YES":
+            fail(f"{rid}: primary package {count} does not have a sha256 or sha512 pkgid")
+        pkgid = snapshotter.checksum(rid, f"primary package {count} pkgid", checksum.text, algorithm)
 
         href = _location_href(rid, f"primary package {pkgid}", location)
 
@@ -108,7 +109,8 @@ def _load_package_index(rid: str, stream: MetadataFile) -> dict[str, PackageEntr
             stream["url"],
             compressed,
             size=int(stream["size"]),
-            sha256=stream["sha256"],
+            sha256=stream.get("sha256"),
+            sha512=stream.get("sha512"),
         )
         compressed.seek(0)
         magic = compressed.read(MAGIC)
@@ -132,7 +134,10 @@ def _repository_stream(
 ) -> MetadataFile:
     """Decode and validate one retained repomd data record."""
     location = data.find(f"{{{_REPOMD_NS}}}location")
+    # Fedora states a sha256 for each stream, and openSUSE states a sha512.
     checksum = data.find(f"{{{_REPOMD_NS}}}checksum[@type='sha256']")
+    if checksum is None:
+        checksum = data.find(f"{{{_REPOMD_NS}}}checksum[@type='sha512']")
     size = data.find(f"{{{_REPOMD_NS}}}size")
     if (
         location is None
@@ -142,16 +147,20 @@ def _repository_stream(
         or size is None
         or size.text is None
     ):
-        fail(f"{rid}: {stream_type} record lacks a location, sha256 checksum, or size")
+        fail(f"{rid}: {stream_type} record lacks a location, sha256 or sha512 checksum, or size")
 
     href = _location_href(rid, f"{stream_type} stream", location)
-    return MetadataFile(
+    stream = MetadataFile(
         out=f"repodata/{PurePosixPath(href).name}",
         url=baseurl + href,
-        sha256=snapshotter.checksum(rid, f"{stream_type} stream", checksum.text),
         # Recording the compressed size avoids an unpinned HEAD request later.
         size=_metadata_int(rid, f"{stream_type} stream", size.text, minimum=1),
     )
+    if checksum.get("type") == "sha512":
+        stream["sha512"] = snapshotter.checksum(rid, f"{stream_type} stream", checksum.text, "sha512")
+    else:
+        stream["sha256"] = snapshotter.checksum(rid, f"{stream_type} stream", checksum.text)
+    return stream
 
 
 def snapshot_repodata(rid: str, baseurl: str) -> RepositorySnapshot:
