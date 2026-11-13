@@ -335,6 +335,6 @@ def root(snapshot: Snapshot, *, readonly: bool = False) -> Generator[Root]:
         if work is not None:
             work.mkdir()
         datadirs = tuple(store / "blobs" for store in snapshot.stores)
-        with Overlay((lower,), upper, work, tree, datadirs=datadirs) as mounted:
+        with Overlay(lower, upper, work, tree, datadirs=datadirs) as mounted:
             mounted.mount()
             yield Root(tree) if readonly else _with_digests(Root(tree, upper), snapshot)

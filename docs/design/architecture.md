@@ -50,7 +50,7 @@ tine//package/            package-system-neutral providers and installation flow
 tine//package_system/     one directory per package system: its repository, resolver, installer,
                           extractor, and optional indexer and builder
 tine//box/                box bootstrap and sandbox command construction
-tine//rootfs/             bind/overlay mounting and stored-delta translation
+tine//rootfs/             bind and overlay mounts and Buck-storable names
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
 tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them
@@ -628,13 +628,13 @@ directory. Each chrooted `run` or `copy` mounts the project read-only under the 
 the duration of that operation. Package scripts and remove globs cannot reach the project through that
 mount. apivfs covers `/run` with a tmpfs so the mount point is not captured into the image.
 
-The sandbox only creates the execution environment. Drivers own their target-root layout through
-`rootfs.rootfs()`:
+The sandbox only creates the execution environment. Drivers restore their target root from snapshots and
+bind it with `rootfs.rootfs()`:
 
-- a fresh install or image layer binds an output directory at `/buildroot`;
-- an incremental install or image layer mounts an ordered lower stack plus a persisted upper;
-- a package build mounts its buildroot stack with an ephemeral upper and binds action scratch at `/build`;
-- pack/disk operations merge a stack with an ephemeral upper so cleanup does not modify stored layers.
+- an install or image layer restores its lower snapshots into a temporary root, binds it at `/buildroot`
+  and captures the result as a new snapshot;
+- a package build restores its buildroot snapshots the same way and binds action scratch at `/build`;
+- disk operations restore their snapshots into a temporary root so cleanup does not modify stored layers.
 
 This division keeps one namespace boundary while letting each driver express the root it needs. Nesting a
 second sandbox inside a box would duplicate isolation, complicate mounts, and make remote execution
@@ -652,10 +652,11 @@ actions never use relaxed mode.
 Native package installation has three phases shared by buildroots and images:
 
 1. **Plan.** Run `PackageSystemInfo.plan` against each configured repository's materialized directory,
-   effective priority, and solver cache. Weak dependencies are disabled. Existing lower layers are mounted
-   read-only so installed packages can satisfy an incremental request. A request lists its packages in the
-   analysis, or in JSON files that an earlier action writes, such as the BuildRequires query of an rpm
-   package. A request with no packages installs nothing and leaves its layer empty.
+   effective priority, and solver cache. Weak dependencies are disabled. Existing lower snapshots are
+   restored into a temporary root so installed packages can satisfy an incremental request. A request lists
+   its packages in the analysis, or in JSON files that an earlier action writes, such as the BuildRequires
+   query of an rpm package. A request with no packages installs nothing, and its snapshot repeats the
+   manifest of the snapshot below it.
 2. **Select.** Use the resulting transaction to select package files from repository pools, verified after
    download if the repository declares signing keys, named with the package system's declared suffix so its
    installer finds them. A local repository is materialized by
@@ -667,9 +668,9 @@ Native package installation has three phases shared by buildroots and images:
    packages in it. Buildroots reject managers with local packages, because buildroot contents must come from
    the explicit, cycle-checked self-hosting locks.
 3. **Install.** Run `PackageSystemInfo.install` over the exact package directory, whose file names carry
-   the package system's suffix. `install_packages()` owns a fresh root or incremental buildroot delta. An
-   image layer instead invokes the same installer against its already-mounted root so package and
-   filesystem operations have one output owner.
+   the package system's suffix. `install_packages()` writes a fresh root snapshot or an incremental
+   buildroot snapshot. An image layer instead invokes the same installer against its already-mounted root
+   so package and filesystem operations have one output owner.
 
 What a request looks like, rather than how one package system answers it, belongs to the neutral layer:
 `package/transaction.py` owns the transaction schema both planners write and Starlark reads back, and
@@ -697,9 +698,9 @@ base.
 
 After installation, the installer parks the package database and scrubs the package-manager and ldconfig
 bookkeeping that would otherwise make identical roots differ; what parking takes is each package system's
-own business. The action that owns the root then captures names and overlay metadata into Buck-storable
-form. A fresh root receives the `uninitialized` machine-id marker systemd initializes on first boot;
-incremental installs preserve any existing machine ID.
+own business. The action that owns the root then captures it as a snapshot. A fresh root receives the
+`uninitialized` machine-id marker systemd initializes on first boot; incremental installs preserve any
+existing machine ID.
 
 `LocalPackageInfo` intentionally does not carry the producer's box. `local_repository` checks that its
 packages use one native package system and remains a box-independent declaration. An image or a buildroot
@@ -764,18 +765,19 @@ and runtime package closures are still delegated to libdnf5 at buildroot-plan ti
 An `rpm_package` action:
 
 1. obtains the shared base root from its `BuildrootInfo`;
-2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream. A
-   hand-written `rpm.package()` also installs the BuildRequires of the spec that it builds. Analysis cannot
-   read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
-   the build's options in the base root and the delta. It writes the BuildRequires that are missing, and a
-   second delta installs them. That delta is empty when the spec needs nothing more;
-3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
-   or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
-   directory under a mount rather than the mounted tree, so each directory mount below the source tree,
-   such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
-   `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
-   first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
-   from that commit. The project is read-only until the driver exits;
+2. resolves its BuildRequires and installs them as a snapshot over the base root, preferring RPMs from
+   `buildroot_packages` over upstream. A hand-written `rpm.package()` also installs the BuildRequires of the
+   spec that it builds. Analysis cannot read the contents of a spec, so an action stages the spec as the
+   build does and runs `rpmbuild -bd` with the build's options in the base root and that snapshot. It writes
+   the BuildRequires that are missing, and a second snapshot installs them. That snapshot repeats the
+   manifest below it when the spec needs nothing more;
+3. restores the snapshots into a temporary root, stages its spec/sources in Buck action scratch, and runs
+   `rpmbuild -ba`, or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree.
+   overlayfs shows the directory under a mount rather than the mounted tree, so each directory mount below
+   the source tree, such as a `tine mount`, gets a volatile overlay of its own. The driver discovers
+   directory mounts with `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a
+   separate action first fetches the dist-git commit that the tree pins, and the build takes its spec and
+   Source/Patch files from that commit. The project is read-only until the driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -795,7 +797,8 @@ names none, and gets no per-release aliases either.
 
 - The imported self-host dependency graph is inferred from stored BuildRequires/Provides/file metadata; it
   does not run RPM's dynamic BuildRequires protocol. The BuildRequires query runs `%generate_buildrequires`
-  only when the base root and the declared delta contain every static BuildRequires, and runs it once.
+  only when the base root and the declared BuildRequires snapshot contain every static BuildRequires, and
+  runs it once.
 - An imported package installs only its recorded BuildRequires, also for a spec from a checkout or a pin.
   `rpm.branch()` derives `buildroot_packages` from them, and Buck cannot add a target dependency that an
   action output discovers. A queried BuildRequires on a package of the branch would install it from
@@ -876,8 +879,6 @@ explicitly, because alpm rebases its system hook directory onto the target root 
 administrator's, and the box's must not run against the image. Afterwards the driver replaces the
 wall-clock `%INSTALLDATE%` alpm records with the assembly epoch, and drops ldconfig's auxiliary
 cache, the sync databases and the transaction log.
-It rewrites only the entries that actually change: alpm keeps one file per package, so rewriting an
-entry a lower layer already parked would copy that whole database up into this layer's delta.
 
 The database stays at Arch's own `/var/lib/pacman`, since Arch has no usr-merged location for it. The
 package-database artifact is read from the assembled layer stack rather than from a terminal output,
