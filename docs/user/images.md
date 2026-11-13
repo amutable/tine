@@ -412,8 +412,9 @@ when needed:
   for Secure Boot. With a `sign_expected_pcr_key`, a signed expected-PCR 11 policy covers each profile;
   set its `sign_expected_pcr` to false to opt out;
 - `image.bootable` selects a kernel and matching initrd from a logical image, exposed as `[uki]`, `[kernel]`,
-  and `[initrd]` subtargets;
-- `image.vm` runs the image's qcow2 ephemerally with the `systemd-vmspawn`, QEMU and OVMF stack of the tools box
+  and `[initrd]` subtargets, and `[cmdline]`, the base command line of the UKI, for a direct kernel boot;
+- `image.vm` runs the image's qcow2 (or raw) ephemerally, from its ESP or by a direct kernel boot, with the
+  `systemd-vmspawn`, QEMU and OVMF stack of the tools box
   of the image's release, and binds the DDIs in `extensions` into the guest, where systemd merges them at
   boot: a sysext from `/var/lib/extensions`, a confext from `/var/lib/confexts`, and a DDI of both classes
   from both. Each must have the `system` scope. It binds the DDIs in `portables`, portable images and
@@ -697,6 +698,7 @@ views and supply-chain artifacts are lazy subtargets:
 ├── [boot]
 │   ├── [kernel]
 │   ├── [initrd]
+│   ├── [cmdline]
 │   └── [uki]
 ├── [roothash]
 └── [partitions]
@@ -1189,7 +1191,31 @@ and the boot loader read (`io.systemd.stub.kernel-cmdline-extra` and its `boot` 
 The guest boots the image's `[qcow2]`, so it sees a disk of the image's `virtual_size` and claims the room
 past the built partitions itself, for example with `systemd-repart`. `grow` gives it a larger disk than
 that (vmspawn's `--grow-image`): vmspawn creates the ephemeral overlay at that size, and the qcow2 stays
-untouched.
+untouched. `image_format = "raw"` hands it the raw disk instead, which has no room past the partitions.
+
+By default the firmware boots the image from its ESP. `linux` and `initrd` boot a kernel directly instead,
+vmspawn's `--linux` and `--initrd`, and take any file; a bootable disk's `[boot][kernel]` and
+`[boot][initrd]` are the ones its UKI carries. Unlike the UKI, a bare kernel brings no command line of its
+own, so `cmdline_file` names the file to read it from when the VM starts, usually the disk's
+`[boot][cmdline]`: it carries the root hash, which is only known once the image is built. `cmdline_extra`
+follows it.
+
+```python
+image.vm(
+    name = "os-direct-vm",
+    image = ":os",
+    linux = ":os[boot][kernel]",
+    initrd = ":os[boot][initrd]",
+    cmdline_file = ":os[boot][cmdline]",
+)
+```
+
+`coco` runs the guest as a confidential VM, vmspawn's `--coco=`, for instance `"sev-snp"` or `"tdx"`; vmspawn
+checks what that needs of the host and of the rest of the command line, such as a direct kernel boot for
+SEV-SNP. `vmspawn_args` passes any other vmspawn option. They follow everything tine passes, so one that
+vmspawn takes the last value of, such as `--console=` or `--tpm=`, overrides tine's. The only options tine
+always passes are `--image`, `--image-format`, `--ephemeral`, which keeps the guest from writing the build
+output, and the defaults `--console=native`, `--kvm=yes` and `--network-user-mode`.
 
 ```sh
 tine buck run //examples/image:boot-demo-vm.fedora

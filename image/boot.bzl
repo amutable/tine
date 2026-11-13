@@ -252,12 +252,14 @@ def uki(name: str, profiles: list[UkiProfile] = [], **kwargs) -> None:
     _uki(name = name, profiles = encode_profiles(profiles), **kwargs)
 
 _ARTIFACTS = {
+    "cmdline": "cmdline",
     "initrd": "initrd",
     "kernel": "vmlinuz",
     "uki": "image.efi",
 }
 
 BootArtifactsInfo = record(
+    cmdline = Artifact,
     initrd = Artifact,
     kernel = Artifact,
     uki = Artifact,
@@ -270,10 +272,10 @@ def declare_boot_artifacts(
     image: ImageInfo,
     identifier: str | None = None,
 ) -> BootArtifactsInfo:
-    """Declare extraction of what a completed image boots: its kernel, initrd and UKI.
+    """Declare extraction of what a completed image boots: its kernel, initrd, command line and UKI.
 
-    The driver picks the newest kernel the image carries and reads the initrd and kernel out of
-    the UKI's PE sections when it boots one, so the results are what a direct kernel boot needs.
+    The driver picks the newest kernel the image carries and reads the initrd, kernel and command line
+    out of the UKI's PE sections when it boots one, so the results are what a direct kernel boot needs.
     """
     selection = declare_out(ctx, identifier, "boot-artifacts.json")
     select = terminal_image_command(
@@ -307,6 +309,7 @@ def declare_boot_artifacts(
         ctx.actions.run(extract, category = "boot_artifact_" + kind, identifier = identifier)
         artifacts[kind] = out
     return BootArtifactsInfo(
+        cmdline = artifacts["cmdline"],
         initrd = artifacts["initrd"],
         kernel = artifacts["kernel"],
         uki = artifacts["uki"],
@@ -315,6 +318,8 @@ def declare_boot_artifacts(
 def boot_subtargets(artifacts: BootArtifactsInfo) -> dict[str, list[Provider]]:
     """The extracted artifacts, exposed wherever the image they come from is."""
     return {
+        # Only a UKI carries one, so like [uki] it extracts on demand and fails for a plain kernel.
+        "cmdline": [DefaultInfo(default_output = artifacts.cmdline)],
         "initrd": [DefaultInfo(default_output = artifacts.initrd)],
         "kernel": [DefaultInfo(default_output = artifacts.kernel)],
         "uki": [DefaultInfo(default_output = artifacts.uki)],

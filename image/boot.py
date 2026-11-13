@@ -35,6 +35,7 @@ class Selection:
     uki: Source | None
     kernel: Source
     initrd: Source
+    cmdline: Source | None
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,7 @@ def _select(tree: Path) -> Selection:
             uki=source,
             kernel=Source(source.path, ".linux"),
             initrd=initrd,
+            cmdline=Source(source.path, ".cmdline") if ".cmdline" in uki.sections else None,
         )
 
     kernels = _kernels(tree)
@@ -125,6 +127,7 @@ def _select(tree: Path) -> Selection:
         uki=None,
         kernel=Source(_image_name(tree, kernel.path)),
         initrd=Source(_image_name(tree, initrd)),
+        cmdline=None,
     )
 
 
@@ -141,6 +144,7 @@ def _write_selection(selection: Selection, out: Path) -> None:
                 "uki": _source_json(selection.uki) if selection.uki is not None else None,
                 "kernel": _source_json(selection.kernel),
                 "initrd": _source_json(selection.initrd),
+                "cmdline": _source_json(selection.cmdline) if selection.cmdline is not None else None,
             },
             indent=2,
             sort_keys=True,
