@@ -66,7 +66,7 @@ def _repository_labels(repositories: list[Dependency]) -> list[str]:
     return sorted([str(repository.label.raw_target()) for repository in repositories])
 
 def _layer_dir(actions: AnalysisActions, name: str) -> Artifact:
-    """Declare a directory output that holds a box root or the overlay work directory for one."""
+    """Declare a directory output for a box root or the snapshot store of one."""
 
     # A box root takes several gigabytes. Buck keeps every content-based version of an output until a
     # clean, so each rebuild that changes the root adds another full copy. A rebuild that produces the
@@ -176,7 +176,6 @@ def _install(
                     "packages_dir": packages,
                     "snapshot": store.as_output() if store else None,
                     "target": stage2.as_output(),
-                    "work": None,
                 },
             ),
         ),

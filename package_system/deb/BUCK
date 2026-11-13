@@ -46,6 +46,7 @@ python.binary(
         "//:util",
         "//package:href",
         "//package:transaction",
+        "//uapi16:storage",
     ],
 )
 
@@ -133,5 +134,6 @@ python.test(
         "//package:installer",
         "//package:snapshotter",
         "//package:transaction",
+        "//uapi16:storage",
     ],
 )

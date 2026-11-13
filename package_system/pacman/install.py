@@ -135,10 +135,7 @@ def parkdb(installroot: Path, epoch: int) -> None:
             f"{epoch}\n" if index and lines[index - 1].strip() == "%INSTALLDATE%" else line
             for index, line in enumerate(lines)
         )
-        # Entries a lower layer already parked are unchanged, and writing one anyway would copy
-        # the whole inherited database up into this layer's delta.
-        if stamped != text:
-            desc.write_text(stamped, encoding="utf-8")
+        desc.write_text(stamped, encoding="utf-8")
 
 
 def scrub(installroot: Path) -> None:
@@ -147,7 +144,7 @@ def scrub(installroot: Path) -> None:
     (installroot / "var/log/pacman.log").unlink(missing_ok=True)
 
 
-def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec, layered: bool) -> None:
+def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec) -> None:
     with installer.fresh_machine_id(installroot), tempfile.TemporaryDirectory(prefix="pacman.") as scratch:
         install(
             packages_dir,
