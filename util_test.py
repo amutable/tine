@@ -6,10 +6,12 @@
 buck test tine//:test
 """
 
+import errno
 import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import util
 
@@ -82,3 +84,38 @@ class TestNamedFiles(unittest.TestCase):
         (source / "dangling").symlink_to("missing")
 
         self.assertEqual(util.named_files(source, "wanted"), [Path("nested/wanted"), Path("wanted")])
+
+
+class TestReflink(unittest.TestCase):
+    def test_reflink_mode_errors_are_not_unavailability(self) -> None:
+        # A successful reflink followed by an unsupported mode change must report the metadata
+        # error. A caller must not mistake that failure for missing reflink support.
+        root = scratch(self)
+        source, destination = root / "source", root / "destination"
+        source.write_bytes(b"cached contents")
+        with (
+            mock.patch.object(util.fcntl, "ioctl", return_value=0),
+            mock.patch.object(util.shutil, "copymode", side_effect=OSError(errno.EOPNOTSUPP, "mode")),
+            self.assertRaises(OSError) as error,
+        ):
+            util.reflink(source, destination)
+        self.assertNotIsInstance(error.exception, util.ReflinkUnavailable)
+        self.assertEqual(error.exception.errno, errno.EOPNOTSUPP)
+
+    def test_reflink_never_falls_back_to_a_byte_copy(self) -> None:
+        # A caller choosing a storage strategy must distinguish an unsupported reflink from
+        # a successful clone. Reject unsupported or denied clones without copying any bytes.
+        root = scratch(self)
+        source, destination = root / "source", root / "destination"
+        source.write_bytes(b"cached contents")
+        for number in (errno.EXDEV, errno.EOPNOTSUPP, errno.EPERM):
+            with (
+                self.subTest(errno=number),
+                mock.patch.object(util.fcntl, "ioctl", side_effect=OSError(number, "unavailable")),
+                mock.patch.object(util, "copy_range") as copy,
+                self.assertRaises(OSError) as error,
+            ):
+                util.reflink(source, destination)
+            self.assertEqual(error.exception.errno, number)
+            copy.assert_not_called()
+        self.assertEqual(source.read_bytes(), b"cached contents")

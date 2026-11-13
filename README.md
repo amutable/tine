@@ -7,7 +7,7 @@ SPDX-License-Identifier: MPL-2.0
 
 tine composes operating-system images out of packages and pinned third-party repositories with
 [Buck2](https://buck2.build/). Every build action runs in an unprivileged sandbox without network access.
-Filesystem images are stacks of overlay deltas. tine's primary output targets are [unified kernel
+Each image layer describes a complete filesystem snapshot. tine's primary output targets are [unified kernel
 images](https://uapi-group.org/specifications/specs/unified_kernel_image/) and dm-verity protected GPT
 disks in various formats, and also additional artifacts like
 [SBOM](https://en.wikipedia.org/wiki/Software_supply_chain).
@@ -25,6 +25,7 @@ The host needs only:
  * `git`
  * `/bin/sh`, which runs the fetch of a Rust project's git dependencies
  * `/dev/kvm` to run VMs for testing; without it, you can still build everything
+ * Read access to `/proc/sys/kernel/overflowuid` for directory exports
 
 tine uses the host's `python` and `git` to bootstrap itself and to read the project's git state, such as the
 version an image derives from it. A build also runs the host's `git` to fetch git checkouts, and the host's

@@ -1,45 +1,23 @@
-#!/usr/bin/python3
-
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""List everything a logical image ships, as a UAPI.16 File Manifest.
-
-The format is an RFC7464 JSON-SEQ sequence: a root object naming the media type, then one object
-per inode, each directory immediately followed by its own contents. Two consumers want this: a
-comparison of the paths two images ship (a path in both a system extension and the /usr it merges
-onto silently shadows an OS file), and per-image size accounting. Both need every inode type an OS
-tree holds, so a type that cannot be listed is an error rather than an omission.
-
-A driver writing a listing of what it is about to package imports this rather than running it: only
-the driver holds the finished tree, and only it knows which paths of that tree its artifact carries.
-`roots` is how it says so, and names stay relative to the image, so a listing reads as where each
-path lands on a machine rather than where it sits inside one partition.
-"""
+"""Read, write and combine UAPI.16 filesystem listings."""
 
 import base64
 import hashlib
 import json
 import os
 import stat
-import sys
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 
-import specs
 from util import fail
 
-import finalize
-
-
-class Spec(finalize.ImageSpec):
-    out: str
-
-
 MEDIA_TYPE = "application/vnd.uapi.16.manifest"
+TRAILER_TYPE = "application/vnd.uapi.16.trailer"
 
 # RFC7464 frames every JSON text with a leading record separator and a trailing line feed.
 _RS = b"\x1e"
@@ -47,7 +25,7 @@ _LF = b"\n"
 
 # A directory holding a manifest cannot also list it, so the format reserves the name at the top
 # level; deeper in the tree it is an ordinary file name.
-_RESERVED = "Uapi16Manifest"
+MANIFEST = "Uapi16Manifest"
 
 _INODE_TYPES = (
     (stat.S_ISREG, "reg"),
@@ -60,6 +38,35 @@ _INODE_TYPES = (
 )
 
 _NANOSECONDS = 10**9
+
+
+class Content(TypedDict, total=False):
+    file: str
+    literal: str
+
+
+class Xattr(TypedDict, total=False):
+    text: str
+    base64: str
+
+
+class Object(TypedDict, total=False):
+    """One record of a UAPI.16 manifest."""
+
+    mediaType: str
+    name: str
+    type: str
+    mode: int
+    uid: int
+    gid: int
+    mTimeNSec: int
+    size: int
+    major: int
+    minor: int
+    sha256: str
+    contents: list[Content]
+    inodeToken: int
+    extendedAttributes: dict[str, dict[str, Xattr]]
 
 
 @dataclass(frozen=True)
@@ -83,19 +90,17 @@ def inode_type(mode: int) -> str:
 
 
 def check_name(name: str) -> str:
-    """Reject a path the format cannot encode, rather than listing the image incompletely.
-
-    Nothing normalizes here: scandir yields neither "." nor ".." nor an empty component, so what
-    is left is the format's own restrictions on the bytes and on the reserved file name.
-    """
+    """Reject a path the format cannot encode, rather than listing the image incompletely."""
     try:
         name.encode("utf-8")
     except UnicodeEncodeError:
         fail(f"manifest: {name!r} is not valid UTF-8, which a manifest name must be")
     if any(ord(character) < 32 or ord(character) == 127 for character in name):
         fail(f"manifest: {name!r} contains a control character")
+    if any(part in ("", ".", "..") for part in name.split("/")):
+        fail(f"manifest: {name!r} must be a normalized relative path")
     top = name.split("/", 1)[0]
-    if top == _RESERVED or top.startswith(_RESERVED + "."):
+    if top == MANIFEST or top.startswith(MANIFEST + "."):
         fail(f"manifest: {name!r} is the reserved manifest file name")
     return name
 
@@ -172,10 +177,10 @@ def _digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> dict[str, object]:
-    """The record for one inode, with its fields in the order the specification lists them."""
+def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> Object:
+    """Describe one inode using UAPI.16 metadata and content fields."""
     kind = inode_type(entry.st.st_mode)
-    obj: dict[str, object] = {"name": entry.name, "type": kind}
+    obj: Object = {"name": entry.name, "type": kind}
     target = os.fsencode(os.readlink(entry.path)) if kind == "lnk" else b""
 
     if kind == "reg":
@@ -189,9 +194,31 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> dict[s
         obj["mode"] = stat.S_IMODE(entry.st.st_mode)
     obj["uid"] = entry.st.st_uid
     obj["gid"] = entry.st.st_gid
-    # Clamped exactly as every other reproducible output here clamps: what a package stamped
-    # survives, what this build stamped collapses onto the epoch.
-    obj["mTime"] = min(entry.st.st_mtime_ns, epoch * _NANOSECONDS)
+    obj["mTimeNSec"] = min(entry.st.st_mtime_ns, epoch * _NANOSECONDS)
+    if entry.st.st_mtime_ns < 0:
+        fail(f"manifest: {entry.name!r} has a timestamp before the UNIX epoch")
+    attributes: dict[str, Xattr] = {}
+    for name in sorted(os.listxattr(entry.path, follow_symlinks=False)):
+        if not name.startswith("user.") or name.startswith("user.overlay."):
+            continue
+        short = name.removeprefix("user.")
+        if not short or any(ord(c) < 32 or ord(c) == 127 for c in short):
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        try:
+            short.encode("utf-8")
+        except UnicodeEncodeError:
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        value = os.getxattr(entry.path, name, follow_symlinks=False)
+        try:
+            text = value.decode("utf-8")
+        except UnicodeDecodeError:
+            text = None
+        if text is None or "\0" in text:
+            attributes[short] = {"base64": base64.b64encode(value).decode("ascii")}
+        else:
+            attributes[short] = {"text": text}
+    if attributes:
+        obj["extendedAttributes"] = {"user": attributes}
     if token is not None:
         obj["inodeToken"] = token
     if kind == "lnk":
@@ -205,20 +232,44 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> dict[s
     return obj
 
 
-def _record(obj: dict[str, object]) -> bytes:
-    return _RS + json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + _LF
+def symlink_target(obj: Object) -> str:
+    return os.fsdecode(base64.b64decode(obj["contents"][0]["literal"]))
+
+
+def xattr_value(value: Xattr) -> bytes:
+    return value["text"].encode() if "text" in value else base64.b64decode(value["base64"])
+
+
+def write_listing(objects: Sequence[Object], out: Path) -> int:
+    # The `contents` of a regular file names a blob, and the blob only exists inside a store.
+    listed: list[Object] = []
+    for obj in objects:
+        copy = obj.copy()
+        if copy.get("type") != "lnk":
+            copy.pop("contents", None)
+        listed.append(copy)
+    return write_objects(listed, out)
+
+
+def _record(obj: Object) -> bytes:
+    return (
+        _RS
+        + json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        + _LF
+    )
 
 
 def records(tree: Path, epoch: int, roots: Sequence[str] = ()) -> Iterator[bytes]:
     """The whole sequence for `tree`: the root object, then one object per inode below it."""
     # The root object carries the media type alone, which is what marks the sequence a manifest.
-    # Its mode and mtime would be the ephemeral overlay upper's rather than the image's, and the
-    # format defaults a nameless first object to a directory anyway.
+    # A partition manifest lists a part of the image, and the image root is not part of it. The format
+    # defaults a nameless first object to a directory.
     yield _record({"mediaType": MEDIA_TYPE})
     found = list(entries(tree, roots))
     tokens = hardlink_tokens(found)
     for entry in found:
         yield _record(file_object(entry, epoch=epoch, token=tokens.get(entry.inode)))
+    yield _record({"mediaType": TRAILER_TYPE})
 
 
 def write(tree: Path, out: Path, epoch: int, roots: Sequence[str] = ()) -> int:
@@ -231,21 +282,55 @@ def write(tree: Path, out: Path, epoch: int, roots: Sequence[str] = ()) -> int:
     return written
 
 
-def _objects(source: Path) -> Iterator[dict[str, object]]:
-    """The named objects of a manifest, the root object it opens with aside."""
+def read(source: Path) -> list[Object]:
+    """Read a complete manifest, rejecting truncated sequences and trailing data."""
     data = source.read_bytes()
-    head, separator, rest = data.partition(_RS)
-    if not separator or head:
+    if not data.startswith(_RS):
         fail(f"manifest: {source} does not open with a record")
-    for index, record in enumerate(rest.split(_RS)):
+    objects: list[Object] = []
+    names: set[str] = set()
+    trailer = False
+    for record in data[1:].split(_RS):
+        if trailer:
+            fail(f"manifest: {source} has data after its trailer")
         if not record.endswith(_LF):
             fail(f"manifest: {source} holds a record that no line feed ends")
-        obj = cast(dict[str, object], json.loads(record))
-        if index == 0:
-            if obj != {"mediaType": MEDIA_TYPE}:
-                fail(f"manifest: {source} does not open with a {MEDIA_TYPE} object")
+        try:
+            obj = cast(Object, json.loads(record))
+        except (ValueError, UnicodeDecodeError) as error:
+            fail(f"manifest: {source} has invalid JSON: {error}")
+        if not isinstance(obj, dict):
+            fail(f"manifest: {source} holds a non-object record")
+        if not objects:
+            if obj.get("mediaType") != MEDIA_TYPE or obj.get("name") is not None:
+                fail(f"manifest: {source} does not open with a {MEDIA_TYPE} root object")
+        elif obj.get("mediaType") == TRAILER_TYPE:
+            text = record.decode("utf-8")
+            _, end = json.JSONDecoder().raw_decode(text, len(text) - len(text.lstrip()))
+            if obj != {"mediaType": TRAILER_TYPE} or text[end:].lstrip(" \t\r") != "\n":
+                fail(f"manifest: {source} has an invalid trailer or data after its trailer")
+            trailer = True
             continue
-        yield obj
+        elif obj.get("mediaType") not in (None, MEDIA_TYPE):
+            continue
+        else:
+            name = obj.get("name")
+            if not isinstance(name, str) or name in names:
+                fail(f"manifest: {source} has a missing or duplicate name: {name!r}")
+            names.add(check_name(name))
+        objects.append(obj)
+    if not trailer:
+        fail(f"manifest: {source} is incomplete: missing trailer")
+    return objects
+
+
+def write_objects(objects: Sequence[Object], out: Path) -> int:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("wb") as stream:
+        for obj in objects:
+            stream.write(_record(obj))
+        stream.write(_record({"mediaType": TRAILER_TYPE}))
+    return len(objects) + 1
 
 
 def order(name: str) -> list[bytes]:
@@ -264,11 +349,11 @@ def merge(sources: Sequence[Path], out: Path) -> int:
     between them. A name more than one of them lists is taken from the last, which is the partition
     mounted over a directory the others merely hold.
     """
-    objects: dict[str, dict[str, object]] = {}
+    objects: dict[str, Object] = {}
     offset = 0
     for source in sources:
         highest = 0
-        for obj in _objects(source):
+        for obj in read(source)[1:]:
             token = obj.get("inodeToken")
             if isinstance(token, int):
                 # A token numbers an inode within one manifest, so each part keeps its own grouping
@@ -278,25 +363,15 @@ def merge(sources: Sequence[Path], out: Path) -> int:
             objects[str(obj["name"])] = obj
         offset += highest
 
-    written = 1
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("wb") as stream:
-        stream.write(_record({"mediaType": MEDIA_TYPE}))
-        for name in sorted(objects, key=order):
-            stream.write(_record(objects[name]))
-            written += 1
-    return written
+    ordered = [objects[name] for name in sorted(objects, key=order)]
+    renumber(ordered)
+    return write_objects([{"mediaType": MEDIA_TYPE}, *ordered], out)
 
 
-def main(argv: list[str] | None = None) -> None:
-    spec = specs.parse(Spec, "manifest", argv)
-
-    out = Path(spec["out"])
-    epoch = int(os.environ["SOURCE_DATE_EPOCH"])
-    with finalize.image(spec, program="manifest") as tree:
-        written = write(tree, out, epoch)
-    print(f"manifest: wrote {written} objects -> {out}", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    main()
+def renumber(objects: Sequence[Object]) -> None:
+    tokens: dict[int, int] = {}
+    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    for obj in objects:
+        token = obj.pop("inodeToken", None)
+        if isinstance(token, int) and counts[token] > 1:
+            obj["inodeToken"] = tokens.setdefault(token, len(tokens) + 1)

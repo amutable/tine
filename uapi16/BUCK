@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+"""UAPI.16 manifests and the snapshot stores built on them."""
+
+load("//python:defs.bzl", "python")
+
+python.library(
+    name = "uapi16",
+    srcs = ["uapi16.py"],
+    deps = ["//:util"],
+    visibility = ["tine//..."],
+)
+
+python.library(
+    name = "storage",
+    srcs = ["storage.py"],
+    deps = [":uapi16", "//:util", "//box:isolation", "//rootfs:rootfs"],
+    visibility = ["tine//..."],
+)
+
+python.test(
+    name = "test",
+    box = "//tools:dev.box",
+    srcs = ["storage_test.py", "uapi16_test.py"],
+    deps = [":storage", ":uapi16", "//:util", "//box:isolation"],
+)

@@ -165,7 +165,7 @@ def _declare_preset(
         default_outputs = [info.disk],
         extra = [info, published] + extra,
         image = image,
-        sub_targets = output.sub_targets | published_metadata_subtargets(image, basename, version, filename),
+        sub_targets = published_metadata_subtargets(image, basename, version, filename) | output.sub_targets,
     )
 
 def declare_extension(

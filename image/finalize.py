@@ -25,6 +25,8 @@ from typing import TypedDict
 from util import fail
 
 import rootfs
+import storage
+import uapi16
 
 
 class ImageSpec(TypedDict):
@@ -34,22 +36,7 @@ class ImageSpec(TypedDict):
     tmpfiles: list[str]
 
 
-# The directories whose whole point is a mode, so a layer cannot carry them: sticky and
-# world-writable, which is exactly what Buck cannot store and the tar filter strips.
 _WORLD_WRITABLE = ("tmp", "var/tmp")
-
-
-def world_writable(tree: Path) -> None:
-    """Restore the mode on the temporary directories, which nothing upstream of here can keep.
-
-    Buck stores no mode beyond the executable bit, so a package's `0o1777` is gone by the time a
-    layer is a build artifact however faithfully it was extracted. Here is the last point before
-    the image is written, and the only one where the mode survives into it.
-    """
-    for name in _WORLD_WRITABLE:
-        path = tree / name
-        if path.is_dir() and not path.is_symlink():
-            path.chmod(0o1777)
 
 
 @contextlib.contextmanager
@@ -57,17 +44,43 @@ def image(
     spec: ImageSpec,
     *,
     program: str,
-    lowers: Sequence[str | Path] | None = None,
     binds: Sequence[tuple[str | Path, str | Path]] | None = None,
+    base: int = 0,
+    readonly: bool = True,
+    strategy: storage.Strategy = "auto",
 ) -> Generator[Path]:
     """Mount the image stack the spec names and yield the finalized tree."""
-    with rootfs.rootfs(
-        "/buildroot", lowers=spec["lower"] if lowers is None else lowers, binds=binds
-    ) as tree:
-        # Before the snippets, so an image that states a mode of its own still wins.
-        world_writable(tree)
+    with _root(
+        spec, program=program, binds=binds, base=base, readonly=readonly, strategy=strategy
+    ) as restored:
+        yield restored.path
+
+
+@contextlib.contextmanager
+def _root(
+    spec: ImageSpec,
+    *,
+    program: str,
+    binds: Sequence[tuple[str | Path, str | Path]] | None = None,
+    base: int = 0,
+    readonly: bool = True,
+    strategy: storage.Strategy = "auto",
+) -> Generator[storage.Root]:
+    snapshot = storage.Snapshot(spec["lower"])
+    if base:
+        storage.delta(snapshot, base)
+    normalize_snapshot(snapshot)
+    with (
+        storage.root(
+            snapshot,
+            # Authored tmpfiles rules write into the root. They fail on a read-only root.
+            readonly=readonly and not spec["tmpfiles"],
+            strategy=strategy,
+        ) as restored,
+        rootfs.rootfs("/buildroot", bind=restored.path, binds=binds) as tree,
+    ):
         apply_tmpfiles(tree, spec["tmpfiles"], program=program)
-        yield tree
+        yield storage.Root(tree, restored.upper)
 
 
 def apply_tmpfiles(tree: Path, snippets: list[str], *, program: str) -> None:
@@ -355,3 +368,65 @@ def locale_gen(tree: Path) -> None:
         # it wrote nothing. Only 0 means that the archive contains the locale.
         if rc != 0:
             fail(f"locale_gen: `{' '.join(cmd)}` failed (rc={rc})")
+
+
+def normalize_snapshot(snapshot: storage.Snapshot) -> None:
+    for obj in snapshot.objects:
+        if obj["type"] == "dir":
+            obj["mode"] = 0o1777 if obj.get("name") in _WORLD_WRITABLE else 0o755
+        elif obj["type"] == "reg":
+            obj["mode"] = 0o755 if obj["mode"] & 0o111 else 0o644
+
+
+def _remove(objects: dict[str, uapi16.Object], relative: str, epoch: int) -> None:
+    path = Path(relative)
+    name = storage.resolve(objects, relative, follow=False)
+    removed = False
+    for child in list(objects):
+        if child == name or child.startswith(name + "/"):
+            del objects[child]
+            removed = True
+    while True:
+        path = path.parent
+        name = storage.resolve(objects, str(path))
+        directory = objects.get(name)
+        if directory is None or directory["type"] != "dir":
+            return
+        if removed:
+            # Removing a file from a real tree sets the mtime of its directory to the current time.
+            # snapshot() clamps that time to the epoch.
+            directory["mTimeNSec"] = epoch * 10**9
+        # remove_path() stops at a parent that is a symlink.
+        if name == "." or objects[storage.resolve(objects, str(path), follow=False)]["type"] == "lnk":
+            return
+        if any(child.startswith(name + "/") for child in objects):
+            return
+        del objects[name]
+        removed = True
+
+
+@contextlib.contextmanager
+def snapshot(
+    spec: ImageSpec,
+    *,
+    program: str,
+    epoch: int,
+    pkgdb_paths: Sequence[str] = (),
+) -> Generator[storage.Snapshot]:
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+        if spec["tmpfiles"]:
+            out = Path(scratch) / "snapshot"
+            with _root(spec, program=program, readonly=False) as restored:
+                storage.capture(restored, out, spec["lower"], epoch=epoch)
+            result = storage.Snapshot([*spec["lower"], out])
+        else:
+            result = storage.Snapshot(spec["lower"])
+            normalize_snapshot(result)
+        objects = storage.by_name(result.objects)
+        for relative in pkgdb_paths:
+            _remove(objects, relative, epoch)
+        result.objects = list(objects.values())
+        uapi16.renumber(result.objects)
+        for obj in result.objects:
+            obj["mTimeNSec"] = min(obj.get("mTimeNSec", epoch * 10**9), epoch * 10**9)
+        yield result

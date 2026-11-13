@@ -5,6 +5,7 @@
 
 import bz2
 import errno
+import fcntl
 import gzip
 import http.client
 import io
@@ -30,6 +31,10 @@ _LINK_FALLBACK_ERRNOS = frozenset({errno.EMLINK, errno.EOPNOTSUPP, errno.EPERM, 
 
 _TRANSIENT_HTTP_STATUS = frozenset((408, 429, 500, 502, 503, 504))
 _FETCH_ATTEMPTS = 4
+
+
+class ReflinkUnavailable(OSError):
+    pass
 
 
 def fail(message: str) -> NoReturn:
@@ -208,6 +213,18 @@ def clone_file(src: Path, dst: Path, allow_link: bool = False) -> None:
     shutil.copymode(src, dst)
 
 
+def reflink(src: Path, dst: Path) -> None:
+    """Raise ReflinkUnavailable instead of copying bytes when the filesystem cannot clone src."""
+    with open(src, "rb") as source, open(dst, "wb") as destination:
+        try:
+            fcntl.ioctl(destination.fileno(), fcntl.FICLONE, source.fileno())
+        except OSError as error:
+            if error.errno in _COPY_FALLBACK_ERRNOS | {errno.EACCES, errno.EBADF, errno.ENOTTY, errno.EPERM}:
+                raise ReflinkUnavailable(error.errno, error.strerror) from error
+            raise
+    shutil.copymode(src, dst)
+
+
 def named_files(source: Path, name: str) -> list[Path]:
     """Find files called `name` under `source`, and return their paths relative to `source`."""
     found: list[Path] = []
@@ -241,7 +258,7 @@ def remove_path(path: Path, with_parents: bool = False) -> None:
         return
     for parent in path.parents:
         # `parent.parent` stops the walk at the filesystem root.
-        if parent == parent.parent or not parent.is_dir() or any(parent.iterdir()):
+        if parent == parent.parent or parent.is_symlink() or not parent.is_dir() or any(parent.iterdir()):
             break
         parent.rmdir()
 

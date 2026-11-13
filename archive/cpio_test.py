@@ -28,6 +28,19 @@ def payload(data: bytes) -> bytes:
 
 
 class TestUnpack(unittest.TestCase):
+    def test_symlink_targets_need_not_be_utf8(self) -> None:
+        # A symlink target is an arbitrary byte string even when its filename is valid UTF-8.
+        # Packing and extracting the target must preserve its bytes without a Unicode error.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            archive = root / "image.cpio"
+            target = b"target-\xff"
+            with cpio.Writer(archive, 0) as writer:
+                writer.add_symlink("link", os.fsdecode(target), mtime=0)
+            with archive.open("rb") as stream:
+                cpio.unpack(stream.fileno(), root / "unpacked")
+            self.assertEqual(os.fsencode(os.readlink(root / "unpacked/link")), target)
+
     def test_extracts_an_ordinary_hardlink_set(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
@@ -131,6 +144,59 @@ class TestUnpack(unittest.TestCase):
                         writer.add_file(name, root / "payload", mode=0o644, mtime=0)
                     header = archive.read_bytes()[: cpio._HEADER]
                     self.assertEqual(int(header[6 + 11 * 8 : 6 + 12 * 8], 16), namesize)
+
+
+class TestPackPaths(unittest.TestCase):
+    def test_a_literal_trailer_name_does_not_end_the_archive(self) -> None:
+        # A regular file named TRAILER!!! must be escaped with a relative prefix so the reader
+        # extracts it and the later file instead of treating it as the archive terminator.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            tree = root / "tree"
+            tree.mkdir()
+            (tree / "TRAILER!!!").write_text("ordinary file")
+            (tree / "z-last").write_text("later file")
+            out = root / "image.cpio"
+            cpio.pack_tree(tree, out, 0)
+            self.assertEqual([obj.name for obj in cpio.read(out.read_bytes())], ["./TRAILER!!!", "z-last"])
+            with out.open("rb") as stream:
+                cpio.unpack(stream.fileno(), root / "unpacked")
+            self.assertEqual((root / "unpacked/TRAILER!!!").read_text(), "ordinary file")
+            self.assertEqual((root / "unpacked/z-last").read_text(), "later file")
+
+    def test_hardlinks_depend_on_selected_paths(self) -> None:
+        # A full selection preserves explicit links without merging equal files. Selecting one
+        # member of a group must emit a self-contained file with nlink=1 and its own payload.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            tree = root / "tree"
+            tree.mkdir()
+            (tree / "a").write_text("same")
+            os.link(tree / "a", tree / "b")
+            (tree / "c").write_text("same")
+            out = root / "image.cpio"
+            cpio.pack_tree(tree, out, 0)
+            objects = {obj.name: obj for obj in cpio.read(out.read_bytes())}
+            self.assertEqual(objects["a"].ino, objects["b"].ino)
+            self.assertEqual(objects["a"].nlink, 2)
+            self.assertNotEqual(objects["a"].ino, objects["c"].ino)
+            cpio.pack_paths(tree, out, 0, ["a"])
+            (obj,) = cpio.read(out.read_bytes())
+            self.assertEqual(obj.nlink, 1)
+            self.assertEqual(obj.size, 4)
+
+    def test_timestamp_truncation_does_not_round_up(self) -> None:
+        # A nanosecond below a second boundary must truncate to the preceding second, even when
+        # the floating-point stat timestamp rounds up to the boundary.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            (root / "file").write_text("contents")
+            cutoff = 1000000000
+            os.utime(root / "file", ns=(0, cutoff * 10**9 - 1))
+            out = root / "image.cpio"
+            cpio.pack_paths(root, out, cutoff, ["file"])
+            header = out.read_bytes()[: cpio._HEADER]
+            self.assertEqual(int(header[6 + 5 * 8 : 6 + 6 * 8], 16), cutoff - 1)
 
 
 if __name__ == "__main__":

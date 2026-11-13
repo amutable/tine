@@ -15,6 +15,7 @@ load(
     "ImageArchiveInfo",
     "declare_image_archive",
     "declare_image_directory",
+    "image_directory_providers",
 )
 load(
     ":boot.bzl",
@@ -152,6 +153,7 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
     return image_providers(
         default_outputs = [cpio.archive],
         extra = [InitrdInfo(cpio = cpio, image = image), cpio],
+        sub_targets = {"manifest": [DefaultInfo(default_output = cpio.manifest)]},
         image = image,
     )
 
@@ -236,6 +238,7 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
     return image_providers(
         default_outputs = [archive.archive],
         extra = [archive],
+        sub_targets = {"manifest": [DefaultInfo(default_output = archive.manifest)]},
         image = image,
     )
 
@@ -484,7 +487,8 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             "initrd": [
                 DefaultInfo(
                     default_output = initrd_info.cpio.archive,
-                    sub_targets = published_metadata_subtargets(initrd_info.image, "{}.initrd".format(basename), version),
+                    sub_targets = published_metadata_subtargets(initrd_info.image, "{}.initrd".format(basename), version)
+                    | {"manifest": [DefaultInfo(default_output = initrd_info.cpio.manifest)]},
                 ),
                 initrd_info,
             ],
@@ -539,7 +543,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     sub_targets = dict(composed.sub_targets)
     sub_targets.update(manifest_sub_targets(manifests))
     sub_targets.update(boot_sub_targets)
-    sub_targets["directory"] = [DefaultInfo(default_output = directory.directory), directory]
+    sub_targets["directory"] = image_directory_providers(directory)
     if bootable:
         sub_targets["ami"] = declare_ami(
             ctx.actions,
@@ -594,7 +598,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         default_outputs = [raw],
         extra = [directory, composed.info, published] + boot_providers,
         image = top,
-        sub_targets = sub_targets | published_metadata_subtargets(top, basename, version),
+        sub_targets = published_metadata_subtargets(top, basename, version) | sub_targets,
     )
 
 _DISK_ATTRS = (

@@ -50,9 +50,11 @@ tine//package/            package-system-neutral providers and installation flow
 tine//package_system/     one directory per package system: its repository, resolver, installer,
                           extractor, and optional indexer and builder
 tine//box/                box bootstrap and sandbox command construction
-tine//rootfs/             bind/overlay mounting and stored-delta translation
+tine//rootfs/             bind mounts and Buck-storable names
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
+tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them
+tine//archive/            tar and cpio readers and writers
 tine//git/                pinned Git repositories with local checkout overrides
 tine//cargo/              vendored crate trees and offline Rust source builds
 tine//go/                 go.sum-verified module fetches and offline Go source builds
@@ -542,16 +544,19 @@ The host contract is intentionally small; its short list of requirements is docu
 
 ### Box layers
 
-If a box and its `parent` come from the same repositories, the box is a delta layer over its parent's
+If a box and its `parent` come from the same repositories, the box is a layer over its parent's
 layers, like with images. It enforces addition only, and fails if its lock would update or remove parent
 packages. One likely cause is an outdated committed lock, which needs a catalog refresh. The other is that
 resolving both package lists together picks other packages than the parent got, for example
 `libcurl` for a box that needs it where the parent has `libcurl-minimal`; `layered = False` then installs
 the box on its own.
 
-The sandbox merges the layers per top-level directory with a read-only overlay. Unlike `rootfs()`, it does
-not decode stored whiteout markers, as that would walk every layer on every action, so the installer refuses
-a box layer that deletes from the layers below.
+Each box layer is a snapshot over the snapshots of its parent's layers, like an image layer. A child box
+installs over its restored parent snapshot, so it sees the modes, hardlinks and extended attributes that the
+package manager wrote. The installer also writes the objects that differ from the parent as a plain
+directory with only what Buck stores: directories, symlinks and regular files with mode 0755 or 0644. The
+sandbox merges these directories per top-level directory with a read-only overlay. A plain directory cannot
+express a deletion, so the installer refuses a box layer that deletes from the layers below.
 
 If the parent has different repositories, the box only shares the parent's package list and is installed
 on its own.
@@ -579,13 +584,14 @@ directory. Each chrooted `run` or `copy` mounts the project read-only under the 
 the duration of that operation. Package scripts and remove globs cannot reach the project through that
 mount. apivfs covers `/run` with a tmpfs so the mount point is not captured into the image.
 
-The sandbox only creates the execution environment. Drivers own their target-root layout through
-`rootfs.rootfs()`:
+The sandbox only creates the execution environment. Drivers restore their target root from snapshots and
+bind it with `rootfs.rootfs()`:
 
-- a fresh install or image layer binds an output directory at `/buildroot`;
-- an incremental install or image layer mounts an ordered lower stack plus a persisted upper;
-- a package build mounts its buildroot stack with an ephemeral upper and binds action scratch at `/build`;
-- pack/disk operations merge a stack with an ephemeral upper so cleanup does not modify stored layers.
+- an install or image layer restores its lower snapshots into a temporary root, binds it at `/buildroot`
+  and captures the result as a new snapshot;
+- a package build restores its buildroot snapshots the same way and binds action scratch at `/build`;
+- disk operations, and archives with authored tmpfiles rules, restore their snapshots into a temporary
+  root so cleanup does not modify stored layers.
 
 This division keeps one namespace boundary while letting each driver express the root it needs. Nesting a
 second sandbox inside a box would duplicate isolation, complicate mounts, and make remote execution
@@ -603,10 +609,11 @@ actions never use relaxed mode.
 Native package installation has three phases shared by buildroots and images:
 
 1. **Plan.** Run `PackageSystemInfo.plan` against each configured repository's materialized directory,
-   effective priority, and solver cache. Weak dependencies are disabled. Existing lower layers are mounted
-   read-only so installed packages can satisfy an incremental request. A request lists its packages in the
-   analysis, or in JSON files that an earlier action writes, such as the BuildRequires query of an rpm
-   package. A request with no packages installs nothing and leaves its layer empty.
+   effective priority, and solver cache. Weak dependencies are disabled. Existing lower snapshots are
+   restored into a temporary root so installed packages can satisfy an incremental request. A request lists
+   its packages in the analysis, or in JSON files that an earlier action writes, such as the BuildRequires
+   query of an rpm package. A request with no packages installs nothing, and its snapshot repeats the
+   manifest of the snapshot below it.
 2. **Select.** Use the resulting transaction to select package files from repository pools, verified after
    download if the repository declares signing keys, named with the package system's declared suffix so its
    installer finds them. A local repository is materialized by
@@ -618,9 +625,9 @@ Native package installation has three phases shared by buildroots and images:
    packages in it. Buildroots reject managers with local packages, because buildroot contents must come from
    the explicit, cycle-checked self-hosting locks.
 3. **Install.** Run `PackageSystemInfo.install` over the exact package directory, whose file names carry
-   the package system's suffix. `install_packages()` owns a fresh root or incremental buildroot delta. An
-   image layer instead invokes the same installer against its already-mounted root so package and
-   filesystem operations have one output owner.
+   the package system's suffix. `install_packages()` writes a fresh root snapshot or an incremental
+   buildroot snapshot. An image layer instead invokes the same installer against its already-mounted root
+   so package and filesystem operations have one output owner.
 
 What a request looks like, rather than how one package system answers it, belongs to the neutral layer:
 `package/transaction.py` owns the transaction schema both planners write and Starlark reads back, and
@@ -648,9 +655,9 @@ base.
 
 After installation, the installer parks the package database and scrubs the package-manager and ldconfig
 bookkeeping that would otherwise make identical roots differ; what parking takes is each package system's
-own business. The action that owns the root then captures names and overlay metadata into Buck-storable
-form. A fresh root receives the `uninitialized` machine-id marker systemd initializes on first boot;
-incremental installs preserve any existing machine ID.
+own business. The action that owns the root then captures it as a snapshot. A fresh root receives the
+`uninitialized` machine-id marker systemd initializes on first boot; incremental installs preserve any
+existing machine ID.
 
 `LocalPackageInfo` intentionally does not carry the producer's box. `local_repository` checks that its
 packages use one native package system and remains a box-independent declaration. An image or a buildroot
@@ -720,13 +727,13 @@ An `rpm_package` action:
    read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
    the build's options in the base root and the delta. It writes the BuildRequires that are missing, and a
    second delta installs them. That delta is empty when the spec needs nothing more;
-3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
-   or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
-   directory under a mount rather than the mounted tree, so each directory mount below the source tree,
-   such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
-   `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
-   first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
-   from that commit. The project is read-only until the driver exits;
+3. restores the base and the deltas into a temporary root, stages its spec/sources in Buck action scratch,
+   and runs `rpmbuild -ba`, or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source
+   tree. overlayfs shows the directory under a mount rather than the mounted tree, so each directory mount
+   below the source tree, such as a `tine mount`, gets a volatile overlay of its own. The driver discovers
+   directory mounts with `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a
+   separate action first fetches the dist-git commit that the tree pins, and the build takes its spec and
+   Source/Patch files from that commit. The project is read-only until the driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -827,8 +834,6 @@ explicitly, because alpm rebases its system hook directory onto the target root 
 administrator's, and the box's must not run against the image. Afterwards the driver replaces the
 wall-clock `%INSTALLDATE%` alpm records with the assembly epoch, and drops ldconfig's auxiliary
 cache, the sync databases and the transaction log.
-It rewrites only the entries that actually change: alpm keeps one file per package, so rewriting an
-entry a lower layer already parked would copy that whole database up into this layer's delta.
 
 The database stays at Arch's own `/var/lib/pacman`, since Arch has no usr-merged location for it. The
 package-database artifact is read from the assembled layer stack rather than from a terminal output,
@@ -1110,22 +1115,59 @@ package's directory does not exist when the tests run.
 
 ### Filesystem layer representation
 
-Buck directory artifacts cannot faithfully store overlay whiteout devices, opaque-directory xattrs, or a
-backslash in a path component. tine stores filesystem deltas in a regular-file representation:
+An image-producing action writes a complete UAPI.16 snapshot before Buck publishes its outputs. Logical
+paths, inode types, modes, nanosecond modification times, user extended attributes, symlink targets and
+explicit hardlink groups are in the manifest. Regular-file contents are immutable SHA-256 blobs. Each store
+contains only blobs absent from its parents; the ordered store list remains an explicit input to every
+consumer. Content references use `blobs/<sha256>` in the combined store namespace, resolved in store order.
+A store with parents therefore needs its declared parent stores to resolve its references. Standalone
+directory exports include every referenced blob.
 
-- `.wh.<name>` represents a whiteout;
-- `.wh..wh..opq` represents an opaque directory;
-- `.esc.<percent-escaped-name>` represents a path component Buck cannot store.
+Equal bytes share storage without sharing an inode. Reproducible `inodeToken` counters identify explicit
+hardlink groups independently of content digests. A metadata-only change changes the manifest and therefore
+Buck's input digest. Capture reads the visible merged filesystem after scriptlets and authored operations;
+deletions disappear from the next snapshot, including native OverlayFS whiteouts, opaque directories and
+file/directory replacements. Logical names never become the file names of a snapshot store. Capture clamps
+modification times to the action's `SOURCE_DATE_EPOCH`, so the same install at another time writes the same
+manifest.
 
-`rootfs.capture()` translates a native overlay upper into this form after unmounting. Before a later mount,
-`rootfs.rootfs()` constructs sparse sidecar layers that translate the stored markers back to native
-overlayfs whiteouts/xattrs and thaw escaped names. Stored layers remain ordinary Buck artifacts and can
-therefore move through its CAS.
+Reconstruction first reflinks one blob into the temporary directory. If that works, it clones every file into
+a private root. Each independent file gets its own inode with shared data extents, and only declared hardlink
+groups share an inode. Metadata restoration and later writes leave cached blobs unchanged. A read-only root
+is a read-only bind mount of the private root. Reconstruction tests a clone instead of checking the
+filesystem type. Separate btrfs filesystems cannot reflink between each other, and other filesystems support
+reflinks too.
 
-Directory modes are made traversable so Buck can materialize/delete them, and Buck's artifact model does
-not preserve general ownership, capabilities, xattrs, or every mode bit. Authored tmpfiles snippets can
-recreate paths, modes, and xattrs during terminal assembly. Ownership is deliberately normalized to uid/gid
-zero rather than reconstructed. SELinux labels are not currently produced.
+If the blob cannot be reflinked, reconstruction uses OverlayFS. Each independent file has a sparse metadata
+inode in the normal lower layer and reads contents from the blob stores as data-only lower layers. Explicit
+hardlink groups start as private clones or copies in the upper, with aliases linked to that private inode.
+`index=off` would break a lower hardlink group on copy-up. Metadata restoration finishes before mounting.
+Directory times are restored after their contents, and symlink metadata is applied without following the
+link.
+
+On the overlay path, metadata changes and data writes copy independent files into the upper. `metacopy=off`
+copies file data even for chmod; the kernel attempts a reflink and falls back to a byte copy. An unprivileged
+mount cannot enable inode indexing. A command that creates a hardlink to an inherited independent file can
+see different inode numbers for the source and alias even though writes affect both. Snapshot capture scans
+the visible tree and uses the upper inode to identify the actual hardlink group. The complete snapshot
+retains the group when the root is reconstructed or exported.
+
+Read-only overlays use only metadata inodes in the normal lower, with aliases linked for declared groups.
+Boot selection, UKI assembly, artifact extraction and SBOM scanning select between private reflinks and
+read-only overlays. A terminal reader with authored tmpfiles rules gets a writable root, because the rules
+write into it. Repart uses full private files because it reads inode identity without access to the upper.
+Parent release inspection reads the os-release file from the parent snapshot without reconstructing a root.
+Temporary roots are removed when the operation exits, including on failure. There is no persistent
+materialized-root cache.
+
+Box layers are snapshots too, but the sandbox mounts the plain directory that the installer writes from
+each snapshot. In that directory, `.esc.<percent-escaped-name>` encodes a name that Buck cannot store.
+Ordinary box startup does not parse image manifests or reconstruct image roots.
+
+Ownership remains uid/gid zero. Terminal outputs apply the image permission policy before authored tmpfiles
+rules and clamp timestamps to the assembly epoch. Permission normalization prepares the snapshot before
+filesystem reconstruction, so a read-only consumer needs no chmod or copy-up. Security labels, capabilities
+and named ACL entries are unsupported.
 
 ### Selecting a distribution
 
@@ -1193,35 +1235,34 @@ whether the key is set or not, so CI does not depend on it.
 ### Image construction
 
 The `image.layer` rule creates either an initial image from a package manager, or a derived image from
-`parent`. `image.ImageInfo` carries the package manager, the box the image runs in, an ordered stack of
-filesystem deltas, deferred tmpfiles snippets, and the canonical lazy package-database and SBOM artifacts. A
+`parent`. `image.ImageInfo` carries the package manager, the box the image runs in, an ordered list of
+snapshot stores, deferred tmpfiles snippets, and the canonical lazy package-database and SBOM artifacts. A
 derived image inherits the construction configuration but declares fresh metadata for its completed stack, so
 one composition cannot silently switch package sources or tooling environments between stages.
 
-Each `image.layer` call applies one ordered operation sequence in one action and persists exactly one overlay
-upper. A layer's `packages` and `package_sets` are rule attributes rather than operations: it installs them
-as one request before any operation runs, while `run`, `copy`, `mkdir`, `symlink`, and `remove` mutate the
-same root afterwards. A package set resolves its symbolic name through the image's package manager during
-analysis and joins the concrete names in the same request, deduplicated. Installation is a property of the
-layer rather than a position in it because a layer resolves one closure at analysis time over the stack below
-it: a second install could only ever be solved blind to what the first one added, so there is nothing an
-ordering could mean. Making it an attribute is also what lets operation sequences compose, since two lists
-that both need packages no longer collide, and what lets a sequence name a package set and extra packages
-together, which a set alone cannot express because its members are known only during analysis. Installing
-against the result of an earlier install is a second layer, which is where a closure resolved over that
-result becomes available. `copy` introduces a declared Buck artifact at an absolute image path, preserving
-its position relative to the other operations. `run` executes the image's own tools in a chroot by default;
-`chroot = False` instead executes box tooling with the image available at `/buildroot`. Its `env` argument
-overlays variables on the box or image environment for that command. Package installation runs outside the
-chroot. `copy`, `merge_os_release`, `mkdir`, `symlink`, `write_file` and `remove` run inside it, so ordinary
-absolute symlinks resolve relative to the image. The `image.layer()` declaration macro recursively flattens
-operation lists,
-allowing reusable helpers to return ordered groups of operations. Every rule that accepts operations is
-wrapped in a declaration macro that flattens them the same way, so a helper returning an ordered group
-works identically in `image.layer()` and in a composition; the underlying attribute stays a flat, typed
-list so Buck can track every embedded source dependency. An `image.install()` target carries `packages`
-beside its operations, so a reusable target declares what it needs and `image.ops.install_from()` folds that
-into the installing layer's own request.
+Each `image.layer` call applies one ordered operation sequence in one action and persists one complete
+snapshot with its new blobs. A layer's `packages` and `package_sets` are rule attributes rather than
+operations: it installs them as one request before any operation runs, while `run`, `copy`, `mkdir`,
+`symlink`, and `remove` mutate the same root afterwards. A package set resolves its symbolic name through the
+image's package manager during analysis and joins the concrete names in the same request, deduplicated.
+Installation is a property of the layer rather than a position in it because a layer resolves one closure at
+analysis time over the stack below it: a second install could only ever be solved blind to what the first one
+added, so there is nothing an ordering could mean. Making it an attribute is also what lets operation
+sequences compose, since two lists that both need packages no longer collide, and what lets a sequence name a
+package set and extra packages together, which a set alone cannot express because its members are known only
+during analysis. Installing against the result of an earlier install is a second layer, which is where a
+closure resolved over that result becomes available. `copy` introduces a declared Buck artifact at an
+absolute image path, preserving its position relative to the other operations. `run` executes the image's own
+tools in a chroot by default; `chroot = False` instead executes box tooling with the image available at
+`/buildroot`. Its `env` argument overlays variables on the box or image environment for that command. Package
+installation runs outside the chroot. `copy`, `merge_os_release`, `mkdir`, `symlink`, `write_file` and
+`remove` run inside it, so ordinary absolute symlinks resolve relative to the image. The `image.layer()`
+declaration macro recursively flattens operation lists, allowing reusable helpers to return ordered groups of
+operations. Every rule that accepts operations is wrapped in a declaration macro that flattens them the same
+way, so a helper returning an ordered group works identically in `image.layer()` and in a composition; the
+underlying attribute stays a flat, typed list so Buck can track every embedded source dependency. An
+`image.install()` target carries `packages` beside its operations, so a reusable target declares what it
+needs and `image.ops.install_from()` folds that into the installing layer's own request.
 
 `install_langs` narrows the install to the translated files of the named languages, and `install_docs`
 drops documentation while keeping licenses. Neither ever enters the tree, so the package database records
@@ -1230,7 +1271,7 @@ sequence, not the logical image's lifetime: an initrd needs neither, while the r
 want both. Each package system implements them in its own driver. A sequence that installs nothing ignores
 both, so a composition can forward them to a layer whose operations happen to skip installation.
 
-An `image.layer` exposes its newly persisted delta, the full stack and canonical metadata through
+An `image.layer` exposes its snapshot, parent stores and canonical metadata through
 `image.ImageInfo`, and the same metadata through lazy `[manifest]`, `[pkgdb]` and `[sbom]` subtargets.
 `image.ImageSbomInfo` gives typed consumers only the two SBOM formats. Declaring a logical image declares
 its metadata with it, because they are intrinsic metadata facets of every logical image: an
@@ -1292,23 +1333,25 @@ Every terminal driver receives the ordered layer stack and the deferred tmpfiles
 extension receives only the snippets that it adds to its base, because a snippet of the base would create a
 file of the base in the extension. The driver applies the snippets with `systemd-tmpfiles --root` before
 reading or emitting image content; a missing tool is an error whenever finalization is needed. The directives
-run against a disposable overlay upper and can create paths or restore modes and xattrs. Image-shipped
+run against a temporary root and can create paths or restore modes and xattrs. Image-shipped
 tmpfiles configuration is not applied implicitly; enabling it will be an explicit output option once its
 single-UID/GID behavior is defined. Ownership and named ACL entries are deliberately unsupported: all archive
 entries use uid/gid zero.
 
-Tar uses deterministic PAX archives and stores Linux xattrs using `SCHILY.xattr.*` headers. The newc cpio
-format has no general xattr representation. Tar/cpio entries are ordered and mtimes are clamped to the fixed
-assembly epoch. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when possible
+Tar uses deterministic PAX archives and stores user xattrs using `SCHILY.xattr.user.*` headers. The newc cpio
+format has no general xattr representation. Tar/cpio entries are ordered and encode explicit hardlinks
+independently of content identity. Linux's initramfs unpacker recreates hardlinked symlinks as separate
+symlinks. Mtimes are clamped to the fixed assembly epoch. Tar retains nanoseconds; newc cpio uses whole
+seconds. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when possible
 so large archives can share extents on reflink-capable filesystems. `compression = "zstd"` compresses the
 finished archive in the same action, so the uncompressed form never becomes a Buck artifact; zstd's
 multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The initrd
-uses it, while the kernel-modules cpio that `uki.py` appends stays raw because the distribution already
-ships each module compressed; the kernel unpacks the concatenation as independently compressed segments.
+uses it, while the kernel-modules cpio that `uki.py` appends stays raw because the distribution already ships
+each module compressed; the kernel unpacks the concatenation as independently compressed segments.
 
 `declare_ddi()` in `ddi.bzl` deliberately distinguishes `definitions` from `partitions`. Definitions describe
-new partitions to populate directly from `image.ImageInfo`: repart mounts the delta stack with a disposable
-overlay upper instead of first copying a directory artifact. Partition inputs are `image.DdiInfo` outputs
+new partitions to populate directly from `image.ImageInfo`: repart reads a temporary root reconstructed
+from the snapshot and blobs. Partition inputs are `image.DdiInfo` outputs
 from an earlier split call; their blocks are copied into the new disk with their resolved type and UUID
 preserved. Calls emit a disk by default. `split = True` additionally exposes each newly defined partition
 with normalized metadata alongside its block artifact; `disk = False` makes such a call partition-only. No
@@ -1371,18 +1414,16 @@ never means restating what it already does, and `install_docs` and `install_lang
 image wants, since documentation and translations only cost an initrd boot memory. It generates before it
 prunes, so the hardware database it ships is compiled from the sources it then drops. The rule archives the
 image into the cpio itself, at the `compression` it declares, and returns both as `image.InitrdInfo`
-alongside the image's own providers. That cpio omits the package database from the paths the image's
-package system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel
-unpacks the whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]`, `[pkgdb]`
-and `[sbom]` views
-read the tree rather than the archive, so they still describe the complete installed set.
-A bootable `image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is
-the initrd target's own output and its compression is declared where the initrd is. A composition given
-no `initrd` declares `<name>.initrd` for itself through the same macro, inheriting its package manager,
-version, and distribution; the default is therefore an ordinary target that can be built and inspected on
-its own rather than an anonymous step inside the disk image. The composition publishes the provider it was
-given from `[initrd]` and returns the same
-instance directly, so both interfaces describe exactly the same initrd.
+alongside the image's own providers. That cpio omits the package database from the paths the image's package
+system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel unpacks the
+whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]` view describes the cpio
+after package-database removal. The `[pkgdb]` and `[sbom]` views describe the complete installed set. A
+bootable `image.disk` consumes `image.InitrdInfo` rather than a bare `image.ImageInfo`, so the archive is the
+initrd target's own output and its compression is declared where the initrd is. A composition given no
+`initrd` declares `<name>.initrd` for itself through the same macro, inheriting its package manager, version,
+and distribution; the default is therefore an ordinary target that can be built and inspected on its own
+rather than an anonymous step inside the disk image. The composition publishes the provider it was given from
+`[initrd]` and returns the same instance directly, so both interfaces describe exactly the same initrd.
 
 `uki.py` appends the kernel-modules cpio and runs `ukify`. On x86 it also packs the microcode the image
 ships under `/usr/lib/firmware/{amd,intel}-ucode` into a `.ucode` section: one concatenated file per vendor
@@ -1518,10 +1559,10 @@ A package installs configuration that describes state rather than carrying it: m
 index, `hwdb.d` with no compiled database, a locale list with no archive. On a running system scriptlets and
 boot-time units produce it; an image being assembled is neither, so tine builds it explicitly. Each generator
 is an operation of its own rather than a step of one pass, so it is positioned where the image wants it,
-configured on its own terms, and adopted one at a time; what it writes persists into the delta that captures
-it, so it is built once and cached with the layer rather than repeated by every terminal output. An `image`
-gets the content its operations ask for and nothing else, which is the same reason terminal rules leave
-package state alone.
+configured on its own terms, and adopted one at a time; what it writes persists into the snapshot that
+captures it, so it is built once and cached with the layer rather than repeated by every terminal output. An
+`image` gets the content its operations ask for and nothing else, which is the same reason terminal rules
+leave package state alone.
 
 Each generator is a no-op for an image that carries none of what it acts on, so none of them needs
 per-distribution knowledge: `image.ops.depmod()` is silent without kernels, `image.ops.hwdb()` without
@@ -1673,11 +1714,13 @@ spec schema. Both it and the snapshot driver keep `--out` there too: the box loc
 targets let a caller name the file to write, or `-` for stdout when it has nowhere to write one, and one
 calling convention per driver beats splitting the destination by verb.
 
-### Store image layers as deltas
+### Store image snapshots with shared blobs
 
-Copying a complete root for every image step scales with total image size rather than change size. Ordered
-overlay deltas let child layers and terminal outputs reuse their ancestors. Encoding whiteouts and opaque
-directories as regular files keeps those deltas compatible with Buck's artifact/CAS model.
+Complete manifests describe visible filesystem state independently of Buck's metadata and filename limits.
+Each action stores only newly introduced content blobs and retains its parent stores as Buck inputs.
+Temporary reconstruction restores inode identity and metadata before commands run. Archive writers read
+manifests and blobs directly when no authored tmpfiles rules require a filesystem. Directory exports restore
+their authoritative snapshot after final Buck materialization.
 
 ### Prefer exact transactions over package-manager network access
 
@@ -1778,10 +1821,9 @@ belong to one package system are listed in its own section instead:
 - A root box verifies its packages with the `rpmkeys` of its own unverified stage1, so a tampered rpm
   package in the seed could defeat the check for that box; every other box and every image verifies with a
   predecessor. Arch packages are not verified at all.
-- Archive ownership is intentionally normalized to uid/gid zero. Capabilities, xattrs, and SELinux labels do
-  not survive as Buck directory metadata; deferred tmpfiles can restore xattrs at terminal assembly, and tar
-  preserves them in PAX headers, but newc cpio cannot represent general xattrs.
-- Directory image output cannot represent backslashes in names; archive outputs should be used instead.
+- Archive ownership is intentionally normalized to uid/gid zero. Snapshots keep user xattrs but no
+  capabilities, other xattr namespaces or SELinux labels. Deferred tmpfiles can restore xattrs at terminal
+  assembly, tar preserves user xattrs in PAX headers, and newc cpio cannot represent xattrs.
 - The default `/usr`-only disk has a volatile root, so the `/etc` a build writes is not what such an image
   boots with; first-boot defaults come from credentials instead. Package and authored state outside `/usr`
   is not yet translated into factory defaults or another persistent partition. How much `/etc` such an
@@ -1852,8 +1894,8 @@ Near-term image gaps are:
 - richer ordered operations for setting file metadata directly;
 - deciding whether package installation and image tooling eventually need distinct compatible boxes.
 
-The layer model should remain ordered operations captured as deltas. A provides/requires feature solver is
-unnecessary unless real composition requirements appear.
+The layer model should remain ordered operations captured as complete snapshots. A provides/requires feature
+solver is unnecessary unless real composition requirements appear.
 
 ### Scale, configuration, and testing
 

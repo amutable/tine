@@ -562,9 +562,17 @@ def _tmpfs(mode: str = _TMPFS_DEFAULT_MODE) -> int:
         return _fsmount(fs)
 
 
-def _overlay(lowers: tuple[str, ...], upper: str | None, work: str | None, attributes: int = 0) -> int:
+def _overlay(
+    lowers: tuple[str, ...],
+    upper: str | None,
+    work: str | None,
+    attributes: int = 0,
+    *,
+    datadirs: tuple[str, ...] = (),
+) -> int:
     """Return a detached overlay. Without `upper` and `work`, the kernel makes it read-only."""
     layers = [("lowerdir+", lower) for lower in lowers]
+    layers += [("datadir+", data) for data in datadirs]
     layers += [(key, path) for key, path in (("upperdir", upper), ("workdir", work)) if path is not None]
     with Close(_fsopen("overlay")) as fs:
         _fsconfig(fs, FSCONFIG_SET_STRING, "source", "overlayfs")
@@ -991,26 +999,29 @@ class Symlink:
 class Overlay(_Mount):
     def __init__(
         self,
-        lowerdirs: tuple[StrPath, ...],
+        lowerdir: StrPath,
         # Without an upperdir and a workdir, the kernel mounts the overlay read-only.
         upperdir: StrPath | None,
         workdir: StrPath | None,
         target: StrPath,
         *,
+        datadirs: tuple[StrPath, ...] = (),
         strict_unmount: bool = False,
     ) -> None:
         super().__init__(target, strict_unmount=strict_unmount)
         if (upperdir is None) != (workdir is None):
             raise ValueError("Overlay takes an upperdir and a workdir, or neither")
-        if upperdir is None and len(lowerdirs) < 2:
-            raise ValueError("a read-only Overlay needs at least two lowerdirs")
-        self.lowerdirs = tuple(os.fspath(path) for path in lowerdirs)
+        # overlayfs refuses a read-only mount of a single layer.
+        if upperdir is None and not datadirs:
+            raise ValueError("a read-only Overlay needs a datadir")
+        self.lowerdir = os.fspath(lowerdir)
+        self.datadirs = tuple(os.fspath(path) for path in datadirs)
         self.upperdir = None if upperdir is None else os.fspath(upperdir)
         self.workdir = None if workdir is None else os.fspath(workdir)
 
     @override
     def _open(self) -> int:
-        return _overlay(self.lowerdirs, self.upperdir, self.workdir)
+        return _overlay((self.lowerdir,), self.upperdir, self.workdir, datadirs=self.datadirs)
 
 
 Filesystem = Bind | File | Devices | Tmpfs | Symlink | Overlay

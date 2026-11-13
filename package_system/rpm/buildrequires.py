@@ -28,7 +28,7 @@ import rpmbuild
 
 
 class Spec(rpmbuild.Parse):
-    # `lower` lists the layers of the buildroot with declared BuildRequires installed, bottom first.
+    # `lower` lists the snapshot stores of the buildroot with declared BuildRequires installed, bottom first.
     lower: list[str]
     # `source_tree` is the source tree of an in-place build, or None.
     source_tree: str | None

@@ -21,8 +21,8 @@ import specs
 import util
 
 import finalize
-import manifest
-import rootfs
+import storage
+import uapi16
 
 _SEED_NAMESPACE = uuid.UUID("5af2de99-4f9f-4e0b-a04b-bde36b068c4f")
 
@@ -260,14 +260,15 @@ def _extension_seed(identity: str, name: str, releases: list[Release]) -> uuid.U
     return uuid.uuid5(_EXTENSION_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _os_release(tree: Path) -> dict[str, str]:
+def _os_release(snapshot: storage.Snapshot) -> dict[str, str]:
     """Parse the parent image's os-release for strict extension matching."""
+    objects = storage.by_name(snapshot.objects)
     for candidate in ("usr/lib/os-release", "etc/os-release"):
-        path = tree / candidate
-        if not path.is_file():
+        obj = objects.get(storage.resolve(objects, candidate))
+        if obj is None or obj["type"] != "reg":
             continue
         fields = {}
-        for line in path.read_text().splitlines():
+        for line in snapshot.content(obj).read_text().splitlines():
             key, sep, value = line.strip().partition("=")
             if key and sep and not key.startswith("#"):
                 fields[key] = value.strip("\"'")
@@ -290,25 +291,18 @@ def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, st
     return strict | release
 
 
-def _extension_layers(spec: Spec, extension: ExtensionSpec) -> tuple[list[Release], list[str | Path]]:
-    """Return the extension-release files and the layers the extension packages.
-
-    With a parent, the fields are pinned to the parent's os-release and the layers are the delta
-    above it. Without a parent, the function returns the releases and layers of the spec unchanged.
-    """
+def _extension_releases(spec: Spec, extension: ExtensionSpec) -> list[Release]:
     releases = extension["releases"]
     parent = extension["parent"]
-    lowers: list[str | Path] = list(spec["lower"])
     if not parent:
-        return releases, lowers
-    with rootfs.rootfs("/buildroot", lowers=lowers) as tree:
-        fields = _os_release(tree)
+        return releases
+    fields = _os_release(storage.Snapshot(spec["lower"][:parent]))
     if "ID" not in fields:
         util.fail("ddi: the parent os-release lacks ID")
     pinned = [
         Release(path=release["path"], fields=pin_release(fields, release["fields"])) for release in releases
     ]
-    return pinned, lowers[parent:]
+    return pinned
 
 
 def empty_directories(tree: Path, directories: list[str]) -> None:
@@ -472,12 +466,16 @@ def main(argv: list[str] | None = None) -> None:
         for index, partition in enumerate(partitions, start=len(written))
     ]
     extension = spec["extension"]
-    releases: list[Release] = []
-    lowers = None
-    if extension:
-        releases, lowers = _extension_layers(spec, extension)
+    releases = _extension_releases(spec, extension) if extension else []
     with (
-        finalize.image(spec, program="ddi", lowers=lowers, binds=binds) as tree,
+        finalize.image(
+            spec,
+            program="ddi",
+            binds=binds,
+            base=extension["parent"] if extension else 0,
+            readonly=False,
+            strategy="copy",
+        ) as tree,
         tempfile.TemporaryDirectory(prefix="repart.") as scratch_dir,
     ):
         if extension:
@@ -511,7 +509,7 @@ def main(argv: list[str] | None = None) -> None:
         listings = []
         for partition in written:
             if partition.manifest is not None:
-                manifest.write(tree, partition.manifest, epoch, roots=partition.definition.sources)
+                uapi16.write(tree, partition.manifest, epoch, roots=partition.definition.sources)
                 listings.append(partition.manifest)
 
         # An imported partition was listed by the invocation that filled it, and this one holds
@@ -519,7 +517,7 @@ def main(argv: list[str] | None = None) -> None:
         # partition this invocation mounts over a directory another one holds is the one on top.
         if spec["manifest"]:
             imported = [it.manifest for it in partitions if it.manifest is not None]
-            manifest.merge(imported + listings, Path(spec["manifest"]))
+            uapi16.merge(imported + listings, Path(spec["manifest"]))
 
         scratch = Path(scratch_dir)
         repart_definitions = scratch / "repart.d"

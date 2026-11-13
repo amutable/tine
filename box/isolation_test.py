@@ -337,44 +337,85 @@ class TestMountContexts(unittest.TestCase):
             root = Path(directory)
             # The mount option parser splits options at `,`. overlayfs splits lowerdir at `:` and treats `\`
             # as an escape. overlayfs gets its layers as file descriptors and doesn't parse their paths.
-            top, bottom, upper, work = (root / name for name in ("to:p", "bot,tom", "up,per", "wo\\rk"))
-            for path in (top, bottom, upper, work):
+            lower, upper, work = (root / name for name in ("lo:w,er", "up,per", "wo\\rk"))
+            for path in (lower, upper, work):
                 path.mkdir()
-            (top / "original").write_text("original")
-            (bottom / "underneath").write_text("underneath")
-            (top / "shadowed").write_text("from the top")
-            (bottom / "shadowed").write_text("from the bottom")
+            (lower / "original").write_text("original")
             target = root / "target"
-            with isolation.Overlay((top, bottom), upper, work, target) as mounted:
+            with isolation.Overlay(lower, upper, work, target) as mounted:
                 mounted.mount()
                 self.assertEqual((target / "original").read_text(), "original")
-                self.assertEqual((target / "underneath").read_text(), "underneath")
-                self.assertEqual((target / "shadowed").read_text(), "from the top")
                 (target / "generated").write_text("output")
             self.assertEqual((upper / "generated").read_text(), "output")
+
+    def test_overlay_reads_data_layers_without_changing_blobs(self) -> None:
+        # Sparse lower files provide distinct metadata for shared data in two hidden data layers.
+        # Reading must not copy data up; chmod and writes must leave the data layers unchanged.
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
+            root = Path(directory)
+            lower, first, second, upper, work = (
+                root / name for name in ("lower", "data:one", "data,two\\", "upper", "work")
+            )
+            for path in (lower, first, second, upper, work):
+                path.mkdir()
+            (first / "shared").write_bytes(b"first")
+            (second / "shared").write_bytes(b"other")
+            (second / "inherited").write_bytes(b"parent")
+            for name, redirect, size, mode, timestamp in (
+                ("a", "shared", 5, 0o640, 111),
+                ("b", "shared", 5, 0o755, 222),
+                ("c", "inherited", 6, 0o644, 333),
+            ):
+                path = lower / name
+                with path.open("wb") as stream:
+                    stream.truncate(size)
+                os.setxattr(path, "user.overlay.metacopy", b"")
+                os.setxattr(path, "user.overlay.redirect", ("/" + redirect).encode())
+                path.chmod(mode)
+                os.utime(path, ns=(timestamp, timestamp))
+            before = (first / "shared").stat()
+            target = root / "target"
+            with isolation.Overlay(
+                lower, upper, work, target, datadirs=(first, second), strict_unmount=True
+            ) as mounted:
+                mounted.mount()
+                self.assertEqual({path.name for path in target.iterdir()}, {"a", "b", "c"})
+                self.assertEqual((target / "a").read_bytes(), b"first")
+                self.assertEqual((target / "b").read_bytes(), b"first")
+                self.assertEqual((target / "c").read_bytes(), b"parent")
+                self.assertFalse((target / "a").samefile(target / "b"))
+                self.assertEqual((target / "a").stat().st_mode & 0o777, 0o640)
+                self.assertEqual((target / "b").stat().st_mtime_ns, 222)
+                self.assertFalse((upper / "a").exists())
+                (target / "a").chmod(0o600)
+                self.assertTrue((upper / "a").exists())
+                self.assertEqual((upper / "a").read_bytes(), b"first")
+                (target / "a").write_bytes(b"changed")
+                self.assertEqual((target / "b").read_bytes(), b"first")
+            self.assertEqual((first / "shared").read_bytes(), b"first")
+            self.assertEqual((first / "shared").stat().st_mode, before.st_mode)
+            self.assertEqual((first / "shared").stat().st_mtime_ns, before.st_mtime_ns)
+            self.assertEqual((second / "shared").read_bytes(), b"other")
 
     def test_overlay_without_an_upper_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
             root = Path(directory)
-            top, bottom = root / "top", root / "bottom"
-            for path in (top, bottom):
+            lower, data = root / "lower", root / "data"
+            for path in (lower, data):
                 path.mkdir()
-            (top / "shadowed").write_text("from the top")
-            (bottom / "shadowed").write_text("from the bottom")
-            (bottom / "underneath").write_text("underneath")
+            (lower / "underneath").write_text("underneath")
             target = root / "target"
-            with isolation.Overlay((top, bottom), None, None, target) as mounted:
+            with isolation.Overlay(lower, None, None, target, datadirs=(data,)) as mounted:
                 mounted.mount()
-                self.assertEqual((target / "shadowed").read_text(), "from the top")
                 self.assertEqual((target / "underneath").read_text(), "underneath")
                 with self.assertRaises(OSError) as raised:
                     (target / "generated").write_text("output")
                 self.assertEqual(raised.exception.errno, errno.EROFS)
 
-    def test_overlay_needs_a_workdir_with_its_upper_and_two_lowers_without(self) -> None:
-        for lowers, upper, work in ((("lower",), "upper", None), (("lower",), None, None)):
-            with self.subTest(lowers=lowers, upper=upper, work=work), self.assertRaises(ValueError):
-                isolation.Overlay(lowers, upper, work, "target")
+    def test_overlay_needs_a_workdir_with_its_upper_and_a_datadir_without(self) -> None:
+        for upper, work in (("upper", None), (None, None)):
+            with self.subTest(upper=upper, work=work), self.assertRaises(ValueError):
+                isolation.Overlay("lower", upper, work, "target")
 
     def test_overlay_parent_keeps_its_mode_with_a_permissive_umask(self) -> None:
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
@@ -387,7 +428,7 @@ class TestMountContexts(unittest.TestCase):
             with ExitStack() as stack:
                 stack.callback(os.umask, os.umask(0))
                 stack.enter_context(mock.patch.object(isolation, "_move_mount"))
-                with isolation.Overlay((lower,), upper, work, target) as overlay:
+                with isolation.Overlay(lower, upper, work, target) as overlay:
                     overlay.attach()
 
             self.assertEqual(target.parent.stat().st_mode & 0o777, 0o755)
@@ -478,7 +519,7 @@ class TestMountContexts(unittest.TestCase):
                 isolation.Tmpfs(target),
                 isolation.Devices(target),
                 # Strict, so that unwinding covers both unmount flavours.
-                isolation.Overlay((lower,), upper, work, target, strict_unmount=True),
+                isolation.Overlay(lower, upper, work, target, strict_unmount=True),
             ]
             for mount in mounts:
                 for fail in (False, True):

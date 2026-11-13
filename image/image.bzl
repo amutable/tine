@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Logical filesystem images built as ordered overlay deltas."""
+"""Logical filesystem images stored as complete snapshots and immutable blobs."""
 
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
@@ -120,7 +120,7 @@ ImageSbomInfo = provider(
 )
 
 ImageInfo = provider(
-    doc = "A logical filesystem image represented by an ordered delta stack and lazy metadata.",
+    doc = "A logical filesystem image represented by snapshot stores and lazy metadata.",
     fields = {
         "box": provider_field(Dependency),
         # Accumulated install specs; they seed the local-packages closure of every derived layer
@@ -645,14 +645,12 @@ def declare_image(
             )
             package_manager_info = package_manager[PackageManagerInfo]
 
-        delta = declare_out(ctx, identifier, "delta", dir = True)
-        work = declare_out(ctx, identifier, "overlay.work", dir = True) if layers else None
+        delta = declare_out(ctx, identifier, "snapshot", dir = True)
         spec = {
             "install": None,
             "lower": layers,
             "operations": [_encode_operation(operation, tools.python) for operation in operations],
             "out": delta.as_output(),
-            "work": work.as_output() if work != None else None,
         }
         if package_manager_info != None:
             system = package_manager_info.package_system[PackageSystemInfo]

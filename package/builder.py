@@ -9,14 +9,15 @@ sets up their scratch tree and mounts, and removes the tree after a successful b
 
 import shutil
 import tempfile
-from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TypedDict
 
 import util
 
 import rootfs
+import storage
 
 # The source tree is mounted at topdir/CHECKOUT, and the persistent build directory at topdir/BUILD.
 CHECKOUT = "CHECKOUT"
@@ -27,7 +28,7 @@ CHROOT_TOPDIR = Path("/build")
 class Spec(TypedDict):
     # `build_dir` is a build directory that Buck keeps between runs, or None for a clean build.
     build_dir: str | None
-    # `lower` lists the layers of the buildroot, lowest first.
+    # `lower` lists the snapshot stores of the buildroot, lowest first.
     lower: list[str]
     out: str
     # `source_tree` is a prepared source tree to build in place, or None to build from the declared sources.
@@ -76,8 +77,13 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
     return rc
 
 
-def buildroot(lower: list[str], topdir: Path) -> AbstractContextManager[Path]:
-    """Chroot into the buildroot with the layers `lower`, with topdir at `CHROOT_TOPDIR`."""
-    return rootfs.rootfs(
-        "/buildroot", lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
-    )
+@contextmanager
+def buildroot(lower: list[str], topdir: Path) -> Generator[Path]:
+    """Chroot into the buildroot that the snapshot stores `lower` restore, with topdir at `CHROOT_TOPDIR`."""
+    with (
+        storage.root(storage.Snapshot(lower)) as restored,
+        rootfs.rootfs(
+            "/buildroot", bind=restored.path, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
+        ) as root,
+    ):
+        yield root

@@ -56,6 +56,8 @@ _BoxRootInfo = provider(
         # resolves its own layers.
         "resolver": provider_field(Dependency | None),
         "selected": provider_field(list[Dependency]),
+        # The snapshot stores of the box's layers, lowest first.
+        "snapshots": provider_field(list[Artifact]),
         "transaction": provider_field(Artifact),
     },
 )
@@ -64,7 +66,7 @@ def _repository_labels(repositories: list[Dependency]) -> list[str]:
     return sorted([str(repository.label.raw_target()) for repository in repositories])
 
 def _layer_dir(actions: AnalysisActions, name: str) -> Artifact:
-    """Declare a directory output that holds a box root or the overlay work directory for one."""
+    """Declare a directory output for a box root or the snapshot store of one."""
 
     # A box root takes several gigabytes. Buck keeps every content-based version of an output until a
     # clean, so each rebuild that changes the root adds another full copy. A rebuild that produces the
@@ -132,10 +134,11 @@ def _install(
     arch: str,
     lower: list[Artifact],
     installed: Artifact | None,
-) -> Artifact:
-    """Install `transaction` with `box`, which also verifies its packages, into a layer over `lower`.
+) -> (Artifact, Artifact):
+    """Install `transaction` with `box`, which also verifies its packages, into a layer over the snapshots `lower`.
 
-    The layer leaves out the packages of `installed`.
+    The layer leaves out the packages of `installed`. Return the directory that the sandbox mounts and the
+    snapshot store of the layer.
     """
     system = package_system[PackageSystemInfo]
 
@@ -152,7 +155,7 @@ def _install(
 
     # Use the predecessor or bootstrapped root to install the box, or its layer over the parent.
     stage2 = _layer_dir(ctx.actions, "stage2")
-    work = _layer_dir(ctx.actions, "stage2.work") if lower else None
+    snapshot = _layer_dir(ctx.actions, "stage2.snapshot")
     ctx.actions.run(
         cmd_args(
             box_run(
@@ -170,14 +173,14 @@ def _install(
                     "langs": [],
                     "lower": lower,
                     "packages_dir": packages,
+                    "snapshot": snapshot.as_output(),
                     "target": stage2.as_output(),
-                    "work": work.as_output() if work != None else None,
                 },
             ),
         ),
         category = "box",
     )
-    return stage2
+    return stage2, snapshot
 
 def _box_impl(ctx: AnalysisContext) -> list[Provider]:
     # A root box takes the repositories of its release rather than the release, because the release
@@ -240,22 +243,24 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
     # See "Box layers" in docs/design/architecture.md.
     repository_labels = _repository_labels(repositories)
     lower = []
+    snapshots = []
     installed = None
     if parent != None and ctx.attrs.layered and _repository_labels(parent[_BoxRootInfo].selected) == repository_labels:
         lower = parent[BoxInfo].layers
+        snapshots = parent[_BoxRootInfo].snapshots
         installed = parent[_BoxRootInfo].transaction
 
     # With the resolver box as a dependency, the keyrings are anonymous targets. Every box that resolves
     # through the same resolver box shares them. A root box has no resolver box and verifies with its stage1
     # root, which is no target.
-    stage2 = _install(
+    stage2, snapshot = _install(
         ctx,
         package_system,
         resolver_dep if resolver_dep != None else installer_box,
         repositories,
         transaction,
         ctx.attrs._arch,
-        lower,
+        snapshots,
         installed,
     )
     info = BoxInfo(
@@ -266,6 +271,7 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
         arch = ctx.attrs._arch,
         resolver = resolver_dep,
         selected = repositories,
+        snapshots = snapshots + [snapshot],
         transaction = transaction,
     )
     sub_targets = {
@@ -331,14 +337,14 @@ def _box_layer_impl(ctx: AnalysisContext) -> list[Provider]:
     resolver = root.resolver if root.resolver != None else parent
     names = _effective_packages(ctx.attrs.packages, parent, package_system)
     transaction = _resolve(ctx, package_system, resolver, _box_repositories(ctx, root.selected, package_system, None), names, root.arch)
-    layer = _install(
+    layer, _ = _install(
         ctx,
         package_system,
         resolver,
         root.selected,
         transaction,
         root.arch,
-        parent[BoxInfo].layers,
+        root.snapshots,
         root.transaction,
     )
     return [DefaultInfo(default_output = layer)]

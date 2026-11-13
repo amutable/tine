@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Tests for the UAPI.16 file manifest.
+"""Tests for the UAPI.16 file uapi16.
 
 buck test tine//image:test
 """
@@ -16,8 +16,9 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 from typing import override
+from unittest import mock
 
-import manifest
+import uapi16
 
 # The epoch every image action runs under (box/runtime.bzl); any value works, but using the real
 # one keeps the clamping assertions honest about what a build actually produces.
@@ -33,16 +34,17 @@ def parse(data: bytes) -> list[dict[str, object]]:
     for record in rest.split(b"\x1e"):
         assert record.endswith(b"\n"), "a record is not terminated by a line feed"
         objects.append(json.loads(record.decode("utf-8")))
-    return objects
+    assert objects[-1] == {"mediaType": uapi16.TRAILER_TYPE}
+    return objects[:-1]
 
 
 class TreeTest(unittest.TestCase):
     @override
     def setUp(self) -> None:
-        self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="manifest.")))
+        self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.")))
 
     def manifest(self, tree: Path | None = None, roots: Sequence[str] = ()) -> list[dict[str, object]]:
-        return parse(b"".join(manifest.records(tree or self.tree, EPOCH, roots)))
+        return parse(b"".join(uapi16.records(tree or self.tree, EPOCH, roots)))
 
     def named(self, tree: Path | None = None) -> dict[str, dict[str, object]]:
         return {str(obj["name"]): obj for obj in self.manifest(tree)[1:]}
@@ -54,18 +56,20 @@ class TestSequence(TreeTest):
         root = self.manifest()[0]
         self.assertEqual(root, {"mediaType": "application/vnd.uapi.16.manifest"})
 
-    def test_an_empty_tree_is_the_root_object_alone(self) -> None:
+    def test_an_empty_tree_has_no_named_objects(self) -> None:
+        # An empty filesystem still has its root and trailer, with no named file objects.
         self.assertEqual(len(self.manifest()), 1)
 
     def test_each_record_is_framed_by_a_separator_and_a_line_feed(self) -> None:
+        # A tree with one file needs three JSON-SEQ records: the root, file and trailer.
         (self.tree / "a").write_text("a")
-        data = b"".join(manifest.records(self.tree, EPOCH))
-        self.assertEqual(data.count(b"\x1e"), 2)
+        data = b"".join(uapi16.records(self.tree, EPOCH))
+        self.assertEqual(data.count(b"\x1e"), 3)
         self.assertTrue(data.endswith(b"\n"))
 
     def test_the_json_carries_no_gratuitous_whitespace(self) -> None:
         (self.tree / "a").write_text("a")
-        self.assertNotIn(b" ", b"".join(manifest.records(self.tree, EPOCH)))
+        self.assertNotIn(b" ", b"".join(uapi16.records(self.tree, EPOCH)))
 
 
 class TestOrder(TreeTest):
@@ -92,14 +96,14 @@ class TestOrder(TreeTest):
         names = ["gamma", "alpha", "beta", "delta"]
         outputs = []
         for order in (names, list(reversed(names))):
-            with tempfile.TemporaryDirectory(prefix="manifest.") as scratch:
+            with tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.") as scratch:
                 tree = Path(scratch)
                 for name in order:
                     (tree / name).mkdir()
                     (tree / name / "file").write_text(name)
                     os.utime(tree / name / "file", (EPOCH - 1, EPOCH - 1))
                     os.utime(tree / name, (EPOCH - 1, EPOCH - 1))
-                outputs.append(b"".join(manifest.records(tree, EPOCH)))
+                outputs.append(b"".join(uapi16.records(tree, EPOCH)))
         self.assertEqual(outputs[0], outputs[1])
 
 
@@ -193,7 +197,9 @@ class TestHardlinks(TreeTest):
     def test_a_link_count_above_one_is_not_enough_when_the_other_name_is_outside_the_tree(
         self,
     ) -> None:
-        outside = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="manifest.outside.")))
+        outside = Path(
+            self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.outside."))
+        )
         (outside / "one").write_text("shared")
         os.link(outside / "one", self.tree / "inside")
         self.assertEqual((self.tree / "inside").stat().st_nlink, 2)
@@ -229,24 +235,25 @@ class TestOtherInodeTypes(TreeTest):
 
     def test_the_inode_type_names_follow_the_format(self) -> None:
         self.assertEqual(
-            [manifest.inode_type(mode) for mode in (stat.S_IFBLK, stat.S_IFSOCK, stat.S_IFLNK)],
+            [uapi16.inode_type(mode) for mode in (stat.S_IFBLK, stat.S_IFSOCK, stat.S_IFLNK)],
             ["blk", "sock", "lnk"],
         )
 
     def test_an_inode_type_with_no_representation_fails_rather_than_being_guessed(self) -> None:
         with self.assertRaises(SystemExit):
-            manifest.inode_type(0)
+            uapi16.inode_type(0)
 
 
 class TestDeviceNodes(unittest.TestCase):
     """Device nodes, from a fabricated inode: this sandbox refuses mknod."""
 
-    def device(self, mode: int, rdev: int) -> dict[str, object]:
+    def device(self, mode: int, rdev: int) -> uapi16.Object:
         st = os.stat_result(
             (mode, 0, 0, 1, 0, 0, 0, 0, EPOCH - 1, 0),
             {"st_rdev": rdev, "st_mtime_ns": (EPOCH - 1) * 10**9},
         )
-        return manifest.file_object(manifest.Entry(name="dev/x", path=Path("dev/x"), st=st), epoch=EPOCH)
+        with mock.patch.object(uapi16.os, "listxattr", return_value=[]):
+            return uapi16.file_object(uapi16.Entry(name="dev/x", path=Path("dev/x"), st=st), epoch=EPOCH)
 
     def test_a_character_device_carries_its_numbers_and_nothing_a_file_would(self) -> None:
         self.assertEqual(
@@ -259,7 +266,7 @@ class TestDeviceNodes(unittest.TestCase):
                 "mode": 0o666,
                 "uid": 0,
                 "gid": 0,
-                "mTime": (EPOCH - 1) * 10**9,
+                "mTimeNSec": (EPOCH - 1) * 10**9,
             },
         )
 
@@ -273,12 +280,12 @@ class TestTimestamps(TreeTest):
     def test_an_mtime_past_the_epoch_is_clamped_onto_it(self) -> None:
         (self.tree / "file").write_text("x")
         os.utime(self.tree / "file", (EPOCH + 10, EPOCH + 10))
-        self.assertEqual(self.named()["file"]["mTime"], EPOCH * 10**9)
+        self.assertEqual(self.named()["file"]["mTimeNSec"], EPOCH * 10**9)
 
     def test_an_mtime_before_the_epoch_survives_in_nanoseconds(self) -> None:
         (self.tree / "file").write_text("x")
         os.utime(self.tree / "file", ns=(0, (EPOCH - 5) * 10**9 + 123))
-        self.assertEqual(self.named()["file"]["mTime"], (EPOCH - 5) * 10**9 + 123)
+        self.assertEqual(self.named()["file"]["mTimeNSec"], (EPOCH - 5) * 10**9 + 123)
 
 
 class TestUnencodableNames(TreeTest):
@@ -304,28 +311,32 @@ class TestUnencodableNames(TreeTest):
 
 
 class TestWrite(TreeTest):
-    def test_the_written_file_is_the_sequence_and_the_count_includes_the_root(self) -> None:
+    def test_the_count_includes_the_root_and_trailer(self) -> None:
+        # Writing one file must report three records and finish with the mandatory trailer.
         (self.tree / "file").write_text("x")
-        out = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="manifest.out."))) / "m"
-        self.assertEqual(manifest.write(self.tree, out, EPOCH), 2)
+        out = (
+            Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.out.")))
+            / "m"
+        )
+        self.assertEqual(uapi16.write(self.tree, out, EPOCH), 3)
         self.assertEqual([obj.get("name") for obj in parse(out.read_bytes())], [None, "file"])
 
 
 class TestScope(unittest.TestCase):
     def test_a_leading_and_trailing_slash_is_not_part_of_the_name(self) -> None:
-        self.assertEqual(manifest.scope(["/usr:", "/boot/"]), ["boot", "usr:"])
+        self.assertEqual(uapi16.scope(["/usr:", "/boot/"]), ["boot", "usr:"])
 
     def test_the_same_root_named_twice_is_listed_once(self) -> None:
-        self.assertEqual(manifest.scope(["/usr", "usr/"]), ["usr"])
+        self.assertEqual(uapi16.scope(["/usr", "usr/"]), ["usr"])
 
     def test_a_root_below_another_is_dropped_rather_than_listed_twice(self) -> None:
-        self.assertEqual(manifest.scope(["/usr", "/usr/lib", "/boot"]), ["boot", "usr"])
+        self.assertEqual(uapi16.scope(["/usr", "/usr/lib", "/boot"]), ["boot", "usr"])
 
     def test_a_name_that_merely_shares_a_prefix_is_kept(self) -> None:
-        self.assertEqual(manifest.scope(["/usr", "/usrfoo"]), ["usr", "usrfoo"])
+        self.assertEqual(uapi16.scope(["/usr", "/usrfoo"]), ["usr", "usrfoo"])
 
     def test_the_whole_tree_covers_every_other_root(self) -> None:
-        self.assertEqual(manifest.scope(["/", "/usr"]), [""])
+        self.assertEqual(uapi16.scope(["/", "/usr"]), [""])
 
 
 class TestScopedTree(TreeTest):
@@ -361,7 +372,7 @@ class TestScopedTree(TreeTest):
 class TestMerge(TreeTest):
     def part(self, name: str, roots: Sequence[str]) -> Path:
         out = self.tree / name
-        manifest.write(self.tree / "parts", out, EPOCH, roots)
+        uapi16.write(self.tree / "parts", out, EPOCH, roots)
         return out
 
     @override
@@ -374,7 +385,7 @@ class TestMerge(TreeTest):
 
     def merged(self, *sources: Path) -> list[dict[str, object]]:
         out = self.tree / "merged"
-        manifest.merge(sources, out)
+        uapi16.merge(sources, out)
         return parse(out.read_bytes())
 
     def test_the_whole_is_every_part_under_one_root_object(self) -> None:
@@ -416,6 +427,45 @@ class TestMerge(TreeTest):
         (self.tree / "junk").write_bytes(b'{"mediaType":"application/json"}\n')
         with self.assertRaises(SystemExit):
             self.merged(self.tree / "junk")
+
+
+class TestReader(TreeTest):
+    def test_requires_trailer_and_rejects_trailing_data(self) -> None:
+        # A partial write and data after a trailer must fail instead of becoming a snapshot.
+        out = self.tree / "manifest"
+        root = b'\x1e{"mediaType":"application/vnd.uapi.16.manifest"}\n'
+        trailer = b'\x1e{"mediaType":"application/vnd.uapi.16.trailer"}\n'
+        for data in (root, root + trailer + trailer, root + trailer + b" ", root + trailer + b"\n"):
+            out.write_bytes(data)
+            with self.subTest(data=data), self.assertRaises(SystemExit):
+                uapi16.read(out)
+        out.write_bytes(root + trailer)
+        self.assertEqual(uapi16.read(out), [{"mediaType": uapi16.MEDIA_TYPE}])
+
+    def test_accepts_whitespace_before_the_trailers_line_feed(self) -> None:
+        # JSON whitespace may precede the trailer's final LF, but any bytes after that LF
+        # are trailing data and must still fail.
+        out = self.tree / "manifest"
+        root = b'\x1e{"mediaType":"application/vnd.uapi.16.manifest"}\n'
+        trailer = b'\x1e { "mediaType": "application/vnd.uapi.16.trailer" } \t\r\n'
+        out.write_bytes(root + trailer)
+        self.assertEqual(uapi16.read(out), [{"mediaType": uapi16.MEDIA_TYPE}])
+        out.write_bytes(root + trailer + b" ")
+        with self.assertRaises(SystemExit):
+            uapi16.read(out)
+
+    def test_accepts_root_metadata(self) -> None:
+        # A storage manifest includes root metadata, which must survive parsing unchanged.
+        out = self.tree / "manifest"
+        objects: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE, "mode": 0o750}]
+        uapi16.write_objects(objects, out)
+        self.assertEqual(uapi16.read(out), objects)
+
+    def test_rejects_non_relative_names(self) -> None:
+        # UAPI.16 forbids path traversal and unnormalized names even in an external uapi16.
+        for name in ("", "/a", "a/", "a//b", "a/../b", "./a", "a/.", "a/..", "a\n"):
+            with self.subTest(name=name), self.assertRaises(SystemExit):
+                uapi16.check_name(name)
 
 
 if __name__ == "__main__":

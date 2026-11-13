@@ -22,13 +22,16 @@ ImageArchiveInfo = provider(
     fields = {
         "archive": provider_field(Artifact),
         "format": provider_field(str),
+        "manifest": provider_field(Artifact),
     },
 )
 
 ImageDirectoryInfo = provider(
-    doc = "A materialized logical image directory.",
+    doc = "A stored snapshot and its command for faithful directory export.",
     fields = {
         "directory": provider_field(Artifact),
+        "export": provider_field(RunInfo),
+        "manifest": provider_field(Artifact),
     },
 )
 
@@ -49,6 +52,7 @@ def declare_image_archive(
     captures the database from the tree itself.
     """
     out = declare_out(ctx, identifier, "image." + format + _COMPRESSION_EXT[compression])
+    listing = declare_out(ctx, identifier, "image." + format + ".Uapi16Manifest")
     cmd = terminal_image_command(
         ctx,
         # One image can be archived in several formats, so the spec is named like the output.
@@ -59,12 +63,13 @@ def declare_image_archive(
         spec = {
             "compression": compression,
             "format": format,
+            "manifest": listing.as_output(),
             "out": out.as_output(),
             "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         },
     )
     ctx.actions.run(cmd, category = "image_" + format, identifier = identifier or format)
-    return ImageArchiveInfo(archive = out, format = format)
+    return ImageArchiveInfo(archive = out, format = format, manifest = listing)
 
 ARCHIVE_ATTRS = {
     "compression": attrs.enum(COMPRESSIONS, default = "none"),
@@ -89,16 +94,22 @@ def declare_image_directory(
         spec = {
             "compression": "none",
             "format": "directory",
+            "manifest": None,
             "out": out.as_output(),
             "pkgdb_paths": [],
         },
     )
     ctx.actions.run(cmd, category = "image_directory", identifier = identifier or "directory")
-    return ImageDirectoryInfo(directory = out)
+    export = RunInfo(args = cmd_args(tools.archive[RunInfo], "export", "--store", out))
+    return ImageDirectoryInfo(directory = out, manifest = out.project("Uapi16Manifest"), export = export)
+
+def image_directory_providers(info: ImageDirectoryInfo) -> list[Provider]:
+    """Return the providers of a `[directory]` target or sub-target for `info`."""
+    return [DefaultInfo(default_output = info.directory, sub_targets = {"manifest": [DefaultInfo(default_output = info.manifest)]}), info.export, info]
 
 def _image_directory_impl(ctx: AnalysisContext) -> list[Provider]:
     info = declare_image_directory(ctx, tools = ctx.attrs._tools[ImageToolsInfo], image = ctx.attrs.image[ImageInfo])
-    return [DefaultInfo(default_output = info.directory), info]
+    return image_directory_providers(info)
 
 _image_directory = rule(
     impl = _image_directory_impl,
