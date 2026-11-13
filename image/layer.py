@@ -238,10 +238,10 @@ def _install(install: LayerInstall, target: Path, scratch: Path) -> None:
     request = installer.InstallSpec(
         arch=install["arch"],
         packages_dir=str(Path(install["packages_dir"]).absolute()),
-        target=None,
+        snapshot=None,
         installroot=str(target),
         lower=[],
-        work=None,
+        target=None,
         box_config=False,
         langs=install["langs"],
         docs=install["docs"],

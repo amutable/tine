@@ -46,6 +46,7 @@ python.binary(
         "//:util",
         "//package:href",
         "//package:transaction",
+        "//uapi16:storage",
     ],
 )
 
@@ -99,7 +100,7 @@ python.test(
     name = "plan-test",
     box = "//tools:dev.box",
     srcs = ["alpm.py", "plan.py", "plan_test.py"],
-    deps = ["//:specs", "//:util", "//package:href", "//package:transaction"],
+    deps = ["//:specs", "//:util", "//package:href", "//package:transaction", "//uapi16:storage"],
 )
 
 python.test(

@@ -69,7 +69,7 @@ class TestImageWrites(unittest.TestCase):
 
         with (
             chdir(self.project),
-            rootfs.rootfs(self.scratch / "target", bind=self.out, capture_bind=True) as target,
+            rootfs.rootfs(self.scratch / "target", bind=self.out) as target,
         ):
             layer._apply(["copy", "source", "/alias/file"], target)
             layer._apply(["os_release", {"ID": "test"}], target)

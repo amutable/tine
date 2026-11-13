@@ -86,7 +86,7 @@ def package_buildroot(
     build_requires: list[str],
     buildroot_packages: list[Dependency],
 ) -> list[Artifact]:
-    """Return the layer stack, bottom to top, that one package builds on.
+    """Return the snapshot stores, bottom to top, that one package builds on.
 
     The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
     delta prefers the packages of `buildroot_packages` over the repositories of the package manager.

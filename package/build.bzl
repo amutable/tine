@@ -74,7 +74,7 @@ def package_build(
     category: str,
     spec: dict[str, typing.Any],
 ) -> list[Provider]:
-    """Run the `build` driver of `package_system` on the layer stack `stack` that `base` starts.
+    """Run the `build` driver of `package_system` on the snapshot stores `stack` that `base` starts.
 
     `spec` contains the fields of the driver spec that the calling rule owns. `packages` names the output
     directory of the packages. A dev build keeps its build directory between runs if `keep_build_dir` is

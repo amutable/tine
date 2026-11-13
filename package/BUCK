@@ -16,7 +16,7 @@ python.library(
     name = "builder",
     srcs = ["builder.py"],
     visibility = ["PUBLIC"],
-    deps = ["//:util", "//rootfs:rootfs"],
+    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage"],
 )
 
 python.library(
@@ -50,7 +50,7 @@ python.library(
 python.library(
     name = "transaction",
     srcs = ["transaction.py"],
-    deps = [":snapshotter", "//:util", "//rootfs:rootfs", "//uapi16:storage"],
+    deps = [":snapshotter", "//:util"],
     visibility = ["PUBLIC"],
 )
 

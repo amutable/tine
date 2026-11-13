@@ -23,6 +23,7 @@ import specs
 from util import fail
 
 import macros
+import storage
 import transaction
 
 # A multilib package in a pinned-arch transaction indicates a bad solve.
@@ -248,8 +249,7 @@ def main(argv: list[str] | None = None) -> None:
     with ExitStack() as stack:
         installroot = None
         if solve_spec["lower"]:
-            # An ephemeral upper keeps the lower stack unchanged.
-            installroot = stack.enter_context(transaction.installed_root(solve_spec["lower"]))
+            installroot = stack.enter_context(storage.root(storage.Snapshot(solve_spec["lower"]))).path
         tx = plan(
             repos,
             install,

@@ -377,7 +377,7 @@ class TestStorage(unittest.TestCase):
         upper.mkdir()
         work.mkdir()
         child = self.scratch / "child"
-        with Overlay((lower,), upper, work, merged) as overlay:
+        with Overlay(lower, upper, work, merged) as overlay:
             overlay.mount()
             (merged / "deleted").unlink()
             shutil.rmtree(merged / "opaque")

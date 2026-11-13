@@ -7,7 +7,6 @@ import os
 import subprocess
 import tempfile
 import unittest
-from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -62,21 +61,21 @@ class TestRun(unittest.TestCase):
             with (
                 self.subTest(mode=mode),
                 tempfile.TemporaryDirectory(dir="/var/tmp") as scratch,
-                mock.patch.dict(os.environ, {"SYSTEMD_IN_CHROOT": "0"}),
+                mock.patch.dict(os.environ, {"SYSTEMD_IN_CHROOT": "0", "SOURCE_DATE_EPOCH": "0"}),
             ):
                 root = Path(scratch)
-                target, lower = root / "target", root / "lower"
+                target = root / "target"
                 target.mkdir()
-                lower.mkdir()
+                lower = _snapshot(root, "lower", {}) if mode == "layered" else None
                 (root / "packages").mkdir()
                 (root / "packages" / "systemd.rpm").write_text("")
                 spec = installer.InstallSpec(
                     arch="x86_64",
                     packages_dir=str(root / "packages"),
-                    target=None if mode == "mounted" else str(target),
+                    snapshot=None if mode == "mounted" else str(root / "snapshot"),
                     installroot=str(target) if mode == "mounted" else None,
-                    lower=[str(lower)] if mode == "layered" else [],
-                    work=str(root / "work") if mode == "layered" else None,
+                    lower=[str(lower)] if lower is not None else [],
+                    target=None,
                     box_config=False,
                     langs=[],
                     docs=True,
@@ -86,7 +85,6 @@ class TestRun(unittest.TestCase):
                     packages_dir: Path,
                     installroot: Path,
                     request: installer.InstallSpec,
-                    layered: bool,
                 ) -> None:
                     (installroot / "journal").mkdir()
                     # Debian's systemd postinst applies an ACL for adm (GID 4), which a namespace
@@ -104,7 +102,7 @@ class TestRun(unittest.TestCase):
     def test_a_box_layer_may_add_but_not_delete(self) -> None:
         # The sandbox mounts the directories of a box's layers without decoding deletions. Install a box
         # layer over a lower snapshot that adds a file, and once more so that it also deletes a file of the
-        # lower snapshot. The first install must write only the added file, the second must fail.
+        # lower snapshot. The first install must export only the added file, the second must fail.
         for deletes in (False, True):
             with (
                 self.subTest(deletes=deletes),
@@ -118,11 +116,10 @@ class TestRun(unittest.TestCase):
                 spec = installer.InstallSpec(
                     arch="x86_64",
                     packages_dir=str(root / "packages"),
-                    target=str(root / "target"),
+                    snapshot=str(root / "snapshot"),
                     installroot=None,
                     lower=[str(lower)],
-                    work=None,
-                    snapshot=str(root / "snapshot"),
+                    target=str(root / "target"),
                     box_config=False,
                     langs=[],
                     docs=True,
@@ -132,7 +129,6 @@ class TestRun(unittest.TestCase):
                     packages_dir: Path,
                     installroot: Path,
                     request: installer.InstallSpec,
-                    layered: bool,
                     deletes: bool = deletes,
                 ) -> None:
                     (installroot / "added").write_text("")
@@ -147,21 +143,21 @@ class TestRun(unittest.TestCase):
                         installer.run("install", install, [])
                         self.assertEqual([path.name for path in (root / "target").iterdir()], ["added"])
 
-    def test_an_empty_closure_leaves_the_layer_empty(self) -> None:
-        # A layered install with no packages to install must not run the package manager. Buck still
-        # expects the work directory as an output. Install an empty package directory over one lower
-        # layer, and check that the layer is empty and that the work directory exists.
+    def test_an_empty_closure_repeats_the_lower_snapshot(self) -> None:
+        # A layered install with no packages to install must not run the package manager. Install an empty
+        # package directory over one lower snapshot, and check that the package manager doesn't run and
+        # that the new snapshot restores the same tree as the lower snapshot.
         with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
             root = Path(scratch)
-            (root / "lower").mkdir()
+            lower = _snapshot(root, "lower", {"etc/os-release": "ID=test\n"})
             (root / "packages").mkdir()
             spec = installer.InstallSpec(
                 arch="x86_64",
                 packages_dir=str(root / "packages"),
-                target=str(root / "target"),
+                snapshot=str(root / "snapshot"),
                 installroot=None,
-                lower=[str(root / "lower")],
-                work=str(root / "work"),
+                lower=[str(lower)],
+                target=None,
                 box_config=False,
                 langs=[],
                 docs=True,
@@ -170,51 +166,10 @@ class TestRun(unittest.TestCase):
             with mock.patch.object(installer.specs, "parse", return_value=spec):
                 installer.run("install", install, [])
             install.assert_not_called()
-            self.assertEqual(list((root / "target").iterdir()), [])
-            self.assertTrue((root / "work").is_dir())
-
-    def test_fresh_root_mount_owns_capture_after_an_install_failure(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
-            root = Path(scratch)
-            target = root / "target"
-            spec = installer.InstallSpec(
-                arch="x86_64",
-                packages_dir=str(root / "packages"),
-                target=str(target),
-                installroot=None,
-                lower=[],
-                work=None,
-                box_config=False,
-                langs=[],
-                docs=True,
+            self.assertEqual(
+                storage.Snapshot([lower, root / "snapshot"]).objects, storage.Snapshot([lower]).objects
             )
-
-            def fail(
-                packages_dir: Path,
-                installroot: Path,
-                request: installer.InstallSpec,
-                layered: bool,
-            ) -> None:
-                raise RuntimeError("install failed")
-
-            with (
-                mock.patch.dict(os.environ),
-                mock.patch.object(installer.specs, "parse", return_value=spec),
-                mock.patch.object(
-                    installer.rootfs,
-                    "rootfs",
-                    return_value=nullcontext(),
-                ) as mounted,
-                self.assertRaisesRegex(RuntimeError, "install failed"),
-            ):
-                installer.run("install", fail, [])
-
-            mounted.assert_called_once_with(
-                installer.BUILDROOT,
-                bind=target,
-                capture_bind=True,
-                apivfs=True,
-            )
+            self.assertEqual(list((root / "snapshot/blobs").iterdir()), [])
 
 
 if __name__ == "__main__":

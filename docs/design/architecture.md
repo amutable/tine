@@ -50,7 +50,7 @@ tine//package/            package-system-neutral providers and installation flow
 tine//package_system/     one directory per package system: its repository, resolver, installer,
                           extractor, and optional indexer and builder
 tine//box/                box bootstrap and sandbox command construction
-tine//rootfs/             bind/overlay mounting and stored-delta translation
+tine//rootfs/             bind mounts and Buck-storable names
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
 tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them
@@ -551,9 +551,12 @@ resolving both package lists together picks other packages than the parent got, 
 `libcurl` for a box that needs it where the parent has `libcurl-minimal`; `layered = False` then installs
 the box on its own.
 
-The sandbox merges the layers per top-level directory with a read-only overlay. Unlike `rootfs()`, it does
-not decode stored whiteout markers, as that would walk every layer on every action, so the installer refuses
-a box layer that deletes from the layers below.
+Each box layer is a snapshot over the snapshots of its parent's layers, like an image layer. A child box
+installs over its restored parent snapshot, so it sees the modes, hardlinks and extended attributes that the
+package manager wrote. The installer also writes the objects that differ from the parent as a plain
+directory with only what Buck stores: directories, symlinks and regular files with mode 0755 or 0644. The
+sandbox merges these directories per top-level directory with a read-only overlay. A plain directory cannot
+express a deletion, so the installer refuses a box layer that deletes from the layers below.
 
 If the parent has different repositories, the box only shares the parent's package list and is installed
 on its own.
@@ -581,13 +584,14 @@ directory. Each chrooted `run` or `copy` mounts the project read-only under the 
 the duration of that operation. Package scripts and remove globs cannot reach the project through that
 mount. apivfs covers `/run` with a tmpfs so the mount point is not captured into the image.
 
-The sandbox only creates the execution environment. Drivers own their target-root layout through
-`rootfs.rootfs()`:
+The sandbox only creates the execution environment. Drivers restore their target root from snapshots and
+bind it with `rootfs.rootfs()`:
 
-- a fresh install or image layer binds an output directory at `/buildroot`;
-- an incremental install or image layer mounts an ordered lower stack plus a persisted upper;
-- a package build mounts its buildroot stack with an ephemeral upper and binds action scratch at `/build`;
-- pack/disk operations merge a stack with an ephemeral upper so cleanup does not modify stored layers.
+- an install or image layer restores its lower snapshots into a temporary root, binds it at `/buildroot`
+  and captures the result as a new snapshot;
+- a package build restores its buildroot snapshots the same way and binds action scratch at `/build`;
+- disk operations, and archives with authored tmpfiles rules, restore their snapshots into a temporary
+  root so cleanup does not modify stored layers.
 
 This division keeps one namespace boundary while letting each driver express the root it needs. Nesting a
 second sandbox inside a box would duplicate isolation, complicate mounts, and make remote execution
@@ -605,10 +609,11 @@ actions never use relaxed mode.
 Native package installation has three phases shared by buildroots and images:
 
 1. **Plan.** Run `PackageSystemInfo.plan` against each configured repository's materialized directory,
-   effective priority, and solver cache. Weak dependencies are disabled. Existing lower layers are mounted
-   read-only so installed packages can satisfy an incremental request. A request lists its packages in the
-   analysis, or in JSON files that an earlier action writes, such as the BuildRequires query of an rpm
-   package. A request with no packages installs nothing and leaves its layer empty.
+   effective priority, and solver cache. Weak dependencies are disabled. Existing lower snapshots are
+   restored into a temporary root so installed packages can satisfy an incremental request. A request lists
+   its packages in the analysis, or in JSON files that an earlier action writes, such as the BuildRequires
+   query of an rpm package. A request with no packages installs nothing, and its snapshot repeats the
+   manifest of the snapshot below it.
 2. **Select.** Use the resulting transaction to select package files from repository pools, verified after
    download if the repository declares signing keys, named with the package system's declared suffix so its
    installer finds them. A local repository is materialized by
@@ -620,9 +625,9 @@ Native package installation has three phases shared by buildroots and images:
    packages in it. Buildroots reject managers with local packages, because buildroot contents must come from
    the explicit, cycle-checked self-hosting locks.
 3. **Install.** Run `PackageSystemInfo.install` over the exact package directory, whose file names carry
-   the package system's suffix. `install_packages()` owns a fresh root or incremental buildroot delta. An
-   image layer instead invokes the same installer against its already-mounted root so package and
-   filesystem operations have one output owner.
+   the package system's suffix. `install_packages()` writes a fresh root snapshot or an incremental
+   buildroot snapshot. An image layer instead invokes the same installer against its already-mounted root
+   so package and filesystem operations have one output owner.
 
 What a request looks like, rather than how one package system answers it, belongs to the neutral layer:
 `package/transaction.py` owns the transaction schema both planners write and Starlark reads back, and
@@ -650,9 +655,9 @@ base.
 
 After installation, the installer parks the package database and scrubs the package-manager and ldconfig
 bookkeeping that would otherwise make identical roots differ; what parking takes is each package system's
-own business. The action that owns the root then captures names and overlay metadata into Buck-storable
-form. A fresh root receives the `uninitialized` machine-id marker systemd initializes on first boot;
-incremental installs preserve any existing machine ID.
+own business. The action that owns the root then captures it as a snapshot. A fresh root receives the
+`uninitialized` machine-id marker systemd initializes on first boot; incremental installs preserve any
+existing machine ID.
 
 `LocalPackageInfo` intentionally does not carry the producer's box. `local_repository` checks that its
 packages use one native package system and remains a box-independent declaration. An image or a buildroot
@@ -722,13 +727,13 @@ An `rpm_package` action:
    read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
    the build's options in the base root and the delta. It writes the BuildRequires that are missing, and a
    second delta installs them. That delta is empty when the spec needs nothing more;
-3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
-   or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
-   directory under a mount rather than the mounted tree, so each directory mount below the source tree,
-   such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
-   `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
-   first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
-   from that commit. The project is read-only until the driver exits;
+3. restores the base and the deltas into a temporary root, stages its spec/sources in Buck action scratch,
+   and runs `rpmbuild -ba`, or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source
+   tree. overlayfs shows the directory under a mount rather than the mounted tree, so each directory mount
+   below the source tree, such as a `tine mount`, gets a volatile overlay of its own. The driver discovers
+   directory mounts with `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a
+   separate action first fetches the dist-git commit that the tree pins, and the build takes its spec and
+   Source/Patch files from that commit. The project is read-only until the driver exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -829,8 +834,6 @@ explicitly, because alpm rebases its system hook directory onto the target root 
 administrator's, and the box's must not run against the image. Afterwards the driver replaces the
 wall-clock `%INSTALLDATE%` alpm records with the assembly epoch, and drops ldconfig's auxiliary
 cache, the sync databases and the transaction log.
-It rewrites only the entries that actually change: alpm keeps one file per package, so rewriting an
-entry a lower layer already parked would copy that whole database up into this layer's delta.
 
 The database stays at Arch's own `/var/lib/pacman`, since Arch has no usr-merged location for it. The
 package-database artifact is read from the assembled layer stack rather than from a terminal output,
@@ -1157,9 +1160,9 @@ Parent release inspection reads the os-release file from the parent snapshot wit
 Temporary roots are removed when the operation exits, including on failure. There is no persistent
 materialized-root cache.
 
-Boxes and other directory-layer callers of `rootfs` retain their direct mounting path and marker encoding:
-`.wh.<name>` represents a whiteout, `.wh..wh..opq` an opaque directory and `.esc.<percent-escaped-name>` an
-unstorable component. Ordinary box startup does not parse image manifests or reconstruct image roots.
+Box layers are snapshots too, but the sandbox mounts the plain directory that the installer writes from
+each snapshot. In that directory, `.esc.<percent-escaped-name>` encodes a name that Buck cannot store.
+Ordinary box startup does not parse image manifests or reconstruct image roots.
 
 Ownership remains uid/gid zero. Terminal outputs apply the image permission policy before authored tmpfiles
 rules and clamp timestamps to the assembly epoch. Permission normalization prepares the snapshot before

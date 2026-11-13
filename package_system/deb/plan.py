@@ -25,6 +25,7 @@ import specs
 import util
 from util import MAGIC, decompressor
 
+import storage
 import transaction
 from href import relative_href
 
@@ -194,7 +195,7 @@ def solve(
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="deb-plan.", dir="/var/tmp")))
         root = scratch / "root"
         if lower:
-            root = stack.enter_context(transaction.installed_root(lower))
+            root = stack.enter_context(storage.root(storage.Snapshot(lower))).path
         status = root / "var/lib/dpkg/status"
         status.parent.mkdir(parents=True, exist_ok=True)
         status.touch(exist_ok=True)

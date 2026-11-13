@@ -202,8 +202,8 @@ def install(
             # `plan.py` pins repositories above 1000, so it can select a version that is older
             # than the installed version.
             "--allow-downgrades",
-            # APT resolves the transaction again here. Refuse a removal as `plan.py` does: removing
-            # a package of a lower layer would write whiteouts into this layer.
+            # APT resolves the transaction again here. Refuse a removal as `plan.py` does, because a
+            # transaction cannot express a removal.
             "--no-remove",
             "install",
             *(str(package) for package in packages),
@@ -237,7 +237,7 @@ def scrub(installroot: Path) -> None:
         update.unlink()
 
 
-def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec, layered: bool) -> None:
+def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec) -> None:
     with installer.fresh_machine_id(installroot):
         install(
             packages_dir,
@@ -246,10 +246,7 @@ def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec,
             langs=spec["langs"],
             docs=spec["docs"],
         )
-    # Scrub only after a transaction that installed a package. On an overlay, `unlink()` of a
-    # file of a lower layer writes a whiteout into this layer.
-    if any(path.suffix == ".deb" for path in packages_dir.iterdir()):
-        scrub(installroot)
+    scrub(installroot)
 
 
 def main(argv: list[str] | None = None) -> None:

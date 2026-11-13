@@ -21,7 +21,7 @@ load(":system.bzl", "PackageSystemInfo")
 _EXTRA_REPO_PRIORITY = 50
 
 _RootInfo = provider(
-    doc = "The installed root tree carried out of an anonymous target.",
+    doc = "The snapshot store of an installed root, carried out of an anonymous target.",
     fields = {"root": provider_field(Artifact)},
 )
 
@@ -117,8 +117,7 @@ def _install_actions(
     system = package_manager.package_system[PackageSystemInfo]
     closure = resolve_packages(ctx, package_manager_dep, box_dep, install, stack, extra_packages, identifier = identifier, install_files = install_files)
     prefix = identifier + "/" if identifier != None else ""
-    out = ctx.actions.declare_output(prefix + ("install.delta" if stack else "root"), dir = True)
-    work = ctx.actions.declare_output(prefix + "install.work", dir = True) if stack else None
+    out = ctx.actions.declare_output(prefix + ("install.snapshot" if stack else "root.snapshot"), dir = True)
     cmd = cmd_args(
         box.run(box = box_dep[box.Info], exe = system.install),
         specs.args(
@@ -132,8 +131,8 @@ def _install_actions(
                 "langs": [],
                 "lower": stack,
                 "packages_dir": closure,
-                "target": out.as_output(),
-                "work": work.as_output() if work != None else None,
+                "snapshot": out.as_output(),
+                "target": None,
             },
         ),
     )
@@ -179,5 +178,5 @@ def install_packages(
             },
         ).artifact("root")
         # A promise is resolved before the anon target is analysed, so its path kind is asserted here.
-        return ctx.actions.assert_short_path(ctx.actions.assert_has_content_based_path(root), short_path = "root")
+        return ctx.actions.assert_short_path(ctx.actions.assert_has_content_based_path(root), short_path = "root.snapshot")
     return _install_actions(ctx, package_manager, box_dep, install, stack, extra_packages, install_files, identifier)
