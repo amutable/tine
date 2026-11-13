@@ -999,7 +999,7 @@ class Symlink:
 class Overlay(_Mount):
     def __init__(
         self,
-        lowerdirs: tuple[StrPath, ...],
+        lowerdir: StrPath,
         # Without an upperdir and a workdir, the kernel mounts the overlay read-only.
         upperdir: StrPath | None,
         workdir: StrPath | None,
@@ -1011,16 +1011,17 @@ class Overlay(_Mount):
         super().__init__(target, strict_unmount=strict_unmount)
         if (upperdir is None) != (workdir is None):
             raise ValueError("Overlay takes an upperdir and a workdir, or neither")
-        if upperdir is None and len(lowerdirs) + len(datadirs) < 2:
-            raise ValueError("a read-only Overlay needs at least two lowerdirs")
-        self.lowerdirs = tuple(os.fspath(path) for path in lowerdirs)
+        # overlayfs refuses a read-only mount of a single layer.
+        if upperdir is None and not datadirs:
+            raise ValueError("a read-only Overlay needs a datadir")
+        self.lowerdir = os.fspath(lowerdir)
         self.datadirs = tuple(os.fspath(path) for path in datadirs)
         self.upperdir = None if upperdir is None else os.fspath(upperdir)
         self.workdir = None if workdir is None else os.fspath(workdir)
 
     @override
     def _open(self) -> int:
-        return _overlay(self.lowerdirs, self.upperdir, self.workdir, datadirs=self.datadirs)
+        return _overlay((self.lowerdir,), self.upperdir, self.workdir, datadirs=self.datadirs)
 
 
 Filesystem = Bind | File | Devices | Tmpfs | Symlink | Overlay

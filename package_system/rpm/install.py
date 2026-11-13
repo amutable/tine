@@ -166,14 +166,13 @@ def install_into_root(
     scrub(installroot)
 
 
-def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec, layered: bool) -> None:
+def _install(packages_dir: Path, installroot: Path, spec: installer.InstallSpec) -> None:
     install_into_root(
         packages_dir,
         installroot,
         arch=spec["arch"],
-        # Installed packages satisfy dependencies for an incremental install; a root the caller
-        # mounted says so by already carrying an rpmdb.
-        system=layered or (installroot / DBPATH / "rpmdb.sqlite").exists(),
+        # Installed packages satisfy dependencies for an install over a root that contains an rpmdb.
+        system=(installroot / DBPATH / "rpmdb.sqlite").exists(),
         langs=spec["langs"],
         docs=spec["docs"],
     )

@@ -119,7 +119,9 @@ class TestEmptyClosure(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 install.install(self._closure(root), installroot, arch="amd64", langs=[], docs=True)
 
-    def test_writes_nothing_when_a_lower_layer_already_satisfies_it(self) -> None:
+    def test_an_empty_closure_leaves_the_database_alone(self) -> None:
+        # A closure without packages has nothing for dpkg to do. Install an empty closure over a root
+        # with a database, and check that install() returns without touching the database.
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             installroot = root / "root"
@@ -130,8 +132,6 @@ class TestEmptyClosure(unittest.TestCase):
 
             install.install(self._closure(root), installroot, arch="amd64", langs=[], docs=True)
 
-            # `prepare()` would change the timestamp of `status`. On an overlay, that copies the
-            # database of the lower layer into a layer that installs nothing.
             self.assertEqual((admin / "status").stat().st_mtime_ns, stamped)
             self.assertFalse((admin / "updates").exists())
 

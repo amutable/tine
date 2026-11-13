@@ -4,10 +4,9 @@
 """Run one native package installation against the root its spec names.
 
 Every package system's installer answers the same request: a directory holding the exact package
-closure, and either a fresh root to fill, a delta to persist over a lower stack, or a root the
-caller has already mounted. Which of those it is, and how the root is mounted and captured, is
-the same work whichever system fills it, so it happens here and the driver is left with the
-transaction itself.
+closure, and either a snapshot to capture over lower snapshots, or a root the caller has already
+mounted. Every package system restores and captures the root the same way, so this module does it and
+the driver only runs the transaction.
 """
 
 import os
@@ -16,13 +15,14 @@ import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 import specs
 from util import fail
 
 import rootfs
 import storage
+import uapi16
 
 # A fixed install path avoids embedding Buck hashes and supports scriptlet chroots.
 BUILDROOT = "/buildroot"
@@ -63,15 +63,14 @@ class InstallSpec(TypedDict):
 
     arch: str
     packages_dir: str
-    # Either an output root, bound at /buildroot to install into, or a root the caller mounted.
-    target: str | None
+    # The install captures the snapshot store `snapshot` over the snapshot stores in `lower`. A
+    # `box.layer()` layer sets only `target`, because no other layer stacks on it. An image layer sets
+    # `installroot` to the root that it mounted instead.
+    snapshot: str | None
     installroot: str | None
     lower: list[str]
-    work: str | None
-    # Only a box install sets `snapshot`. The install then restores the snapshot stores in `lower`,
-    # captures its own snapshot store at `snapshot` and writes the directory that the sandbox mounts to
-    # `target`. A `box.layer()` layer sets `snapshot` to None, because no other layer stacks on it.
-    snapshot: NotRequired[str | None]
+    # Only a box install sets `target`, to the directory that the sandbox mounts.
+    target: str | None
     box_config: bool
     langs: list[str]
     docs: bool
@@ -143,13 +142,12 @@ def _normalize(installroot: Path, spec: InstallSpec) -> None:
 
 def run(
     prog: str,
-    install: Callable[[Path, Path, InstallSpec, bool], None],
+    install: Callable[[Path, Path, InstallSpec], None],
     argv: list[str] | None = None,
 ) -> None:
-    """Mount the root this invocation names and hand it to `install`.
+    """Install into the root this invocation names and capture the result.
 
-    The callback receives the closure directory, the root to install into, the spec, and whether
-    it is layering over packages a lower stack already carries.
+    The callback receives the closure directory, the root to install into and the spec.
     """
     spec = specs.parse(InstallSpec, prog, argv)
     os.environ.update(
@@ -168,88 +166,52 @@ def run(
 
     # An installer resolves its own paths against the root, so give it no relative ones.
     packages_dir = Path(spec["packages_dir"]).absolute()
-    layered = bool(spec["lower"])
+    lowers = spec["lower"]
 
     if spec["installroot"] is not None:
-        if spec["target"] is not None or layered or spec["work"] is not None:
-            fail(f"{prog}: installroot excludes target, lower, and work")
+        if spec["snapshot"] is not None or spec["target"] is not None or lowers:
+            fail(f"{prog}: installroot excludes snapshot, target and lower")
         installroot = Path(spec["installroot"]).absolute()
-        install(packages_dir, installroot, spec, layered)
+        install(packages_dir, installroot, spec)
         _normalize(installroot, spec)
         return
 
-    if spec["target"] is None:
-        fail(f"{prog}: one of target and installroot is required")
-
-    if "snapshot" in spec:
-        snapshot = spec["snapshot"]
-        _install_box(
-            prog,
-            install,
-            packages_dir,
-            spec,
-            None if snapshot is None else Path(snapshot),
-            Path(spec["target"]),
-        )
+    if spec["snapshot"] is not None:
+        _install_snapshot(prog, install, packages_dir, spec, Path(spec["snapshot"]))
         return
-
-    # Bind sources must exist.
-    target = Path(spec["target"])
-    target.mkdir(parents=True, exist_ok=True)
-
-    if layered:
-        if spec["work"] is None:
-            fail(f"{prog}: lower needs a work overlay directory")
-        # The closure is empty when the lower layers contain every package of the layer, for example in
-        # the buildroot of a package whose spec needs nothing beyond the base root, or in a box layer
-        # that adds nothing to its parent. The layer then stays empty, and the package manager doesn't
-        # run. Buck still expects the work directory as an output.
-        if not any(packages_dir.iterdir()):
-            Path(spec["work"]).mkdir(parents=True, exist_ok=True)
-            return
-        root = rootfs.rootfs(
-            BUILDROOT,
-            lowers=spec["lower"],
-            upperdir=target,
-            workdir=spec["work"],
-            apivfs=True,
-        )
-    else:
-        root = rootfs.rootfs(BUILDROOT, bind=target, capture_bind=True, apivfs=True)
-
-    with root:
-        install(packages_dir, Path(BUILDROOT), spec, layered)
-        _normalize(Path(BUILDROOT), spec)
-
-    # The sandbox stacks a box's layers as Buck stores them, without turning markers back into
-    # overlayfs whiteouts. Deletions are not supported at box runtime right now.
-    if layered and spec["box_config"] and (deleted := rootfs.deletions(target)):
-        markers = ", ".join(map(str, deleted))
-        fail(f"{prog}: a box layer cannot delete from the layers below it, but has {markers}")
+    if spec["target"] is None:
+        fail(f"{prog}: one of snapshot, target and installroot is required")
+    # No layer stacks on a `box.layer()` layer, so it only needs the directory that the sandbox mounts.
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+        _install_snapshot(prog, install, packages_dir, spec, Path(scratch) / "snapshot")
 
 
-def _install_box(
+def _install_snapshot(
     prog: str,
-    install: Callable[[Path, Path, InstallSpec, bool], None],
+    install: Callable[[Path, Path, InstallSpec], None],
     packages_dir: Path,
     spec: InstallSpec,
-    out: Path | None,
-    target: Path,
+    out: Path,
 ) -> None:
     lowers = spec["lower"]
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
-        out = out or Path(scratch) / "snapshot"
+    # The closure is empty when the lower snapshots contain every package of the layer, for example in the
+    # buildroot of a package whose spec needs nothing beyond the base root. The package manager then doesn't
+    # run, and the snapshot only repeats the manifest of the snapshot below it.
+    if lowers and not any(packages_dir.iterdir()):
+        (out / "blobs").mkdir(parents=True)
+        shutil.copyfile(Path(lowers[-1]) / uapi16.MANIFEST, out / uapi16.MANIFEST)
+    else:
         with storage.root(storage.Snapshot(lowers)) as restored:
             with rootfs.rootfs(BUILDROOT, bind=restored.path, apivfs=True, strict_unmount=True):
-                install(packages_dir, Path(BUILDROOT), spec, bool(lowers))
+                install(packages_dir, Path(BUILDROOT), spec)
                 _normalize(Path(BUILDROOT), spec)
             storage.capture(restored, out, lowers, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
-        snapshot = storage.Snapshot([*lowers, out])
-        # The sandbox stacks the directories of a box's layers and decodes no whiteouts. A file that a
-        # layer deletes would still show up from the layer below.
-        if deleted := storage.delta(snapshot, len(lowers)):
-            fail(
-                f"{prog}: a box layer cannot delete from the layers below it, "
-                f"but deletes {', '.join(deleted)}"
-            )
-        rootfs.write_buck_tree(snapshot, target)
+
+    if spec["target"] is None:
+        return
+    snapshot = storage.Snapshot([*lowers, out])
+    # The sandbox stacks the directories of a box's layers and decodes no whiteouts. A file that a
+    # layer deletes would still show up from the layer below.
+    if deleted := storage.delta(snapshot, len(lowers)):
+        fail(f"{prog}: a box layer cannot delete from the layers below it, but deletes {', '.join(deleted)}")
+    rootfs.write_buck_tree(snapshot, Path(spec["target"]))

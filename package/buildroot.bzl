@@ -86,10 +86,10 @@ def package_buildroot(
     build_requires: list[str],
     buildroot_packages: list[Dependency],
 ) -> list[Artifact]:
-    """Return the layer stack, bottom to top, that one package builds on.
+    """Return the snapshot stores, bottom to top, that one package builds on.
 
-    The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
-    delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
+    The stack is the shared base root, plus a snapshot that installs `build_requires`. The solve of the
+    snapshot prefers the packages of `buildroot_packages` over the repositories of the package manager.
     `owner` starts a failure message.
     """
     extra_packages = _extra_packages(owner, base, buildroot_packages)
@@ -111,7 +111,7 @@ def package_buildroot(
         ),
     ]
 
-def recipe_delta(
+def recipe_snapshot(
     ctx: AnalysisContext,
     owner: str,
     base: BuildrootInfo,
@@ -119,9 +119,9 @@ def recipe_delta(
     buildroot_packages: list[Dependency],
     requires: Artifact,
 ) -> Artifact:
-    """Return a delta over `stack` that installs the JSON list `requires` of build dependencies.
+    """Return a snapshot over `stack` that installs the JSON list `requires` of build dependencies.
 
-    The solve of the delta prefers the packages of `buildroot_packages` over the repositories of the
+    The solve of the snapshot prefers the packages of `buildroot_packages` over the repositories of the
     package manager. `owner` starts a failure message.
     """
     return install_packages(
