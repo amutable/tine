@@ -13,7 +13,8 @@ from pathlib import Path
 
 import snapshot
 
-BASE = "https://snapshot.invalid/archive/debian/20260701T000000Z/dists/trixie"
+BASEURL = "https://snapshot.invalid/archive/debian/20260701T000000Z"
+BASE = f"{BASEURL}/dists/trixie"
 XZ = "3ab4e811cf4f3e5a335d382c58cc19d85f1abe7a4ef4689160ca1f637fa0e9b3"
 PLAIN = "be70297f6ea499e8ef0bd93906719298c795bc3dc4ce72560f13e6c9836bfedb"
 DEB = "03571d298ed24c615641d54dec4eb023ef5710a2b8cb9304acb66e372cab9c46"
@@ -28,6 +29,17 @@ def release(*, by_hash: str = "yes", entries: str | None = None) -> dict[str, st
     return {
         "architectures": "all amd64 arm64",
         "components": "main contrib non-free",
+        "acquire-by-hash": by_hash,
+        "sha256": stated,
+    }
+
+
+def release_flat(*, by_hash: str = "yes", entries: str | None = None) -> dict[str, str]:
+    stated = entries
+    if stated is None:
+        stated = f"\n{PLAIN} 65651288 Packages\n{XZ}  9672648 Packages.xz"
+    return {
+        "architectures": "all amd64 arm64",
         "acquire-by-hash": by_hash,
         "sha256": stated,
     }
@@ -81,6 +93,30 @@ class TestPackageIndex(unittest.TestCase):
         ):
             with self.subTest(entries=entries), self.assertRaises(SystemExit):
                 snapshot.package_index("main", release(entries=entries), BASE, "trixie", "main", "amd64")
+
+    def test_tolerates_flat_release_with_no_suite(self) -> None:
+        stream = snapshot.package_index("main", release_flat(), BASE, "", "", "amd64")
+        self.assertEqual(stream["out"], "Packages.xz")
+        self.assertEqual(stream["sha256"], XZ)
+        self.assertEqual(stream["size"], 9672648)
+        self.assertEqual(stream["url"], f"{BASE}/by-hash/SHA256/{XZ}")
+
+
+class TestRepositoryBase(unittest.TestCase):
+    def test_standard_repo_preserves_suite(self) -> None:
+        base, suite = snapshot._repository_base("main", BASEURL, "trixie")
+        self.assertEqual(base, f"{BASEURL}/dists/trixie")
+        self.assertEqual(suite, "trixie")
+
+    def test_flat_repo_removes_suite(self) -> None:
+        base, suite = snapshot._repository_base("main", BASEURL, "not/really/a/suite/")
+        self.assertEqual(base, f"{BASEURL}/not/really/a/suite")
+        self.assertEqual(suite, "")
+
+    def test_flat_repo_tolerates_slash_only(self) -> None:
+        base, suite = snapshot._repository_base("main", BASEURL, "/")
+        self.assertEqual(base, BASEURL)
+        self.assertEqual(suite, "")
 
 
 class TestIndexedTogether(unittest.TestCase):

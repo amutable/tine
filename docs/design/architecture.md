@@ -915,7 +915,8 @@ Both pinned files keep the path the mirror serves them under, such as `dists/tes
 `dists/testing/main/binary-amd64/Packages.xz`. That layout is what the signed `InRelease` is held to:
 
 - It has to say it is the suite its directory names, by `Suite` or `Codename`. An archive signs every
-  suite with the same keys, so the signature alone would accept the `InRelease` of another suite.
+  suite with the same keys, so the signature alone would accept the `InRelease` of another suite. The
+  only exception is a flat repository, where there is only one `InRelease` to verify anyway.
 - It has to state the index at the path the index sits at. Every index of a suite is signed, so
   matching the bytes alone would accept the index of another component.
 

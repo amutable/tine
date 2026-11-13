@@ -19,7 +19,6 @@ the chain again from the pinned `InRelease`, and fails if that does not list the
 """
 
 import io
-import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -43,7 +42,7 @@ def read_release(rid: str, base: str, suite: str) -> tuple[MetadataFile, dict[st
     url = f"{base}/{release.INRELEASE}"
     with io.BytesIO() as raw:
         sha256, size = snapshotter.download(rid, release.INRELEASE, url, raw)
-    out = f"{deb822.SUITES}/{suite}/{release.INRELEASE}"
+    out = f"{deb822.SUITES}/{suite}/{release.INRELEASE}" if suite else release.INRELEASE
     signed = MetadataFile(out=out, url=url, sha256=sha256, size=size)
     with io.BytesIO() as raw:
         snapshotter.download(rid, release.RELEASE, f"{base}/{release.RELEASE}", raw)
@@ -81,16 +80,16 @@ def package_index(
     index. The URL uses the checksum path whenever the Release offers it.
     """
     stated = release.stated(rid, stanza)
-    directory = deb822.index_directory(component, arch)
-    name = next((name for name in deb822.INDEX_NAMES if f"{directory}/{name}" in stated), None)
+    directory = f"{deb822.index_directory(component, arch)}/" if suite else ""
+    name = next((name for name in deb822.INDEX_NAMES if f"{directory}{name}" in stated), None)
     if name is None:
-        util.fail(f"{rid}: Release states no {directory}/Packages index")
-    sha256, size = stated[f"{directory}/{name}"]
+        util.fail(f"{rid}: Release states no {directory}Packages index")
+    sha256, size = stated[f"{directory}{name}"]
     if size <= 0:
-        util.fail(f"{rid}: Release states an empty {directory}/{name}")
+        util.fail(f"{rid}: Release states an empty {directory}{name}")
     by_hash = stanza.get("acquire-by-hash") == "yes"
-    path = f"{directory}/by-hash/SHA256/{sha256}" if by_hash else f"{directory}/{name}"
-    out = f"{deb822.SUITES}/{suite}/{directory}/{name}"
+    path = f"{directory}by-hash/SHA256/{sha256}" if by_hash else f"{directory}{name}"
+    out = f"{deb822.SUITES}/{suite}/{directory}{name}" if suite else name
     return MetadataFile(out=out, url=f"{base}/{path}", sha256=sha256, size=size)
 
 
@@ -107,19 +106,32 @@ def inventory(rid: str, index: Path) -> dict[str, PackageEntry]:
     return packages
 
 
+def _repository_base(rid: str, baseurl: str, suite: str) -> tuple[str, str]:
+    if suite.endswith("/"):
+        # A suite ending in '/' is a path to a flat repo, not a suite.
+        suite_rstripped = suite.rstrip("/")
+        if suite_rstripped:
+            relative_href(rid, "suite", suite_rstripped)
+            return (f"{baseurl}/{suite_rstripped}", "")
+        else:
+            return (baseurl, "")
+    else:
+        # A standard repository stores the suite in `dists/<suite>`, so the name must be a single
+        # path component.
+        if "/" in relative_href(rid, "suite", suite):
+            util.fail(f"{rid}: a suite in a directory below another is not supported: {suite!r}")
+        return (f"{baseurl}/{deb822.SUITES}/{suite}", suite)
+
+
 def snapshot_repository(spec: Spec) -> Mapping[str, object]:
     """Pin the index of one component of a suite and the packages that the index describes."""
-    rid, suite, component, arch = spec["id"], spec["suite"], spec["component"], spec["arch"]
-    print(f"{rid}: snapshotting {suite}/{component}/binary-{arch}…", file=sys.stderr)
-    # A materialized repository stores the suite in `dists/<suite>`, so the name must be a single
-    # path component.
-    if "/" in relative_href(rid, "suite", suite):
-        util.fail(f"{rid}: a suite in a directory below another is not supported: {suite!r}")
-    base = f"{spec['baseurl'].rstrip('/')}/{deb822.SUITES}/{suite}"
+    rid, component, arch = spec["id"], spec["component"], spec["arch"]
+    base, suite = _repository_base(rid, spec["baseurl"].rstrip("/"), spec["suite"])
     signed, stanza = read_release(rid, base, suite)
-    release.named(rid, stanza, suite)
-    _indexed_together(rid, stanza, _offered(rid, stanza, "Architectures", arch))
-    _offered(rid, stanza, "Components", component)
+    if suite:
+        release.named(rid, stanza, suite)
+        _indexed_together(rid, stanza, _offered(rid, stanza, "Architectures", arch))
+        _offered(rid, stanza, "Components", component)
     stream = package_index(rid, stanza, base, suite, component, arch)
 
     with tempfile.TemporaryDirectory() as scratch:

@@ -141,6 +141,30 @@ class TestVerify(unittest.TestCase):
         (directory / SUITE / release.INRELEASE).write_bytes(signed)
         return directory
 
+    def flat_repository(
+        self,
+        *records: str,
+        signers: tuple[str, ...] | None = None,
+        date: str = DATED,
+        valid_until: str | None = None,
+        signed_at: str = SIGNED,
+    ) -> Path:
+        """Write a pinned repository like repository(), but with a flat layout."""
+        directory = Path(tempfile.mkdtemp(dir=self._scratch.name)) / "repo"
+        directory.mkdir()
+        index = "".join(records).encode()
+        (directory / "Packages").write_bytes(index)
+        expires = f"Valid-Until: {valid_until}\n" if valid_until is not None else ""
+        text = (
+            f"Origin: tine\nComponent: deb\nDate: {date}\n{expires}"
+            "Architectures: amd64\nSHA256:\n"
+            f" {hashlib.sha256(index).hexdigest()} {len(index)} Packages\n"
+        )
+        signers = signers if signers is not None else (self.archive.key,)
+        signed = self.archive.clearsign(text, *signers, at=signed_at) if signers else text.encode()
+        (directory / release.INRELEASE).write_bytes(signed)
+        return directory
+
     def retain(self, repository: Path, older: Path, pinned_at: str | None = None) -> None:
         """Move the repository `older` into `repository` as a retained generation."""
         retained = repository / snapshotter.RETAINED
@@ -208,8 +232,10 @@ class TestVerify(unittest.TestCase):
 
     def test_publishes_a_package_the_signed_release_vouches_for(self) -> None:
         package, record = self.package("good")
-        out = self.verify(self.declared(self.archive.key), self.repository(record), package)
-        self.assertEqual((out / f"pkg--{package.name}").read_bytes(), package.read_bytes())
+        for repository in [self.repository(record), self.flat_repository(record)]:
+            with self.subTest(repository=repository):
+                out = self.verify(self.declared(self.archive.key), repository, package)
+                self.assertEqual((out / f"pkg--{package.name}").read_bytes(), package.read_bytes())
 
     def test_one_declared_key_among_the_signers_suffices(self) -> None:
         # The archive signs with its current key and with the previous key, so a repository can
