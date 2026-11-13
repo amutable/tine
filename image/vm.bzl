@@ -9,25 +9,52 @@ load("//distribution:defs.bzl", "distribution")
 load(":ddi.bzl", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN")
 load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "system_extension")
 
-def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
+# vmspawn takes the kernel command line as its own trailing arguments, and only the build knows the
+# one a direct kernel boot needs, as the UKI's carries the root hash. So the runner reads it from the
+# file at run time. Word splitting is harmless: vmspawn joins the arguments with spaces again. Globbing
+# is not, as a command line can carry patterns such as systemd.image_filter=usr=AOS_*.
+_CMDLINE_FILE_RUNNER = 'set -f; cmdline=$(cat "$1"); shift; exec systemd-vmspawn $cmdline "$@"'
+
+def _image(image: Dependency, image_format: str) -> Artifact:
+    if image_format == "raw":
+        disk = image[DdiInfo].disk
+        if disk == None:
+            fail("image_vm: {} is not a disk".format(image.label))
+        return disk
+
     # The qcow is the intended VM format, and it has virtual_size; the raw doesn't.
-    qcow2 = ctx.attrs.image[DefaultInfo].sub_targets.get("qcow2")
+    qcow2 = image[DefaultInfo].sub_targets.get("qcow2")
     if qcow2 == None:
-        fail("image_vm: {} is not a disk with a qcow2".format(ctx.attrs.image.label))
-    run = cmd_args(
-        box.run(
-            box = ctx.attrs._box[box.Info],
-            exe = "systemd-vmspawn",
-            relaxed = True,
-        ),
+        fail("image_vm: {} is not a disk with a qcow2".format(image.label))
+    return qcow2[DiskConversionInfo].image
+
+def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
+    if ctx.attrs.cmdline_file != None:
+        run = cmd_args(
+            box.run(box = ctx.attrs._box[box.Info], exe = "sh", relaxed = True),
+            "-c",
+            _CMDLINE_FILE_RUNNER,
+            "sh",
+            ctx.attrs.cmdline_file,
+        )
+    else:
+        run = cmd_args(box.run(box = ctx.attrs._box[box.Info], exe = "systemd-vmspawn", relaxed = True))
+
+    run.add(
         "--image",
-        qcow2[DiskConversionInfo].image,
-        "--image-format=qcow2",
+        _image(ctx.attrs.image, ctx.attrs.image_format),
+        "--image-format={}".format(ctx.attrs.image_format),
         "--console=native",
+        # Necessary rather than a default: the image is a build output, which the guest must not write.
         "--ephemeral",
         "--kvm=yes",
         "--network-user-mode",
     )
+
+    if ctx.attrs.linux != None:
+        run.add(cmd_args(ctx.attrs.linux, format = "--linux={}"))
+    if ctx.attrs.initrd != None:
+        run.add(cmd_args(ctx.attrs.initrd, format = "--initrd={}"))
 
     if ctx.attrs.grow != None:
         if not regex_match(SIZE_PATTERN, ctx.attrs.grow):
@@ -56,6 +83,9 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     # on first boot, Secure Boot or not.
     if ctx.attrs.secure_boot or ctx.attrs.tpm:
         run.add("--tpm=yes")
+
+    if ctx.attrs.coco != None:
+        run.add("--coco={}".format(ctx.attrs.coco))
 
     directories = {}
     for dep in ctx.attrs.extensions:
@@ -102,6 +132,9 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
             fail("image_vm: invalid credential name {!r}".format(name))
         run.add("--set-credential={}:{}".format(name, ctx.attrs.credentials[name]))
 
+    # After everything tine passes, so that an option vmspawn takes the last value of overrides it.
+    run.add(ctx.attrs.vmspawn_args)
+
     # vmspawn takes extra kernel command line arguments as its own trailing arguments, and picks how
     # to deliver them from what it is booting: an SMBIOS OEM string each for the stub and the boot
     # loader for a UKI, `-append` for a bare kernel image. Handing it the arguments rather than the
@@ -125,6 +158,16 @@ _image_vm = rule(
             default = [],
             doc = "kernel command line arguments appended to the ones the image boots with",
         ),
+        "cmdline_file": attrs.option(
+            attrs.source(),
+            default = None,
+            doc = "file holding the kernel command line to boot `linux` with, such as a disk's `[boot][cmdline]`; `cmdline_extra` follows it",
+        ),
+        "coco": attrs.option(
+            attrs.string(),
+            default = None,
+            doc = 'confidential computing technology to run the guest with, as vmspawn\'s --coco=, e.g. "sev-snp" or "tdx"',
+        ),
         "cpus": attrs.option(
             attrs.int(),
             default = None,
@@ -146,7 +189,22 @@ _image_vm = rule(
             default = None,
             doc = 'size of the disk the guest sees, e.g. "8G", for more room than the virtual_size of the image',
         ),
-        "image": attrs.dep(providers = [DdiInfo], doc = "the disk image whose qcow2 boots ephemerally"),
+        "image": attrs.dep(providers = [DdiInfo], doc = "the disk image the guest boots from, ephemerally"),
+        "image_format": attrs.enum(
+            ["qcow2", "raw"],
+            default = "qcow2",
+            doc = "which encoding of `image` the guest gets, as vmspawn's --image-format=",
+        ),
+        "initrd": attrs.option(
+            attrs.source(),
+            default = None,
+            doc = "initrd for a direct kernel boot of `linux`, such as a disk's `[boot][initrd]`",
+        ),
+        "linux": attrs.option(
+            attrs.source(),
+            default = None,
+            doc = "kernel to boot directly rather than through the image's ESP, such as a disk's `[boot][kernel]`",
+        ),
         "portables": attrs.list(
             attrs.dep(providers = [DdiInfo]),
             default = [],
@@ -164,6 +222,11 @@ _image_vm = rule(
         "tpm": attrs.bool(
             default = False,
             doc = "attach a software TPM, which Secure Boot implies",
+        ),
+        "vmspawn_args": attrs.list(
+            attrs.arg(),
+            default = [],
+            doc = "further systemd-vmspawn options, after the ones tine passes, so they can override those vmspawn takes the last value of",
         ),
         # The tools box of the image's release built the image and contains the VM stack. Booting the image
         # in that box builds no other box.
