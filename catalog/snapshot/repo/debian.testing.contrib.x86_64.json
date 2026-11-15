@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
+        "sha256": "ee1fe55ee24d4f02465a6b78ec9f79c86f51f0c35c334afcf999b27dff4d0624",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-amd64/Packages.xz",
-        "sha256": "6c6ed857eb5361bb80c3c5fef8812120292ce685f3f87529635cf77950eadad6",
-        "size": 48624,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/6c6ed857eb5361bb80c3c5fef8812120292ce685f3f87529635cf77950eadad6"
+        "sha256": "ce60a80d491dacf5ceb68d91ea66ee8fc6856156c188a4ed98c1d811c4d0f995",
+        "size": 48488,
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/ce60a80d491dacf5ceb68d91ea66ee8fc6856156c188a4ed98c1d811c4d0f995"
       }
     ],
     "inline": {}
@@ -56,7 +56,6 @@
     "234a1d9ff26229c41a9b2e499ad27a9f29b8edda1a5fad683e7ff05c8c4656b3": {"location":"pool/contrib/g/gcc-doc-defaults/gcc-doc_15.2.0-1_amd64.deb","size":4096},
     "23ab45f645123a5897b391b3d9f7fde306ac6c9afdb2dc86f1fe0cdf09bc94aa": {"location":"pool/contrib/c/clear-sans/fonts-clear-sans_1.00-3_all.deb","size":375896},
     "24db3f518becd8857673beda27ffe6f5ab5ca98674e36f802b8246fe5076fcbc": {"location":"pool/contrib/g/game-data-packager/quake2-server_89_all.deb","size":35444},
-    "26cf60bcc120b1b7710d2d791671932cfea16b5dcf29fcbbf82fcd899c6d627d": {"location":"pool/contrib/o/openrct2/openrct2_0.5.6+ds-1_amd64.deb","size":6266432},
     "270aeefc46f2d83bc2c47592a6b87d4b6abb238681a05166049e24f505833410": {"location":"pool/contrib/p/primus-vk/nvidia-primus-vk-wrapper_1.6.4-4+b2_amd64.deb","size":9844},
     "286774c6a297a6c5a960f976a1297a7c850ab20d8fc1b12891f6333c6a32c90a": {"location":"pool/contrib/s/steam-installer/steam-installer_1.0.0.87~ds-3_amd64.deb","size":54504},
     "2b7960b4db76cf7669d54ddf4a0f1e42473417ea060f0ac7920f09d7a6376105": {"location":"pool/contrib/o/odpic/libodpic26_26.0.0-1_amd64.deb","size":146872},
@@ -68,6 +67,7 @@
     "324f940a9e6a482ddd4eb742850609467ca081c0632aedf711a64c300b2ecc53": {"location":"pool/contrib/a/amoeba/amoeba_1.1-32_amd64.deb","size":84132},
     "33dfbc34b5167b104a5e7da1fb12938d2bacb9c07eef6c51ab1a95bd06c75a30": {"location":"pool/contrib/o/openvr/libopenvr-api2_2.12.1~ds1-1_amd64.deb","size":41496},
     "355cd863438ac7b2a35fbcb80daf0361a165aba12614944dedf3e7d498724dad": {"location":"pool/contrib/n/nvidia-egl-x11/libnvidia-egl-xcb1_1.0.3-1_amd64.deb","size":32204},
+    "357a0e01a8aac992f58298fa31f554e28ca91ee15a07d82d145100c7cdad3bf0": {"location":"pool/contrib/j/josm-installer/josm-installer_0.0.9+svn19637_all.deb","size":174872},
     "36a1dbb02f3a483399bd444e76931be3258712df813cab9af77b9fc577f3f09b": {"location":"pool/contrib/p/play.it-adventure/play.it-adventure_2025-11-25-2_all.deb","size":99788},
     "36ebeed261268879f6994196f49355a70f092b0e258131a274b2d081fda01164": {"location":"pool/contrib/d/dbab/dbab_1.6.1-1_all.deb","size":22436},
     "396d8616ea9a3c024606320ee1249d0f46f52a28aa36baf7bacd9d7021a01d5c": {"location":"pool/contrib/d/diaspora-installer/diaspora-installer_0.9.0.0+debian3_all.deb","size":8404},
@@ -116,7 +116,6 @@
     "6b5cd6a8544c7aa2be8410c8cd2c8258489ee8d802374fb6b59c42128c6911d2": {"location":"pool/contrib/c/crafty-books-medium/crafty-books-medium_1.0.debian1-7_all.deb","size":181240},
     "6b8b3e8505400d5fc79ab16b50afd9a308daa9676e438741bd0aa82bb948d4c4": {"location":"pool/contrib/libr/librem5-flash-image/librem5-flash-image_0.0.5-1_all.deb","size":11008},
     "6cfc9466add4d368170d4d68525d6c05ca01796eba93b815ea767ed29f448360": {"location":"pool/contrib/g/gitlab-agent/ruby-kas-grpc_16.1.3-2_all.deb","size":5448},
-    "6d442d9dc5658d572b4be40e0c2cca0dcd58e78e71a7e53aed760e81a8ddd9f2": {"location":"pool/contrib/p/play.it-community/play.it-community_2025-11-25-4_all.deb","size":6648},
     "6d4cae113d55a85a3b7287b6334716ed3056ff7a4770e492b9fad62e259c8318": {"location":"pool/contrib/s/sus/susv2_8.20250128_all.deb","size":3476},
     "6ece44ed0a76d88d9be740615fcd77e7ab1f78d6b5167ac5a2aaac5b8126f2be": {"location":"pool/contrib/o/openmohaa/openmohaa-common_0.82.1+dfsg-4_amd64.deb","size":1700712},
     "6f0c2f8857f46bd427c9b58ea6f01bafd6c34104cb29c93e24e00492a2c21164": {"location":"pool/contrib/d/doris/python3-doris_5.0.3~beta+dfsg-19_all.deb","size":78940},
@@ -180,6 +179,7 @@
     "989631c8dbcf6eefcba4d95bd55902014ed9eec47225292c02df6dc00f0e8f7d": {"location":"pool/contrib/p/python-seqcluster/python3-seqcluster_1.2.9+ds-8_all.deb","size":1642500},
     "9a9c9be9008c451c709a6cb205a068e8127775f2c0ff4cd682ebabf6de15f0cf": {"location":"pool/contrib/a/astrometry-data-2mass/astrometry-data-2mass-01_1.2_all.deb","size":3436},
     "9b50a54efc3139b56165199e17c0c275ceb4ad190cdfe5a2b68d9e5aa09387d9": {"location":"pool/contrib/s/scrcpy/scrcpy_4.1-1+b1_amd64.deb","size":122520},
+    "9c34fa54c9af945e0211a53bfa9468ee463340ef153ee4433c9a977963a5d066": {"location":"pool/contrib/o/openrct2/openrct2_0.5.7+ds-1_amd64.deb","size":6278360},
     "9c41738d96365e7d272691d953b1c8593d331138fc2853f9ba8f9a8b24a44a75": {"location":"pool/contrib/n/nvidia-egl-x11/libnvidia-egl-xlib1_1.0.3-1_amd64.deb","size":32844},
     "9c4f332f3868cda0341b9787a62dbd5a00dc595719f0eb57b1166e9cd0c9d62f": {"location":"pool/contrib/g/game-data-packager/quake_89_all.deb","size":101580},
     "9c5e3ff2ae13826cab85243f7202774744ff52e88a81e2dc3298b2715727f30a": {"location":"pool/contrib/x/xtrs/xtrs_4.9d-4_amd64.deb","size":307100},
@@ -215,7 +215,6 @@
     "b35743447d7f00793fd05e4cbef57fc0aaf2930e0494bd0921d9938a2e849a00": {"location":"pool/contrib/z/zfs-linux/libnvpair3linux_2.4.4-1_amd64.deb","size":58016},
     "b3b421ea8566a5338af72f5dcb635ec69cc9075d4d7569b5ae0301a4dcd5eb67": {"location":"pool/contrib/e/esix/esix_1-4_all.deb","size":41692},
     "b4347c16200970dabf647e96258768c065a5406c3311e85d045bf6ee55a2a5b2": {"location":"pool/contrib/m/mbrola/mbrola_3.3+dfsg-10_amd64.deb","size":166644},
-    "b56d31d6c310bee379de0d868ddfa5726bf54d53c98e213f9d89aec2f6ec3c5f": {"location":"pool/contrib/o/openrct2/openrct2-data_0.5.6+ds-1_all.deb","size":3462000},
     "b58c5612e9550bd2269b66b6c693398fb1c48f908a721a488010d64b236552a2": {"location":"pool/contrib/o/octave-jnifti/matlab-jnifti_0.8-1_all.deb","size":17288},
     "b7fa75b380825b831bfaa3203191705c52341768b57a452fb964223510c3f46e": {"location":"pool/contrib/b/boinc/boinc-virtualbox_8.2.15+dfsg-10_amd64.deb","size":16484},
     "b86c3a07706f90f8806447c6e6d6e7db84ad615815162024d6bdd98afa700ff4": {"location":"pool/contrib/g/gobi-loader/gobi-loader_0.7+git20171116.143deb4+dfsg-1_amd64.deb","size":7932},
@@ -232,7 +231,6 @@
     "c641eda1af89734e0d36222c8cb4ccd2cf025551f0675fb76e316e5fbf4cb8c9": {"location":"pool/contrib/g/geoipupdate/geoipupdate_7.1.1-1_amd64.deb","size":2213444},
     "c6bc1224326593a4359534a81096febe0a1ebfac9330937ca90517d9bb123ffa": {"location":"pool/contrib/t/thunar-dropbox-plugin/thunar-dropbox-plugin_0.3.2-1_amd64.deb","size":9396},
     "c6f86d1aa40f6e60eaf74904c2d885aa03e30c2266a46c3fd9c21fd45a1b3417": {"location":"pool/contrib/s/shockolate/shockolate_0.8.2+git20260908+ds-1_amd64.deb","size":688640},
-    "c7596d9e74f4524585dfbeb207831545cb1c23ec1218dbf789cb20b240f623af": {"location":"pool/contrib/j/josm-installer/josm-installer_0.0.8+svn19519_all.deb","size":174452},
     "c775cbf2230da4b68f871cae87a2a2d4d21697e911182a38ac0d917f429a4a6e": {"location":"pool/contrib/m/mathjax-siunitx/mathjax-siunitx_0.1-3_all.deb","size":181932},
     "c89b8f5788c066b79ebb6866dc2d53c8e7f499f32ec0c07b8a7907fe341e62ea": {"location":"pool/contrib/f/festvox-don/festvox-don_1.4.0-6_all.deb","size":606216},
     "c975d0f29aae1ed0ba4c3fcd2c6ea1458fe17e0382872aac10531b1614a53917": {"location":"pool/contrib/z/zfs-linux/zfs-dracut_2.4.4-1_all.deb","size":31664},
@@ -280,6 +278,7 @@
     "f3ccc488ea42aa90bc5623a5211a639e1326d29f919ac7c7748ad9cb3f29ba78": {"location":"pool/contrib/o/openvr/libopenvr-dev_2.12.1~ds1-1_amd64.deb","size":92688},
     "f45125ed36e15727ceba026d087294b4ffe9038e02cea3871ff2edb93bb75480": {"location":"pool/contrib/s/spectemu/spectemu-common_0.94a-23_amd64.deb","size":54460},
     "f4667eb6d43512f9a86bdbaea73731d79460584a581f4d1b7b69c97f45168fd2": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate-2-data_0.9.4+dfsg-1_all.deb","size":64208},
+    "f747ea0e2db86d3cea8b4ba821eaaf779302f34f619a2f9e72d4005bfca9ecf3": {"location":"pool/contrib/o/openrct2/openrct2-data_0.5.7+ds-1_all.deb","size":3462764},
     "f7e19921c00252cf5152025d1a3435a23a5649827db2fb5f5113a40e803be4ce": {"location":"pool/contrib/z/zfs-linux/libpam-zfs_2.4.4-1_amd64.deb","size":30304},
     "f84e9392e2d6f57b666c4c614e7eea15f28d05fa5dfcc2f0a28549d3b0c03eed": {"location":"pool/contrib/o/odpic/odpic-dev_26.0.0-1_amd64.deb","size":66332},
     "f8fbe36fc38ea88d79f528355f2fc474aee6ae7f34fb6e4b91644a61c2322875": {"location":"pool/contrib/h/hts-voice-nitech-jp-atr503-m001/hts-voice-nitech-jp-atr503-m001_1.05-8_all.deb","size":763184},

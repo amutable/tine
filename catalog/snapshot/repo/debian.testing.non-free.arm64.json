@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
+        "sha256": "ee1fe55ee24d4f02465a6b78ec9f79c86f51f0c35c334afcf999b27dff4d0624",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/non-free/binary-arm64/Packages.xz",
-        "sha256": "b9eaa7ebdbf5b1600de789c39e05077f6f57b487371e1ed8ed22c638c5252cae",
-        "size": 63468,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/non-free/binary-arm64/by-hash/SHA256/b9eaa7ebdbf5b1600de789c39e05077f6f57b487371e1ed8ed22c638c5252cae"
+        "sha256": "b07777b0df95ba37aa73b980ed6e887d5f2f6cf0ca387589ea93e3ee6ead43f0",
+        "size": 63564,
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/non-free/binary-arm64/by-hash/SHA256/b07777b0df95ba37aa73b980ed6e887d5f2f6cf0ca387589ea93e3ee6ead43f0"
       }
     ],
     "inline": {}
@@ -147,6 +147,7 @@
     "4c8ea6a5a5fd3410646473669ef993b7985eb52e238de820e976aecca8f73bc2": {"location":"pool/non-free/libs/libsbig/libsbig-dev_4.9.9-8_arm64.deb","size":26924},
     "4db3e6fa0184d3aa49e1312e796947601dc32a2c6b782a9e6d40fa7df7075b1b": {"location":"pool/non-free/r/rhvoice/speech-dispatcher-rhvoice_1.14.0-3_arm64.deb","size":113436},
     "4e90263f75a959d7473b49269fb6265390a9400bce52c3d665ac017d135cadcd": {"location":"pool/non-free/m/mbrola-mx2/mbrola-mx2_0.1+repack2-5_all.deb","size":2989156},
+    "4ef5dd0c31009746e2fd4bbc836e5dbb2b839ee9000935710de0cb3c740be54c": {"location":"pool/non-free/m/mapproxy/mapproxy_8.1.0+dfsg-1_all.deb","size":34956},
     "4f02a59d04a9616ac4f4817e4a463ba9009ca04de24727d953869a7f6bea27da": {"location":"pool/non-free/n/nvidia-graphics-drivers/libnvoptix1_550.163.01-6_arm64.deb","size":98314324},
     "500f62e5957c3f96616a3bdbc11081e6d8779beffc8a4fb16cf67608c8ae85a0": {"location":"pool/non-free/t/tar-doc/tar-doc_1.35-2_all.deb","size":199168},
     "504c28c6bdabf3c281d0849881c64b14c8f997137b07175abb681e23574ef9dc": {"location":"pool/non-free/g/gcc-13-doc/gnat-13-doc_13.3.0-1_all.deb","size":3352268},
@@ -218,7 +219,6 @@
     "749bdb5ed4e92c1f62a272eb903e957046b519eba0d2df12af96c6704168b9bc": {"location":"pool/non-free/g/groops/groops-gui_0+git20260719+ds-1_arm64.deb","size":353660},
     "7514dccafc67cc3d9762e496b14290f0f8426a7822bf4af4e1e78eabb5a215e6": {"location":"pool/non-free/g/google-android-installers/google-android-sdk-docs-installer_24+r3.1785528795-1_all.deb","size":16852},
     "766f9c85bbbfdb762de64ad359c921ebf71ad9b6ab59bcf3f2fe70a6360d0358": {"location":"pool/non-free/g/gcc-14-doc/cpp-14-doc_14.2.0-1_all.deb","size":846560},
-    "76db463f968701643edc81120ccf5dc47a719c0b31922fa9eccbb1a0a103a20b": {"location":"pool/non-free/m/mapproxy/python3-mapproxy_7.0.0+dfsg-1_all.deb","size":1477072},
     "776bb5ad63d29a6e97c7ea0cd9af31d571e6e357ead586b9692a6326259bb7fc": {"location":"pool/non-free/g/gcc-13-doc/gcc-13-doc_13.3.0-1_all.deb","size":10043100},
     "77ef871871b22515ebe1228341add43b96c34aa0a0b303c2649f04e2df77d09e": {"location":"pool/non-free/libs/libsbig/libsbig4t64_4.9.9-8_arm64.deb","size":130616},
     "7885e1f9de1c32e87d5dc4d6f993c37902d9085f9782c68eb566d8d79e76d4a9": {"location":"pool/non-free/s/stardict-german-czech/stardict-german-czech_20200501-2_all.deb","size":55064},
@@ -262,7 +262,6 @@
     "902bcd8c3ffa7de430f9edd4893fa5e710a9fdae3be809cb55328ea2dd68f49e": {"location":"pool/non-free/t/triangle/triangle-bin_1.6-8_arm64.deb","size":126460},
     "906f281b9cd1861207a9da02f57ba6db2843968018b3caf6a9d50e1a76ba3505": {"location":"pool/non-free/n/nvidia-graphics-drivers/libglx-nvidia0_550.163.01-6_arm64.deb","size":375248},
     "90feeb2320fb264c568a78913f5241d8db39e94266c120e954d5d95e791e8e34": {"location":"pool/non-free/m/mbrola-tr2/mbrola-tr2_0.1+repack2-5_all.deb","size":3855392},
-    "914a9470377e7811877cf8eb17308156a21b1b8b6f16b459cdb8bbaa2d077b87": {"location":"pool/non-free/p/play.it-strategy/play.it-strategy_2026-04-17-1_all.deb","size":89348},
     "915b71739c467da8c1695e216028319bb738af70ec04900286f615c3202f816d": {"location":"pool/non-free/m/mbrola-es1/mbrola-es1_0.0.19980610+repack2-6_all.deb","size":1690896},
     "922b1beb67e2bf5418e6bb1545dec61cecc01684dc7623f2aff4b632bf780296": {"location":"pool/non-free/f/fonts-larabie/fonts-larabie-deco_20011216-7_all.deb","size":932804},
     "9367bc3d7f97e158e5af69fa867de08e256a6040b4b75562f8fced96107d8908": {"location":"pool/non-free/r/reform-branding/reform-branding_8_all.deb","size":13428},
@@ -311,7 +310,6 @@
     "acc40f004a5fa629974a4248c4ab8cf8dccfa9b3c3594ee9548d579ae8cb7014": {"location":"pool/non-free/h/hijra/hijra-applet_1.0-5_all.deb","size":12812},
     "ae374c898a70d47a23affc10928635ccb27aba41b9423cbdefa4c93f5c31ba67": {"location":"pool/non-free/p/play.it-action/play.it-action_2026-04-17-1_all.deb","size":43204},
     "ae7333d668a809ebc78ffc07db8bcb7f8387aa730d5927b60767ce20796ea615": {"location":"pool/non-free/m/mbrola-sw1/mbrola-sw1_1.00+repack2-6_all.deb","size":8354520},
-    "afdd9a4482d2ce2d668973c5bd1443433677b43e838f6798ff3feb3a0e802e34": {"location":"pool/non-free/7/7zip-rar/7zip-rar_26.05-1_arm64.deb","size":72740},
     "b03b0f3ec358cf2de5a1984e597ef2d593ec3ea53c21da8b33288590c794e91c": {"location":"pool/non-free/libv/libvideo-info-perl/libvideo-info-perl_0.993-5_all.deb","size":635004},
     "b14d352ba99df1edf69f92d8d1522db1b3172f1014e0efb172fbb62266869b19": {"location":"pool/non-free/m/mbrola-jp1/mbrola-jp1_0.0.20000314+repack2-3_all.deb","size":1515604},
     "b17a8b0971d4c27233553511115bb6ee58cc38dd768a5b289e862a838ef12db0": {"location":"pool/non-free/f/frogatto-data/frogatto-data_1.3.1+dfsg-4_all.deb","size":224725580},
@@ -326,6 +324,7 @@
     "b7f0f6f68f5f92f7b8650709538abdb5de38b0ebe47cf9ef6a61b25b2feb9fae": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-vdpau-driver_550.163.01-6_arm64.deb","size":613772},
     "b8002a8f4b104c768fda4a71c614711d66e3ab0bd067d01df60b5889a317d741": {"location":"pool/non-free/g/gcc-13-doc/gfortran-13-doc_13.3.0-1_all.deb","size":1560224},
     "b83cb3e608f3a2807325c714d23900f9b45e02d9e80dc31d94598b3dd29f4200": {"location":"pool/non-free/m/mbrola-fr4/mbrola-fr4_0.0.19990521+repack2-6_all.deb","size":5315752},
+    "b86559e48a3589b44ae693fb6405173af7617c94b77000a1c24d475cbbf07e49": {"location":"pool/non-free/s/sarif-oasis-schemas/sarif-oasis-schemas_2.1.0+errata01-1_all.deb","size":17208},
     "b868b2e3da6ac6ebf4eda7c1d6b3ec01989c45d03d7be8b6d9dc62e0c705ae24": {"location":"pool/non-free/t/trnascan-se/trnascan-se-common_2.0.12+ds-2_all.deb","size":2360132},
     "b86ce81e0a99f60e97fe9d004cb0968efb53a1c8bde2def62de3e79c14c046cd": {"location":"pool/non-free/m/mbrola-de2/mbrola-de2_0.0.19990106+repack2-5_all.deb","size":8463156},
     "b93ed95a49cc7fd1d82c93b54881968885657c2843cf5ed51ad21dc80ba01bd6": {"location":"pool/non-free/v/vienna-rna/librna-perl_2.7.2+dfsg-1_arm64.deb","size":83720},
@@ -387,6 +386,7 @@
     "d470eae4149a1e58b2a967a4b4164c960b017e79880ef8d65cbaa754930cea2e": {"location":"pool/non-free/f/firebuild/libfirebuild0_0.8.6.2-1_arm64.deb","size":171688},
     "d4bffab092b799b3093354af3cead4dc8b25a2a81ba174a947de1ea444116d6e": {"location":"pool/non-free/m/mbrola-de6/mbrola-de6_0.0.20021125+repack2-6_all.deb","size":41770448},
     "d5331edec454fd3ee91c2618091e7cd8943a0591333e3aa362f3c6380b79d9a1": {"location":"pool/non-free/m/mbrola-de7/mbrola-de7_0.0.20030404+repack2-6_all.deb","size":41553384},
+    "d53a826a26dcc217518039f469b0c75baa721f9b33ca5ada44139f8ddcc84949": {"location":"pool/non-free/7/7zip-rar/7zip-rar_26.06-1_arm64.deb","size":72760},
     "d5e438b335de5104c92af94a965a2541e8bb2a5e3ab7d07eb34a7490ad1c636b": {"location":"pool/non-free/g/gcc-14-doc/gccgo-14-doc_14.2.0-1_all.deb","size":278588},
     "d63f6647f28bfa9a4461cf43fe304190dede3b7e81abb448621edb333f11f716": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-kernel-dkms_550.163.01-6_arm64.deb","size":41362664},
     "d6448dcd72e548079045d0721827094f42772485c5102385c2e46f523f8e0bf0": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-legacy-check_550.163.01-6_arm64.deb","size":136748},
@@ -422,6 +422,7 @@
     "e6bc38178c4f2e43a78e44e6d59d6488852dc6431c37ec211e462d6a9f23dd58": {"location":"pool/non-free/g/google-android-installers/google-android-platform-8-installer_8+r3.1785528795-1_all.deb","size":16668},
     "e757603d496eeda319db50ff7048529b8f03ba4b89e932543eb4c79471da4f7d": {"location":"pool/non-free/m/mbrola-lt2/mbrola-lt2_1.0+repack2-5_all.deb","size":17378236},
     "e79bea4f7dc66232bb5d4bad727b22544bc7eea04b01fb3bc3d2e65240889507": {"location":"pool/non-free/g/genesisplusgx/kodi-game-libretro-genplus_1.7.4+git20260324-1_arm64.deb","size":947840},
+    "e8703662de17a8a9c53c203bb4b26abf3fd31d4dee255db726885be35834466e": {"location":"pool/non-free/m/mapproxy/python3-mapproxy_8.1.0+dfsg-1_all.deb","size":1479360},
     "e8921bcd6dc7d128fff32999e75b1cfafc33bded5dafc156f5eda20b72c1973c": {"location":"pool/non-free/u/uqm-content/uqm-music_0.8.0+deb-1_all.deb","size":18921340},
     "e91ecb87386bae17245b552fb3a6e3202054249010176c865c4c510497bf7db3": {"location":"pool/non-free/x/xfonts-scalable-nonfree/fonts-xfree86-nonfree_4.2.1-9_all.deb","size":277476},
     "ec73d642ba367be34d770e1ae26a5e1d6cf8a0360059ab1417138b23b8ec3c0d": {"location":"pool/non-free/r/rhvoice/rhvoice-uzbek_1.14.0-3_all.deb","size":3487116},
@@ -434,7 +435,6 @@
     "f09ec8d84e17be04e47380a8b69f3a1b885c230dde5d5a854288596ee846a5f9": {"location":"pool/non-free/g/google-android-installers/google-android-sources-30-installer_30+1785528795-1_all.deb","size":16524},
     "f0b1b36833b6ee710820c4247ab6910f9fa4f0155ddefd987d269b2d833e51e6": {"location":"pool/non-free/t/trn4/trn4_4.0-test77-19_arm64.deb","size":386140},
     "f2c8bc2bee501c9bd236354c1cc27d84009034e0e8ca108cad8fa88008b8c772": {"location":"pool/non-free/m/mdk-doc/mdk-doc_1.3.1-1_all.deb","size":174172},
-    "f301fc34c3d5e31068d95f45da2eafb34f593f75e3e7cc030abb09b92095b83c": {"location":"pool/non-free/m/mapproxy/mapproxy_7.0.0+dfsg-1_all.deb","size":34444},
     "f353ebd822815bd650d35ee91e6cb20a586ecd197176d41cf9f16a72055a8a00": {"location":"pool/non-free/b/bedstead/fonts-bedstead_3.261-1_all.deb","size":884692},
     "f40f4800d69699f21aa29874b7e8ad7841cbf484edbefb871ce99d24111e305a": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-kernel-source_550.163.01-6_arm64.deb","size":41406488},
     "f429213d43b10707c8daa196095c06ec3de030803bd2ebe3919d54badde7096e": {"location":"pool/non-free/n/nvidia-graphics-drivers/xserver-xorg-video-nvidia_550.163.01-6_arm64.deb","size":1932624},
