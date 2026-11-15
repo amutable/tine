@@ -23,4 +23,4 @@ def define(langs: list[str] | None = None) -> None:
         macros["_install_langs"] = ":".join(langs)
     for name, value in macros.items():
         # rpm/__init__.py re-exports its C extension with a star import, which ty can't see through.
-        rpm.addMacro(name, value)  # ty: ignore[unresolved-attribute]
+        rpm.addMacro(name, value)  # ty: ignore[missing-attribute]

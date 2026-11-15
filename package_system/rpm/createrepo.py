@@ -68,7 +68,7 @@ def createrepo(entries: list[tuple[str, Path]], out: Path, revision: str) -> Non
     repomd.set_revision(revision)
     for name, _ in _STREAMS:
         rec = cr.RepomdRecord(name, paths[name])
-        rec.fill(cr.SHA256)  # ty: ignore[unresolved-attribute]  # SWIG dynamic constant
+        rec.fill(cr.SHA256)  # ty: ignore[missing-attribute]  # SWIG dynamic constant
         rec.rename_file()  # standard <checksum>-<name>.xml.gz layout
         repomd.set_record(rec)
     (repodata / "repomd.xml").write_text(repomd.xml_dump())
