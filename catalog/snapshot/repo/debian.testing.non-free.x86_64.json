@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "94f89af9f95831fc6a68f2572be2ecbd8fe4a2bf9a7483741f81608d91d50446",
+        "sha256": "ee1fe55ee24d4f02465a6b78ec9f79c86f51f0c35c334afcf999b27dff4d0624",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/non-free/binary-amd64/Packages.xz",
-        "sha256": "12b081954d104b8945c3de80c5d2aef409926d7d79be6e5c271bc4f20f1f244d",
-        "size": 85132,
-        "url": "https://snapshot.debian.org/archive/debian/20261107T205437Z/dists/testing/non-free/binary-amd64/by-hash/SHA256/12b081954d104b8945c3de80c5d2aef409926d7d79be6e5c271bc4f20f1f244d"
+        "sha256": "d3614f6028a047b4b4b40a26a991087afcae6d8f909709304797d737dd032151",
+        "size": 85156,
+        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/non-free/binary-amd64/by-hash/SHA256/d3614f6028a047b4b4b40a26a991087afcae6d8f909709304797d737dd032151"
       }
     ],
     "inline": {}
@@ -208,7 +208,9 @@
     "4cef245fac4af12a5e28c4d52a6c87357b75c92713d8743da54d408630cc1671": {"location":"pool/non-free/v/vienna-rna/vienna-rna_2.7.2+dfsg-1_amd64.deb","size":4343336},
     "4d1a154dea23e993dd3cd6010c394c851ca3b0d9ed43a763a43a0a4b3fe4fb00": {"location":"pool/non-free/g/google-android-installers/google-android-cmdline-tools-17.0-installer_17.0+1785528795-1_amd64.deb","size":17052},
     "4d5c26f0fdcd57c934ac0dc792261fc137acf486cf5d9bc3632622a5db034f81": {"location":"pool/non-free/i/intel-mkl/libmkl-avx_2020.4.304-7_amd64.deb","size":12254260},
+    "4de9e060b24684863b461a22b0d2da21c847c5609bc0a33ec593b04836261ace": {"location":"pool/non-free/7/7zip-rar/7zip-rar_26.06-1_amd64.deb","size":77424},
     "4e90263f75a959d7473b49269fb6265390a9400bce52c3d665ac017d135cadcd": {"location":"pool/non-free/m/mbrola-mx2/mbrola-mx2_0.1+repack2-5_all.deb","size":2989156},
+    "4ef5dd0c31009746e2fd4bbc836e5dbb2b839ee9000935710de0cb3c740be54c": {"location":"pool/non-free/m/mapproxy/mapproxy_8.1.0+dfsg-1_all.deb","size":34956},
     "500f62e5957c3f96616a3bdbc11081e6d8779beffc8a4fb16cf67608c8ae85a0": {"location":"pool/non-free/t/tar-doc/tar-doc_1.35-2_all.deb","size":199168},
     "504c28c6bdabf3c281d0849881c64b14c8f997137b07175abb681e23574ef9dc": {"location":"pool/non-free/g/gcc-13-doc/gnat-13-doc_13.3.0-1_all.deb","size":3352268},
     "50bc420abe9615068d23ce3f67b51839c6fbe61b082ece0368b0ad37f775854f": {"location":"pool/non-free/g/google-android-installers/google-android-platform-24-installer_24+r2.1785528795-1_all.deb","size":16660},
@@ -221,7 +223,6 @@
     "52e5ee7f2039dd25962727ee1e36ed80677c0256bd48c233873d220b012d3a48": {"location":"pool/non-free/c/coq-doc/coq-doc-html_9.2.0-1_all.deb","size":1910192},
     "52e6418c4c94a7d464a529c7e2d16306c9a391f44fbacbeefc83a99beb24feff": {"location":"pool/non-free/m/mbrola-id1/mbrola-id1_1+repack2-6_all.deb","size":3871160},
     "53270fac69ddb7a9eb7a4143959450f8f6e04f3c0470d7ffb44e14d5724f4e8d": {"location":"pool/non-free/o/openzwave-controlpanel/openzwave-controlpanel_1.6~git20200306.4b8a39d-2_amd64.deb","size":58568},
-    "53a0bbaa144e4098fb5ff96d0c61d4aa343d42b158bfbf02c3014bd88d0cb486": {"location":"pool/non-free/7/7zip-rar/7zip-rar_26.05-1_amd64.deb","size":77400},
     "549ad38784fa3ab3e9f0afe089ff3bd8d660c2684584c7336cffc803f1a5a6b0": {"location":"pool/non-free/n/nvidia-graphics-drivers/libnvidia-ptxjitcompiler1_550.163.01-6_amd64.deb","size":7662408},
     "54a9e1dd7f684979bdd1e5de950de644d1a88e006be2d3d7c6aa55e58e1dbd56": {"location":"pool/non-free/k/kstars-data-extra-tycho2/kstars-data-extra-tycho2_1.1r1-9.2_all.deb","size":29060696},
     "54c95337035a5a74fd9e94fe53c23cc72815a3351a8d9fda6cfe11cacd3afa50": {"location":"pool/non-free/g/gcc-15-doc/cpp-15-doc_15.2.0-1_all.deb","size":836260},
@@ -316,7 +317,6 @@
     "752f8d2d59f1dfaa5a7a5b48eee9f48fdeadab8d3b54499e92dac997d412ad64": {"location":"pool/non-free/g/google-android-installers/google-android-build-tools-26.0.1-installer_26.0.1+1785528795-1_amd64.deb","size":17000},
     "7640979a24882ad78d76cd035f3e3820cf2d7de9297924dab15d88f5db663bb7": {"location":"pool/non-free/i/intel-mkl/libmkl-vml-avx_2020.4.304-7_amd64.deb","size":3826628},
     "766f9c85bbbfdb762de64ad359c921ebf71ad9b6ab59bcf3f2fe70a6360d0358": {"location":"pool/non-free/g/gcc-14-doc/cpp-14-doc_14.2.0-1_all.deb","size":846560},
-    "76db463f968701643edc81120ccf5dc47a719c0b31922fa9eccbb1a0a103a20b": {"location":"pool/non-free/m/mapproxy/python3-mapproxy_7.0.0+dfsg-1_all.deb","size":1477072},
     "776bb5ad63d29a6e97c7ea0cd9af31d571e6e357ead586b9692a6326259bb7fc": {"location":"pool/non-free/g/gcc-13-doc/gcc-13-doc_13.3.0-1_all.deb","size":10043100},
     "77c7510ca692ac6edf3c45acff60fe20815e36d6a200c0183f3a59eb7ee083c5": {"location":"pool/non-free/i/irpas/irpas_0.10-10_amd64.deb","size":77000},
     "7885e1f9de1c32e87d5dc4d6f993c37902d9085f9782c68eb566d8d79e76d4a9": {"location":"pool/non-free/s/stardict-german-czech/stardict-german-czech_20200501-2_all.deb","size":55064},
@@ -381,7 +381,6 @@
     "90feeb2320fb264c568a78913f5241d8db39e94266c120e954d5d95e791e8e34": {"location":"pool/non-free/m/mbrola-tr2/mbrola-tr2_0.1+repack2-5_all.deb","size":3855392},
     "911fc3a6b39118ace60e1a8b958da5d5505d8dbacc0bf83f0ec0aeeaf8dee0a5": {"location":"pool/non-free/g/google-android-installers/google-android-build-tools-29.0.0-installer_29.0.0+1785528795-1_amd64.deb","size":17060},
     "912a869854d73daf4d4f4b0a089ee553155826ce765c04be36091e709ac1b6b3": {"location":"pool/non-free/s/svox/libttspico-dev_1.0+git20130326-14.1_amd64.deb","size":186772},
-    "914a9470377e7811877cf8eb17308156a21b1b8b6f16b459cdb8bbaa2d077b87": {"location":"pool/non-free/p/play.it-strategy/play.it-strategy_2026-04-17-1_all.deb","size":89348},
     "915b71739c467da8c1695e216028319bb738af70ec04900286f615c3202f816d": {"location":"pool/non-free/m/mbrola-es1/mbrola-es1_0.0.19980610+repack2-6_all.deb","size":1690896},
     "9217cc91fc56febca2ff4a76f8d1031ffec058a703f30d0c91c98c1bda4d9f8a": {"location":"pool/non-free/g/google-android-installers/google-android-ndk-r23b-installer_23.1.7779620+1785528795-1_amd64.deb","size":17012},
     "922b1beb67e2bf5418e6bb1545dec61cecc01684dc7623f2aff4b632bf780296": {"location":"pool/non-free/f/fonts-larabie/fonts-larabie-deco_20011216-7_all.deb","size":932804},
@@ -463,6 +462,7 @@
     "b6ffd57ffaaba18862884c4e7dac8ed834ad29aea0b8e1b3e172fbf6bb21018b": {"location":"pool/non-free/n/nvidia-graphics-drivers/libcuda1_550.163.01-6_amd64.deb","size":2930840},
     "b8002a8f4b104c768fda4a71c614711d66e3ab0bd067d01df60b5889a317d741": {"location":"pool/non-free/g/gcc-13-doc/gfortran-13-doc_13.3.0-1_all.deb","size":1560224},
     "b83cb3e608f3a2807325c714d23900f9b45e02d9e80dc31d94598b3dd29f4200": {"location":"pool/non-free/m/mbrola-fr4/mbrola-fr4_0.0.19990521+repack2-6_all.deb","size":5315752},
+    "b86559e48a3589b44ae693fb6405173af7617c94b77000a1c24d475cbbf07e49": {"location":"pool/non-free/s/sarif-oasis-schemas/sarif-oasis-schemas_2.1.0+errata01-1_all.deb","size":17208},
     "b868b2e3da6ac6ebf4eda7c1d6b3ec01989c45d03d7be8b6d9dc62e0c705ae24": {"location":"pool/non-free/t/trnascan-se/trnascan-se-common_2.0.12+ds-2_all.deb","size":2360132},
     "b86ce81e0a99f60e97fe9d004cb0968efb53a1c8bde2def62de3e79c14c046cd": {"location":"pool/non-free/m/mbrola-de2/mbrola-de2_0.0.19990106+repack2-5_all.deb","size":8463156},
     "b897fd00425402aedf6874baf827ce35c40d126bd125bfacf571e93e3c7f7554": {"location":"pool/non-free/d/dxx-rebirth/d2x-rebirth_0.60~git20260920-1_amd64.deb","size":729796},
@@ -589,6 +589,7 @@
     "e6d3a295bb5bb2e7ba30c640a579c5d9db8be4b59fc0ec7d621f11c1e1fbd0b4": {"location":"pool/non-free/g/google-android-installers/google-android-build-tools-25.0.1-installer_25.0.1+1785528795-1_amd64.deb","size":16968},
     "e7497d850c2c8a9a19875f2272fe61abe81342ec66e0e03d13a15c6c706ce838": {"location":"pool/non-free/n/nvidia-graphics-drivers/libnvidia-cfg1_550.163.01-6_amd64.deb","size":263152},
     "e757603d496eeda319db50ff7048529b8f03ba4b89e932543eb4c79471da4f7d": {"location":"pool/non-free/m/mbrola-lt2/mbrola-lt2_1.0+repack2-5_all.deb","size":17378236},
+    "e8703662de17a8a9c53c203bb4b26abf3fd31d4dee255db726885be35834466e": {"location":"pool/non-free/m/mapproxy/python3-mapproxy_8.1.0+dfsg-1_all.deb","size":1479360},
     "e8921bcd6dc7d128fff32999e75b1cfafc33bded5dafc156f5eda20b72c1973c": {"location":"pool/non-free/u/uqm-content/uqm-music_0.8.0+deb-1_all.deb","size":18921340},
     "e907b794b737a3aa9acfe9b1f6d9b8f5bcf0fa9711a9771b57a74069617ceda0": {"location":"pool/non-free/g/google-android-installers/google-android-build-tools-30.0.2-installer_30.0.2+1785528795-1_amd64.deb","size":17068},
     "e91ecb87386bae17245b552fb3a6e3202054249010176c865c4c510497bf7db3": {"location":"pool/non-free/x/xfonts-scalable-nonfree/fonts-xfree86-nonfree_4.2.1-9_all.deb","size":277476},
@@ -612,7 +613,6 @@
     "f258635dc34e834773852880a6846d2172fa22e6033ade44b5d660b1d750ba57": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-driver-libs_550.163.01-6_amd64.deb","size":131048},
     "f2c8bc2bee501c9bd236354c1cc27d84009034e0e8ca108cad8fa88008b8c772": {"location":"pool/non-free/m/mdk-doc/mdk-doc_1.3.1-1_all.deb","size":174172},
     "f2d968d6590dd8fc2fe799f6b97722cb45bb85a19c55cd09b2b2f3d57a6fb15c": {"location":"pool/non-free/n/nvidia-graphics-drivers/nvidia-smi_550.163.01-6_amd64.deb","size":475508},
-    "f301fc34c3d5e31068d95f45da2eafb34f593f75e3e7cc030abb09b92095b83c": {"location":"pool/non-free/m/mapproxy/mapproxy_7.0.0+dfsg-1_all.deb","size":34444},
     "f353ebd822815bd650d35ee91e6cb20a586ecd197176d41cf9f16a72055a8a00": {"location":"pool/non-free/b/bedstead/fonts-bedstead_3.261-1_all.deb","size":884692},
     "f3798e3dbbe113df2d5bc9abf8db674a36c03c350c6392c28d377738b2a105c7": {"location":"pool/non-free/n/nvidia-graphics-drivers/libnvidia-glvkspirv_550.163.01-6_amd64.deb","size":3177640},
     "f3be98a9b94b39d1f934103161b6b7ba4e61834be53d131015060f44d85c2628": {"location":"pool/non-free/i/intel-mkl/libmkl-avx512_2020.4.304-7_amd64.deb","size":11819228},
