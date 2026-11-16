@@ -539,7 +539,8 @@ two stages:
 
 1. The minimal extractor unpacks the same package closure into `stage1` without running scriptlets
    or creating a package database. An extractor reads the packages its repository serves, whatever
-   framing they carry, so the pool never has to derive a second form for the bootstrap.
+   framing they carry, so the pool never has to derive a second form for the bootstrap. Like a box layer,
+   `stage1` is written from a snapshot of the unpacked tree.
 2. The package-system installer runs from `stage1` and properly installs the closure into `stage2`,
    including scriptlets and the package database. `stage2` becomes the reusable `BoxInfo` root, a single
    layer.
