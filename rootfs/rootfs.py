@@ -46,16 +46,16 @@ def escape(name: str) -> str:
 
 
 def capture(tree: Path) -> None:
-    """Make every directory of `tree` writable for its owner and escape the names Buck cannot store."""
-    # Buck must be able to delete and rename through package-supplied read-only directories.
-    for p in tree.rglob("*"):
-        st = p.lstat()
-        if stat.S_ISDIR(st.st_mode) and stat.S_IMODE(st.st_mode) & 0o700 != 0o700:
-            p.chmod(stat.S_IMODE(st.st_mode) | 0o700)
+    """Escape the names below `tree` that Buck cannot store."""
     for p in sorted(tree.rglob("*"), key=lambda q: len(q.parts), reverse=True):
         escaped = escape(p.name)
-        if escaped != p.name:
-            p.rename(p.parent / escaped)
+        if escaped == p.name:
+            continue
+        # A rename needs write access to the directory, which a package or %prep can take away.
+        mode = stat.S_IMODE(p.parent.lstat().st_mode)
+        if not mode & stat.S_IWUSR:
+            p.parent.chmod(mode | stat.S_IWUSR)
+        p.rename(p.parent / escaped)
 
 
 def write_buck_tree(snapshot: storage.Snapshot, out: Path) -> None:

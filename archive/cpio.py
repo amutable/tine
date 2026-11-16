@@ -148,8 +148,7 @@ def _extract(source: Source, dest: Path, src_fd: int, start: int) -> int:
         if fmt == 0o040000:  # directory
             # The mode a package ships a directory with is deliberately not applied: this runs once
             # per archive into one tree, and a later archive still has to write into a directory an
-            # earlier one declared unwritable. `rootfs.capture` settles directory modes once
-            # everything is in place.
+            # earlier one declared unwritable. The Buck tree of stage1 gives every directory mode 0755.
             target.mkdir(parents=True, exist_ok=True)
         elif fmt == 0o120000:  # symlink (last-writer-wins across multi-archive extracts)
             target.parent.mkdir(parents=True, exist_ok=True)
