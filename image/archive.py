@@ -28,7 +28,6 @@ class Spec(finalize.ImageSpec):
     out: str
     format: str
     compression: str
-    pkgdb_paths: list[str]
     manifest: str | None
 
 
@@ -106,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "archive", arguments)
     epoch = int(os.environ["SOURCE_DATE_EPOCH"])
     out = Path(spec["out"])
-    snapshot = finalize.snapshot(spec, epoch=epoch, pkgdb_paths=spec["pkgdb_paths"])
+    snapshot = storage.Snapshot(spec["lower"])
     if spec["format"] == "tar":
         # tar has no socket type, so neither the archive nor its listing contains sockets.
         snapshot.objects = [obj for obj in snapshot.objects if obj["type"] != "sock"]

@@ -12,7 +12,9 @@ load(
     "ImageToolsInfo",
     "check_name",
     "declare_out",
-    "pkgdb_paths",
+    "declare_stripped",
+    "extension_release_operation",
+    "ops",
     "spec_path",
     "terminal_image_command",
 )
@@ -296,9 +298,28 @@ def declare_ddi(
     keeps it, for a system nothing ever resolves packages in. The image's `[pkgdb]` and `[sbom]`
     subtargets still capture it from the tree itself. `strip_paths` drops further files by glob, for
     what the partitions do not need but a sibling target reading the same layer still does.
-    `extension` makes the driver package the tree as an extension (see extension.bzl). The partitions
-    leave out the contents of the directories in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
+    `extension` packages the tree as an extension (see extension.bzl). The partitions leave out the
+    contents of the directories in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
     """
+    # An extension identifies itself through its extension-release files. An os-release in the
+    # extension would replace the os-release of the parent image in the merged tree.
+    extension_ops = []
+    if extension != None:
+        extension_ops = [extension_release_operation(release["path"], release["fields"], pin = extension["parent"] > 0) for release in extension["releases"]] + [
+            ops.remove("/usr/lib/os-release"),
+            ops.remove("/etc/os-release"),
+        ]
+    image = declare_stripped(
+        ctx,
+        tools = tools,
+        image = image,
+        name = "strip",
+        identifier = identifier,
+        strip_pkgdb = strip_pkgdb,
+        strip_paths = strip_paths,
+        ops = extension_ops,
+    )
+
     _check_definitions(
         definitions,
         disk = disk,
@@ -380,7 +401,12 @@ def declare_ddi(
         "basename": basename,
         "definitions": definition_specs,
         "exclude": exclude,
-        "extension": extension,
+        "extension": None
+        if extension == None
+        else extension
+        | {
+            "releases": [release["path"] for release in extension["releases"]],
+        },
         # The default seed derives from the identity, so changing "repart" here changes the partition
         # UUIDs of every target that declares no identifier.
         "identity": "{}[{}]".format(ctx.label, identifier or "repart"),
@@ -396,11 +422,9 @@ def declare_ddi(
             }
             for value in imported_partitions
         ],
-        "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         "root_hash_out": None,
         "seed": seed,
         "signing": signing_key_spec(verity_key),
-        "strip_paths": strip_paths,
     }
 
     out = None

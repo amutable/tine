@@ -5,13 +5,13 @@
 
 """Export the finalized image's UAPI.16 listing."""
 
-import os
 import sys
 from pathlib import Path
 
 import specs
 
 import finalize
+import storage
 import uapi16
 
 
@@ -23,8 +23,7 @@ def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "manifest", argv)
 
     out = Path(spec["out"])
-    epoch = int(os.environ["SOURCE_DATE_EPOCH"])
-    written = uapi16.write_listing(finalize.snapshot(spec, epoch=epoch).objects, out)
+    written = uapi16.write_listing(storage.Snapshot(spec["lower"]).objects, out)
     print(f"manifest: wrote {written} objects -> {out}", file=sys.stderr)
 
 

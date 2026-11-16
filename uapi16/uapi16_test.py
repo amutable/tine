@@ -43,8 +43,25 @@ class TreeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tree = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.")))
 
-    def manifest(self, tree: Path | None = None, roots: Sequence[str] = ()) -> list[dict[str, object]]:
-        return parse(b"".join(uapi16.records(tree or self.tree, EPOCH, roots)))
+    def data(self, tree: Path | None = None, roots: Sequence[str] = ()) -> bytes:
+        """Write the manifest of `tree`, or of the paths below `roots`, like capture does."""
+        found = [
+            entry
+            for entry in uapi16.entries(tree or self.tree)
+            if not roots or any(entry.name == root or entry.name.startswith(root + "/") for root in roots)
+        ]
+        tokens = uapi16.hardlink_tokens(found)
+        objects: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE}]
+        objects += [uapi16.file_object(entry, epoch=EPOCH, token=tokens.get(entry.inode)) for entry in found]
+        out = (
+            Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.out.")))
+            / "m"
+        )
+        uapi16.write_objects(objects, out)
+        return out.read_bytes()
+
+    def manifest(self, tree: Path | None = None) -> list[dict[str, object]]:
+        return parse(self.data(tree))
 
     def named(self, tree: Path | None = None) -> dict[str, dict[str, object]]:
         return {str(obj["name"]): obj for obj in self.manifest(tree)[1:]}
@@ -63,13 +80,13 @@ class TestSequence(TreeTest):
     def test_each_record_is_framed_by_a_separator_and_a_line_feed(self) -> None:
         # A tree with one file needs three JSON-SEQ records: the root, file and trailer.
         (self.tree / "a").write_text("a")
-        data = b"".join(uapi16.records(self.tree, EPOCH))
+        data = self.data()
         self.assertEqual(data.count(b"\x1e"), 3)
         self.assertTrue(data.endswith(b"\n"))
 
     def test_the_json_carries_no_gratuitous_whitespace(self) -> None:
         (self.tree / "a").write_text("a")
-        self.assertNotIn(b" ", b"".join(uapi16.records(self.tree, EPOCH)))
+        self.assertNotIn(b" ", self.data())
 
 
 class TestOrder(TreeTest):
@@ -103,7 +120,7 @@ class TestOrder(TreeTest):
                     (tree / name / "file").write_text(name)
                     os.utime(tree / name / "file", (EPOCH - 1, EPOCH - 1))
                     os.utime(tree / name, (EPOCH - 1, EPOCH - 1))
-                outputs.append(b"".join(uapi16.records(tree, EPOCH)))
+                outputs.append(self.data(tree))
         self.assertEqual(outputs[0], outputs[1])
 
 
@@ -312,13 +329,11 @@ class TestUnencodableNames(TreeTest):
 
 class TestWrite(TreeTest):
     def test_the_count_includes_the_root_and_trailer(self) -> None:
-        # Writing one file must report three records and finish with the mandatory trailer.
-        (self.tree / "file").write_text("x")
-        out = (
-            Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.out.")))
-            / "m"
-        )
-        self.assertEqual(uapi16.write(self.tree, out, EPOCH), 3)
+        # Writing a root and one file must report three records and finish with the mandatory
+        # trailer.
+        out = self.tree / "m"
+        objects: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE}, {"name": "file", "type": "reg"}]
+        self.assertEqual(uapi16.write_objects(objects, out), 3)
         self.assertEqual([obj.get("name") for obj in parse(out.read_bytes())], [None, "file"])
 
 
@@ -339,40 +354,10 @@ class TestScope(unittest.TestCase):
         self.assertEqual(uapi16.scope(["/", "/usr"]), [""])
 
 
-class TestScopedTree(TreeTest):
-    @override
-    def setUp(self) -> None:
-        super().setUp()
-        for name in ("usr/bin", "opt/thing", "var/lib"):
-            (self.tree / name).mkdir(parents=True)
-            (self.tree / name / "file").write_text(name)
-
-    def test_only_the_roots_named_are_listed(self) -> None:
-        names = {str(obj["name"]) for obj in self.manifest(roots=["usr", "opt"])[1:]}
-        self.assertEqual(names, {"opt", "opt/thing", "opt/thing/file", "usr", "usr/bin", "usr/bin/file"})
-
-    def test_a_root_is_listed_before_the_contents_it_holds(self) -> None:
-        names = [str(obj["name"]) for obj in self.manifest(roots=["usr"])[1:]]
-        self.assertEqual(names, ["usr", "usr/bin", "usr/bin/file"])
-
-    def test_a_root_the_image_does_not_have_is_skipped(self) -> None:
-        names = {str(obj["name"]) for obj in self.manifest(roots=["usr", "efi"])[1:]}
-        self.assertEqual(names, {"usr", "usr/bin", "usr/bin/file"})
-
-    def test_a_root_naming_a_file_lists_that_file_alone(self) -> None:
-        objects = self.manifest(roots=["usr/bin/file"])[1:]
-        self.assertEqual([obj["name"] for obj in objects], ["usr/bin/file"])
-        self.assertEqual(objects[0]["type"], "reg")
-
-    def test_no_roots_is_the_whole_tree(self) -> None:
-        names = {str(obj["name"]) for obj in self.manifest()[1:]}
-        self.assertIn("var/lib/file", names)
-
-
 class TestMerge(TreeTest):
     def part(self, name: str, roots: Sequence[str]) -> Path:
         out = self.tree / name
-        uapi16.write(self.tree / "parts", out, EPOCH, roots)
+        out.write_bytes(self.data(self.parts, roots))
         return out
 
     @override

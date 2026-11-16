@@ -347,6 +347,13 @@ def _merge_os_release(fields: dict[str, str]) -> LayerOperation:
     """Merge quoted KEY="value" assignments into the image's /usr/lib/os-release."""
     return ("os_release", fields)
 
+def extension_release_operation(path: str, fields: dict[str, str], pin: bool) -> LayerOperation:
+    """Write the extension-release file `path` with `fields`.
+
+    With `pin`, the file also matches the os-release of the image below it (see layer.pin_release).
+    """
+    return ("extension_release", path, fields, pin)
+
 def _depmod() -> LayerOperation:
     """Rebuild the module indexes for every kernel the image installs."""
     return ("depmod",)
@@ -698,6 +705,29 @@ def declare_image(
             version = version,
         ),
     )
+
+def declare_stripped(
+    ctx: AnalysisContext,
+    *,
+    tools: ImageToolsInfo,
+    image: ImageInfo,
+    name: str,
+    identifier: str | None = None,
+    strip_pkgdb: bool = False,
+    strip_paths: list[str] = [],
+    ops: list[LayerOperation] = [],
+) -> ImageInfo:
+    """Return `image` with `ops` applied and the package database and `strip_paths` removed.
+
+    A terminal output reads the result. The changes are a layer of their own, which the image's
+    `[pkgdb]` and `[sbom]` subtargets don't see, and which only exists when there is something to
+    change. `name` tells the layer apart from the other layers that `identifier` declares.
+    """
+    removed = (pkgdb_paths(image) if strip_pkgdb else []) + strip_paths
+    ops = ops + [_remove("/" + path.lstrip("/")) for path in removed]
+    if not ops:
+        return image
+    return declare_image(ctx, tools = tools, ops = ops, parent = image, identifier = _path(identifier, name))
 
 IMAGE_OPERATION_ATTR = attrs.one_of(
     # A command takes attrs.arg() whether or not it chroots, so an artifact argument reads the

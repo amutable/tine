@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import cast
 
 import ddi
+import storage
+import uapi16
 
 UUID = "fb1bb90c-9de1-b90c-8b89-e04b87c721bd"
 PUBLISHED = f"AmutableOS_9_x86-64.usr-x86-64.{UUID}.raw"
@@ -41,10 +43,12 @@ class TestSplitName(unittest.TestCase):
     def test_split_names_by_type_and_uuid(self) -> None:
         # systemd-sysupdate reads the UUID back out of the name as @u, so the artifact repart
         # writes is already named the way it is published.
-        self.assertIn("SplitName=%t.%U", ddi.Definition.parse(DEFINITION).render(split=True).splitlines())
+        self.assertIn(
+            "SplitName=%t.%U", ddi.Definition.parse(DEFINITION).render(split=True, exclude=[]).splitlines()
+        )
 
     def test_no_split_name_without_split(self) -> None:
-        rendered = ddi.Definition.parse(DEFINITION).render(split=False)
+        rendered = ddi.Definition.parse(DEFINITION).render(split=False, exclude=[])
         self.assertNotIn("SplitName", rendered)
 
 
@@ -86,35 +90,6 @@ class TestCopyPartition(unittest.TestCase):
             scratch = Path(scratch_dir)
             with self.assertRaises(SystemExit):
                 ddi._copy_partition({"split_path": "-"}, "usr", scratch / "usr.raw", scratch / "usr.json")
-
-
-class TestPinRelease(unittest.TestCase):
-    PARENT = {"ID": "fedora", "VERSION_ID": "45", "NAME": "Fedora Linux"}
-    BUILD = {"IMAGE_ID": "demo", "IMAGE_VERSION": "7"}
-
-    def test_pins_id_and_version_id(self) -> None:
-        pinned = ddi.pin_release(self.PARENT, {"SYSEXT_SCOPE": "portable"})
-        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "45", "SYSEXT_SCOPE": "portable"})
-        # The driver writes the fields in this order, and derives the default seed from it.
-        self.assertEqual(list(pinned), ["ID", "VERSION_ID", "SYSEXT_SCOPE"])
-
-    def test_release_overrides_the_parent(self) -> None:
-        pinned = ddi.pin_release(self.PARENT, {"VERSION_ID": "46"})
-        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "46"})
-
-    def test_rolling_parent_pins_only_id(self) -> None:
-        pinned = ddi.pin_release({"ID": "arch"}, {})
-        self.assertEqual(pinned, {"ID": "arch"})
-
-    def test_pins_the_image_build(self) -> None:
-        pinned = ddi.pin_release(self.PARENT | self.BUILD, {"SYSEXT_VERSION_ID": "1"})
-        self.assertEqual(
-            pinned, {"ID": "fedora", "VERSION_ID": "45"} | self.BUILD | {"SYSEXT_VERSION_ID": "1"}
-        )
-
-    def test_any_pins_nothing(self) -> None:
-        pinned = ddi.pin_release(self.PARENT | self.BUILD, {"ID": "_any"})
-        self.assertEqual(pinned, {"ID": "_any"})
 
 
 class TestMkfsEnvironment(unittest.TestCase):
@@ -168,60 +143,70 @@ class TestWriteRootHash(unittest.TestCase):
             self._write([{"roothash": HASH}, {"roothash": HASH.replace("d", "0")}])
 
 
-class TestEmptyDirectories(unittest.TestCase):
-    def test_removes_the_contents_and_keeps_the_directory(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
-            tree = Path(scratch_dir)
-            (tree / "boot/EFI/Linux").mkdir(parents=True)
-            (tree / "boot/EFI/Linux/image.efi").write_text("uki")
-            (tree / "boot/.hidden").write_text("hidden")
-            (tree / "usr").mkdir()
-            (tree / "usr/os-release").write_text("ID=test")
-            ddi.empty_directories(tree, ["/boot", "/efi"])
-            self.assertTrue((tree / "boot").is_dir())
-            self.assertEqual(list((tree / "boot").iterdir()), [])
-            # A directory the image doesn't have is left alone.
-            self.assertFalse((tree / "efi").exists())
-            self.assertEqual((tree / "usr/os-release").read_text(), "ID=test")
+class TestExcludeFiles(unittest.TestCase):
+    def test_leaves_out_the_contents_of_excluded_directories(self) -> None:
+        # The ESP of a bootable disk copies /boot in another repart run. The root partition must
+        # leave out the contents of /boot and keep the directory, which a trailing slash tells
+        # repart.
+        rendered = ddi.Definition.parse(DEFINITION).render(split=False, exclude=["/boot", "efi"])
+        self.assertIn("ExcludeFiles=/boot/", rendered.splitlines())
+        self.assertIn("ExcludeFiles=/efi/", rendered.splitlines())
 
 
-class TestStripFiles(unittest.TestCase):
-    def _tree(self, scratch_dir: str) -> Path:
-        tree = Path(scratch_dir)
-        for version in ("6.17.0", "6.18.0"):
-            modules = tree / "usr/lib/modules" / version
-            (modules / "kernel/fs").mkdir(parents=True)
-            (modules / "vmlinuz").write_text("kernel")
-            (modules / "modules.dep").write_text("deps")
-            (modules / "kernel/fs/xfs.ko").write_text("module")
-        return tree
+class TestListing(unittest.TestCase):
+    OBJECTS: list[uapi16.Object] = [
+        {"mediaType": uapi16.MEDIA_TYPE, "type": "dir", "mode": 0o755},
+        {"name": "boot", "type": "dir", "mode": 0o755},
+        {"name": "boot/uki.efi", "type": "reg", "mode": 0o644, "inodeToken": 1},
+        {"name": "usr", "type": "dir", "mode": 0o755},
+        {"name": "usr/a", "type": "reg", "mode": 0o644, "inodeToken": 1},
+        {"name": "usr/b", "type": "reg", "mode": 0o644, "inodeToken": 2},
+        {"name": "usr/c", "type": "reg", "mode": 0o644, "inodeToken": 2},
+    ]
 
-    def test_removes_every_match_and_nothing_else(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
-            tree = self._tree(scratch_dir)
-            ddi.strip_files(tree, ["usr/lib/modules/*/vmlinuz"])
-            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/vmlinuz")), [])
-            self.assertEqual(len(sorted(tree.glob("usr/lib/modules/*/modules.dep"))), 2)
+    def test_lists_the_roots_without_excluded_contents(self) -> None:
+        # A partition that copies / and excludes /boot lists the image without the contents of
+        # /boot. Its root object contains only the media type, because the partition doesn't
+        # contain the image root. usr/a loses its token, because its other name is excluded.
+        listed = ddi._listing(self.OBJECTS, ("/",), ["/boot"])
+        self.assertEqual(listed[0], {"mediaType": uapi16.MEDIA_TYPE})
+        self.assertEqual([obj["name"] for obj in listed[1:]], ["boot", "usr", "usr/a", "usr/b", "usr/c"])
+        self.assertNotIn("inodeToken", listed[3])
+        self.assertEqual(listed[4]["inodeToken"], 1)
 
-    def test_takes_a_directory_with_its_contents(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
-            tree = self._tree(scratch_dir)
-            ddi.strip_files(tree, ["usr/lib/modules/*/kernel"])
-            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/kernel")), [])
-            self.assertTrue((tree / "usr/lib/modules/6.17.0").is_dir())
+    def test_lists_only_the_partition_sources(self) -> None:
+        # A /usr partition lists /usr and nothing else.
+        listed = ddi._listing(self.OBJECTS, ("/usr",), [])
+        self.assertEqual([obj["name"] for obj in listed[1:]], ["usr", "usr/a", "usr/b", "usr/c"])
 
-    def test_reads_a_leading_slash_as_the_image_root(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
-            tree = self._tree(scratch_dir)
-            ddi.strip_files(tree, ["/usr/lib/modules/*/vmlinuz"])
-            self.assertEqual(sorted(tree.glob("usr/lib/modules/*/vmlinuz")), [])
+    def test_a_source_the_image_does_not_have_lists_nothing(self) -> None:
+        # The ESP definition names both /boot and /efi for images that have one or the other.
+        # A source the image doesn't have adds nothing to the listing.
+        listed = ddi._listing(self.OBJECTS, ("/boot", "/efi"), [])
+        self.assertEqual([obj["name"] for obj in listed[1:]], ["boot", "boot/uki.efi"])
 
-    def test_ignores_a_pattern_that_matches_nothing(self) -> None:
-        # A glob holds for every image the rule builds, so one without the file is not an error.
-        with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
-            tree = self._tree(scratch_dir)
-            ddi.strip_files(tree, ["usr/lib/modules/*/.vmlinuz.hmac"])
-            self.assertEqual(len(sorted(tree.glob("usr/lib/modules/*/vmlinuz"))), 2)
+    def test_a_source_naming_a_file_lists_that_file_alone(self) -> None:
+        # A partition can copy a single file. Its listing must contain that file and nothing else.
+        listed = ddi._listing(self.OBJECTS, ("/usr/a",), [])
+        self.assertEqual([obj["name"] for obj in listed[1:]], ["usr/a"])
+
+
+class TestAddDirectories(unittest.TestCase):
+    def test_adds_missing_directories_in_order(self) -> None:
+        # An extension delta can lack /opt and /usr, which its partition copies. Restoring the
+        # snapshot must create /opt with the metadata of the full image and /usr with defaults,
+        # each in its place in the manifest order.
+        full: list[uapi16.Object] = [
+            {"mediaType": uapi16.MEDIA_TYPE, "type": "dir", "mode": 0o755, "mTimeNSec": 7},
+            {"name": "etc", "type": "dir", "mode": 0o755, "mTimeNSec": 1},
+            {"name": "opt", "type": "dir", "mode": 0o700, "mTimeNSec": 2},
+        ]
+        snapshot = storage.Snapshot([])
+        snapshot.objects = [full[0], full[1]]
+        ddi._add_directories(snapshot, full, ["opt", "usr", "etc"])
+        self.assertEqual([obj.get("name") for obj in snapshot.objects], [None, "etc", "opt", "usr"])
+        self.assertEqual(snapshot.objects[2]["mode"], 0o700)
+        self.assertEqual(snapshot.objects[3], {"name": "usr", "type": "dir", "mode": 0o755, "mTimeNSec": 7})
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from util import ReflinkUnavailable, clone_file, fail, reflink
 
@@ -126,33 +126,7 @@ def save(snapshot: Snapshot, out: Path) -> None:
 
 
 def by_name(objects: Sequence[uapi16.Object]) -> dict[str, uapi16.Object]:
-    # The root object has no name. resolve() returns "." for it.
-    return {obj.get("name", "."): obj for obj in objects}
-
-
-def resolve(objects: dict[str, uapi16.Object], name: str, *, follow: bool = True) -> str:
-    resolved = PurePosixPath()
-    parts = list(PurePosixPath(name).parts)
-    hops = 0
-    while parts:
-        part = parts.pop(0)
-        if part == "..":
-            resolved = resolved.parent
-            continue
-        candidate = resolved / part
-        obj = objects.get(str(candidate))
-        if obj is None or obj["type"] != "lnk" or (not parts and not follow):
-            resolved = candidate
-            continue
-        hops += 1
-        if hops > 40:
-            fail(f"storage: too many levels of symbolic links in {name!r}")
-        target = PurePosixPath(uapi16.symlink_target(obj))
-        if target.is_absolute():
-            resolved = PurePosixPath()
-            target = target.relative_to("/")
-        parts = [*target.parts, *parts]
-    return str(resolved)
+    return {obj["name"]: obj for obj in objects if "name" in obj}
 
 
 def metadata(path: Path, obj: uapi16.Object) -> None:

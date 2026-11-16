@@ -590,7 +590,7 @@ bind it with `rootfs.rootfs()`:
 - an install or image layer restores its lower snapshots into a temporary root, binds it at `/buildroot`
   and captures the result as a new snapshot;
 - a package build restores its buildroot snapshots the same way and binds action scratch at `/build`;
-- disk operations restore their snapshots into a temporary root so cleanup does not modify stored layers.
+- terminal readers and disk operations restore their snapshots into a read-only temporary root.
 
 This division keeps one namespace boundary while letting each driver express the root it needs. Nesting a
 second sandbox inside a box would duplicate isolation, complicate mounts, and make remote execution
@@ -1163,10 +1163,8 @@ retains the group when the root is reconstructed or exported.
 
 Read-only overlays use only metadata inodes in the normal lower, with aliases linked for declared groups.
 Boot selection, UKI assembly, artifact extraction and SBOM scanning select between private reflinks and
-read-only overlays. Disk image assembly gets a writable root, because it edits the tree before repart reads
-it. Parent release inspection reads the os-release file from the parent snapshot without reconstructing a
-root. Temporary roots are removed when the operation exits, including on failure. There is no persistent
-materialized-root cache.
+read-only overlays, and so does repart. Temporary roots are removed when the operation exits, including on
+failure. There is no persistent materialized-root cache.
 
 Box layers are snapshots too, but the sandbox mounts the plain directory that the installer writes from
 each snapshot. In that directory, `.esc.<percent-escaped-name>` encodes a name that Buck cannot store.
@@ -1337,12 +1335,14 @@ tree additionally catches
 packages no package manager knows about, such as Go modules bundled into ELF binaries.
 
 Terminal rules leave the package database and other package state intact. An extension drops the database
-from the paths the image's package system declares, because a merged extension must not replace the host's.
-Image cleanup is an explicit, configurable layer so output formats do not silently alter image contents.
-Every terminal driver receives the ordered layer stack of its image. Image-shipped tmpfiles configuration
-is not applied at build time; enabling it will be an explicit output option once its single-UID/GID
-behavior is defined. Ownership and named ACL entries are deliberately unsupported: all archive entries use
-uid/gid zero.
+from the paths the image's package system declares, because a merged extension must not replace the host's. A
+terminal output that strips the database or other paths, and an extension, read a layer of their own on top
+of the image. That layer removes the paths, writes the extension-release files and removes the os-release of
+an extension. Every terminal driver receives the ordered layer stack of its image and changes nothing in it.
+The system partitions of a bootable disk leave out the contents of the directories that its ESP copies,
+through repart's `ExcludeFiles=`. Image-shipped tmpfiles configuration is not applied at build time; enabling
+it will be an explicit output option once its single-UID/GID behavior is defined. Ownership and named ACL
+entries are deliberately unsupported: all archive entries use uid/gid zero.
 
 Tar uses deterministic PAX archives and stores user xattrs using `SCHILY.xattr.user.*` headers. The newc cpio
 format has no general xattr representation. Tar/cpio entries are ordered and encode explicit hardlinks

@@ -287,6 +287,35 @@ class TestRemove(unittest.TestCase):
                 layer._remove_glob(Path("/"), pattern)
 
 
+class TestPinRelease(unittest.TestCase):
+    PARENT = {"ID": "fedora", "VERSION_ID": "45", "NAME": "Fedora Linux"}
+    BUILD = {"IMAGE_ID": "demo", "IMAGE_VERSION": "7"}
+
+    def test_pins_id_and_version_id(self) -> None:
+        pinned = layer.pin_release(self.PARENT, {"SYSEXT_SCOPE": "portable"})
+        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "45", "SYSEXT_SCOPE": "portable"})
+        # The op writes the fields in this order, and the extension seed derives from the file.
+        self.assertEqual(list(pinned), ["ID", "VERSION_ID", "SYSEXT_SCOPE"])
+
+    def test_release_overrides_the_parent(self) -> None:
+        pinned = layer.pin_release(self.PARENT, {"VERSION_ID": "46"})
+        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "46"})
+
+    def test_rolling_parent_pins_only_id(self) -> None:
+        pinned = layer.pin_release({"ID": "arch"}, {})
+        self.assertEqual(pinned, {"ID": "arch"})
+
+    def test_pins_the_image_build(self) -> None:
+        pinned = layer.pin_release(self.PARENT | self.BUILD, {"SYSEXT_VERSION_ID": "1"})
+        self.assertEqual(
+            pinned, {"ID": "fedora", "VERSION_ID": "45"} | self.BUILD | {"SYSEXT_VERSION_ID": "1"}
+        )
+
+    def test_any_pins_nothing(self) -> None:
+        pinned = layer.pin_release(self.PARENT | self.BUILD, {"ID": "_any"})
+        self.assertEqual(pinned, {"ID": "_any"})
+
+
 def _elf(
     *, bits: int = 64, order: str = "<", e_type: int = 3, machine: int = 62, stack: int | None = 0o6
 ) -> bytes:
