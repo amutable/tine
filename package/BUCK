@@ -23,7 +23,7 @@ python.library(
     name = "extractor",
     srcs = ["extractor.py"],
     visibility = ["PUBLIC"],
-    deps = ["//:specs", "//:util", "//rootfs:rootfs"],
+    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//uapi16:storage"],
 )
 
 python.library(

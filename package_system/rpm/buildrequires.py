@@ -47,9 +47,6 @@ def query(spec: Spec) -> list[str]:
     topdir = Path(tempfile.gettempdir()) / "topdir"
     topdir.mkdir()
     with ExitStack() as stack:
-        # %prep can leave read-only directories in topdir, and Buck must be able to remove them. The stack
-        # exits in reverse order. capture_on_exit() then runs after source_overlay() unmounts the checkout.
-        stack.enter_context(rootfs.capture_on_exit(topdir))
         if source_tree is not None:
             stack.enter_context(rootfs.source_overlay(Path(source_tree), topdir / builder.CHECKOUT))
         staged = rpmbuild.stage(topdir, spec, source_tree)

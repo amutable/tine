@@ -9,7 +9,10 @@ the only part that differs, so the expansion, the ordering, the capture and the 
 here and a driver is left with one package at a time.
 """
 
+import os
+import stat
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict
@@ -18,6 +21,7 @@ import specs
 from util import fail
 
 import rootfs
+import storage
 
 
 class Spec(TypedDict):
@@ -44,6 +48,22 @@ def run(prog: str, unpack: Callable[[Path, Path], int], argv: list[str] | None =
     packages = expand(spec["packages"])
     if not packages:
         fail(f"{prog}: no packages to extract")
-    with rootfs.capture_on_exit(dest):
-        total = sum(unpack(package, dest) for package in packages)
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+        tree, snapshot = Path(scratch) / "root", Path(scratch) / "snapshot"
+        tree.mkdir()
+        total = sum(unpack(package, tree) for package in packages)
+        # The extract action doesn't run as root, and packages install files such as /etc/gshadow with
+        # mode 0000. Capture reads every file, and the Buck tree keeps only the executable bit anyway.
+        for directory, directories, files in os.walk(tree):
+            for name in directories + files:
+                path = os.path.join(directory, name)
+                st = os.lstat(path)
+                if stat.S_ISDIR(st.st_mode):
+                    os.chmod(path, 0o700)
+                elif not stat.S_ISLNK(st.st_mode):
+                    os.chmod(path, stat.S_IMODE(st.st_mode) | stat.S_IRUSR)
+        # stage1 is a box layer, so it is written from a snapshot like every other box layer. Buck
+        # stores no mtimes, so the epoch the capture clamps them to doesn't matter.
+        storage.capture(storage.Root(tree), snapshot, epoch=0)
+        rootfs.write_buck_tree(storage.Snapshot([snapshot]), dest)
     print(f"extracted {total} entries from {len(packages)} package(s) into {dest}", file=sys.stderr)

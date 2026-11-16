@@ -378,10 +378,10 @@ class TestCaptureOnExit(unittest.TestCase):
 
 
 class TestCapture(unittest.TestCase):
-    def test_makes_directories_writable_and_escapes_backslashes(self) -> None:
-        # Buck can't remove a tree through a directory without owner write access, and it can't store a
-        # name with a backslash. Capture a tree with a read-only directory that contains such a name, and
-        # check that the directory becomes writable and the name is escaped.
+    def test_escapes_backslashes_in_read_only_directories(self) -> None:
+        # Buck can't store a name with a backslash, and renaming it needs write access to its directory.
+        # Capture a tree with a read-only directory that contains such a name, and check that the name is
+        # escaped.
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
             tree = Path(directory)
             (tree / "readonly").mkdir()

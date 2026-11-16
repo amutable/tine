@@ -49,8 +49,8 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
     scratch = Path(tempfile.gettempdir())
     topdir = scratch / "topdir"
     topdir.mkdir()
-    # The outputs are mounted next to topdir and not inside it. capture_on_exit() rewrites topdir, and
-    # topdir is removed after a successful build.
+    # The outputs are mounted next to topdir and not inside it, because topdir is removed after a
+    # successful build.
     out, subpackages = scratch / "packages", scratch / "subpackages"
     outputs = {Path(spec["out"]): out, Path(spec["subpackages_out"]): subpackages}
     if spec["build_dir"] is not None:
@@ -62,11 +62,8 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
         util.remove_previous_binaries(out)
         util.remove_previous_binaries(subpackages)
         with (
-            # Buck must be able to remove topdir and the persistent build directory after a failed build.
-            # The with statement exits its contexts in reverse order, so capture_on_exit() runs after
-            # source_overlay() has unmounted CHECKOUT. Otherwise capture() would walk the merged checkout
-            # and copy up every directory whose mode it changes.
-            rootfs.capture_on_exit(topdir),
+            # Buck stores the persistent build directory, so its names must be ones that Buck can store.
+            rootfs.capture_on_exit(topdir / BUILD) if spec["build_dir"] is not None else nullcontext(),
             rootfs.source_overlay(Path(source_tree), topdir / CHECKOUT)
             if source_tree is not None
             else nullcontext(),
