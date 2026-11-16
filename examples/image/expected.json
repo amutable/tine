@@ -1,63 +1,63 @@
 {
   "arm64": {
     "boot-demo-preloaded.fedora": {
-      "sha256": "6fe1c31cf3cd18738a8fa96942e26db5a965797e1048965b130f24fd057cee4d"
+      "sha256": "24d19e606c51927b4f3c00d6a1924f73eac10df5d252a46cc51cdc5092836b99"
     },
     "boot-demo.fedora": {
-      "sha256": "574319ac8308185271180deef3897941b8b6585f74468c9c7e5cdcbe7bd9f0f7"
+      "sha256": "2eada7a4db56df5af777d35cc0a5799705ef801e3aa037c969bfda202857c1d6"
     },
     "boot-demo.fedora[boot][initrd]": {
-      "sha256": "6f2292a9e29dbecf7941218d343be2ebb89f9dcdddbe6f6bb9cf0e8069f60acf"
+      "sha256": "9c51528d1e7eddedf7db34ea5916c559d6593d1ce00127b634b5f9bef65a49b3"
     },
     "boot-demo.fedora[boot][kernel]": {
       "sha256": "c36519eeec20a7903bf7be7b4f60ae5f8cd942f72128f67a4946dafffa2dcfca"
     },
     "boot-demo.fedora[boot][uki]": {
-      "sha256": "bcc5e304ac1df794665dba9adaf610e3f0a1186644a4fb5dc8d08669354f9aa1"
+      "sha256": "e39098ee3ed6a69d9b94a43fcc44e9f298bd8e04d29749a80a5d4c1fc4c94350"
     },
     "boot-demo.fedora[disk-manifest]": {
-      "sha256": "1de0ae34c195c69676f5268c369ae88e55e918e90a631d3c5e3181b81b50120c"
+      "sha256": "e2be464a0ec7f3be1cac3e351addd46b815691cf6fc8c248b2a87292870fb4a0"
     },
     "boot-demo.fedora[manifests][esp]": {
-      "sha256": "b40f037db407693bb942fab62e7c1508d4264b533acba0541b58493d6246e0d7"
+      "sha256": "bb5074c2cfd3b0ef94bd4e0f14d50c880a818dff7f4cd89c498437669a0c61d5"
     },
     "boot-demo.fedora[manifests][usr]": {
-      "sha256": "23af6b9e676fcab1e514a684c546b8c8f94a9a5570b7c29f794ba8fa8d6e554b"
+      "sha256": "88cc7d85eab46a36b9554d0736f7340882b10f32b42e83f42d2d1d571b18c453"
     },
     "boot-demo.fedora[partitions][usr-verity]": {
-      "sha256": "2b22fba0e972ba4e0b20d2d4b6907b50cbc09647ee50c2d87de498181b386611"
+      "sha256": "9e08d300f9b78f338fbb0c6990ed36203a7e0f8679a9fe474ad4c97ede8c2376"
     },
     "boot-demo.fedora[partitions][usr]": {
-      "sha256": "9ea211f1a5be8f093fc836b1b235ab7ae7e3053cc61af0cac85ac0345b2c7264"
+      "sha256": "3d228d278db97fba87beb41bf86dc1653eacb28543dbbe7a8c7ab004cf389033"
     },
     "boot-demo.fedora[roothash]": {
-      "sha256": "045d3ba41ebd1409eceed28a71eb385ae74c4bb38de56ecf89ff33db9eb88e3a"
+      "sha256": "c3343e37ba996dd98cd2792c7a9ea20f79a9c8525bc7d42f98827f11cfb4ba0c"
     },
     "demo-ext.fedora": {
-      "sha256": "754a8373fa7555e81e1909671595c2765c11c2e8d9ae94cdada92d007d961a6c"
+      "sha256": "fcfd14dd982f0aafc5f57599d5dac13e4dc3be6467addd29aa40f187d4851105"
     }
   },
   "x86_64": {
     "boot-demo-preloaded.fedora": {
-      "sha256": "0f6d00fb08703d8f96db40f97f97a0df956abed030bac695556cfc1700e15005"
+      "sha256": "64f480bb81bbbe660b41067ec294a089995bef7ba1ba06ea38ae9baf74bd1af5"
     },
     "boot-demo.fedora": {
-      "sha256": "2a2aaf221a6e3c4df53ccf338ce38ac3cd86ac22c58da241ac8b454b7d2234ad"
+      "sha256": "af07c185de4d8df08de81a94a11029c82ec347ac00eaa3928fb4d4fe61739435"
     },
     "boot-demo.fedora[boot][initrd]": {
-      "sha256": "88cbd3c71fab4ff180742ef7dac9bb53cab8888958b1b1578d78a29eb5c5477e"
+      "sha256": "020645a706487536a096017daa669ea1f51cee97eb09b4bc23e444443d742694"
     },
     "boot-demo.fedora[boot][kernel]": {
       "sha256": "33f8c0e4c4293c5a7117fe6e70b9a964b33d53ef7c1c1ec4b6d1862d34d03d07"
     },
     "boot-demo.fedora[boot][uki]": {
-      "sha256": "66be205f5706f021c7d44f191bc0ebaef10b913b1d0a607eb6a36a2f47321282"
+      "sha256": "6482d82483c80ff76f053528d7067e296f3b03a16adc5f18e370fca236f66445"
     },
     "boot-demo.fedora[disk-manifest]": {
-      "sha256": "4944de58235cc0001eb78e7640dc80739e6849af08ee405e11126686537cf57a"
+      "sha256": "c968ba6949dddfcfa46b3ff1c94588bbd1a3fa6df2788e7e0719fb83d26ec846"
     },
     "boot-demo.fedora[manifests][esp]": {
-      "sha256": "1e3d79656bed817ae841486e6384dac133a12593fd4f267402eb595d43143adf"
+      "sha256": "8344b98d82f234330b11ce2abc4853bf926dbe413e4ba61a62f9aa78edd14f47"
     },
     "boot-demo.fedora[manifests][usr]": {
       "sha256": "39800a22881d67af6064afa5bb8f6d4b89928e79c280dd7ecb711c6cc5ecae73"
@@ -72,7 +72,7 @@
       "sha256": "4fb999d3253160388667d7a10742114d8c82b7f6a3db506de9d480507df5a191"
     },
     "demo-ext.fedora": {
-      "sha256": "c1ad6f58bc432fb8c0c96a2c57162c6bf900404399d29bf703bb1e10cc5e15b9"
+      "sha256": "6e3ef1c0b14d71d05dd6426307184ef5ed4ed0278346d21a17b36e750008a119"
     }
   }
 }
