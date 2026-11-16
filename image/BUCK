@@ -130,6 +130,8 @@ python.test(
         "finalize_test.py",
         "layer.py",
         "layer_test.py",
+        "manifest.py",
+        "manifest_test.py",
         "preload.py",
         "preload_test.py",
         "substitute.py",
@@ -171,7 +173,7 @@ python.binary(
     deps = [
         ":finalize",
         "//:specs",
-        "//:util",
+        "//uapi16:storage",
         "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
@@ -180,7 +182,7 @@ python.binary(
 python.library(
     name = "finalize",
     srcs = ["finalize.py"],
-    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage", "//uapi16:uapi16"],
+    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage"],
     visibility = ["PUBLIC"],
 )
 

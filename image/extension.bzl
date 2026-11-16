@@ -14,8 +14,11 @@ load(
     ":image.bzl",
     "ImageInfo",
     "ImageToolsInfo",
+    "LayerOperation",
     "check_name",
+    "extension_release_operation",
     "image_providers",
+    "ops",
 )
 load(":publish.bzl", "PublishedFile", "PublishedInfo", "published_metadata_subtargets")
 load(
@@ -116,6 +119,7 @@ def _declare_preset(
     seed: str | None,
     verity_key: SigningKeyInfo | None,
     extension: dict[str, typing.Any] | None = None,
+    operations: list[LayerOperation] = [],
     extra: list[Provider] = [],
 ) -> list[Provider]:
     """Declare a DDI of one verity protected root partition, and return the providers of its rule.
@@ -148,6 +152,7 @@ def _declare_preset(
         strip_pkgdb = extension != None,
         verity_key = verity_key,
         extension = extension,
+        operations = operations,
     )
     info = output.info
     published = PublishedInfo(
@@ -248,8 +253,15 @@ def declare_extension(
             "identity": str(ctx.label),
             "name": name,
             "parent": layers,
-            "releases": releases,
+            "releases": [release["path"] for release in releases],
         },
+        # An extension identifies itself through its extension-release files. An os-release in the
+        # extension would replace the os-release of the parent image in the merged tree.
+        operations = [extension_release_operation(release["path"], release["fields"], pin = layers > 0) for release in releases]
+        + [
+            ops.remove("/usr/lib/os-release"),
+            ops.remove("/etc/os-release"),
+        ],
         extra = [
             ExtensionInfo(
                 classes = [class_name for class_name, _ in _CLASSES if class_name in classes],

@@ -10,7 +10,7 @@ load(
     "ImageInfo",
     "ImageToolsInfo",
     "declare_out",
-    "pkgdb_paths",
+    "declare_stripped",
     "terminal_image_command",
 )
 
@@ -49,6 +49,7 @@ def declare_image_archive(
     keeps it, for a root nothing ever resolves packages in. The image's `[pkgdb]` subtarget still
     captures the database from the tree itself.
     """
+    image = declare_stripped(ctx, tools = tools, image = image, name = "strip-" + format, identifier = identifier, strip_pkgdb = strip_pkgdb)
     out = declare_out(ctx, identifier, "image." + format + _COMPRESSION_EXT[compression])
     listing = declare_out(ctx, identifier, "image." + format + ".Uapi16Manifest")
     cmd = terminal_image_command(
@@ -63,7 +64,6 @@ def declare_image_archive(
             "format": format,
             "manifest": listing.as_output(),
             "out": out.as_output(),
-            "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         },
     )
     ctx.actions.run(cmd, category = "image_" + format, identifier = identifier or format)
@@ -94,7 +94,6 @@ def declare_image_snapshot(
             "format": "snapshot",
             "manifest": None,
             "out": out.as_output(),
-            "pkgdb_paths": [],
         },
     )
     ctx.actions.run(cmd, category = "image_snapshot", identifier = identifier or "snapshot")

@@ -612,7 +612,8 @@ Required attributes:
 - `ops` (operation list): Build the root filesystem layer; passed on to `image.layer`.
 - `definitions` (list of `image.partition()` descriptors): Partition layout; `image.DEFAULT_ROOT_PARTITIONS`,
   `image.DEFAULT_USR_VERITY_PARTITIONS`, and `image.DEFAULT_SIGNED_USR_VERITY_PARTITIONS` are reusable
-  conventional layouts; a bootable disk needs system and ESP partitions.
+  conventional layouts; a bootable disk needs system and ESP partitions. A partition label can't contain
+  `%`, because repart would expand it as a specifier from the build box rather than from the image.
 
 Optional attributes:
 

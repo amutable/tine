@@ -253,24 +253,16 @@ def remove_previous_binaries(out: Path) -> None:
         previous.unlink()
 
 
-def remove_path(path: Path, with_parents: bool = False) -> None:
+def remove_path(path: Path) -> None:
     """Remove a file, symlink, or whole directory tree, if it is there at all.
 
     shutil.rmtree only handles real directories: it raises on files, on symlinks even when
-    they point at a directory, and on a missing path. With `with_parents`, also take the
-    directories the removal leaves empty, up to the first one still in use.
+    they point at a directory, and on a missing path.
     """
     if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
     elif path.is_symlink() or path.exists():
         path.unlink()
-    if not with_parents:
-        return
-    for parent in path.parents:
-        # `parent.parent` stops the walk at the filesystem root.
-        if parent == parent.parent or parent.is_symlink() or not parent.is_dir() or any(parent.iterdir()):
-            break
-        parent.rmdir()
 
 
 @contextmanager

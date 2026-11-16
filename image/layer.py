@@ -159,6 +159,41 @@ def _merge_os_release(raw_fields: object) -> None:
     path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
 
 
+def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, str]:
+    """Add the parent's identity to the extension-release fields `release` does not set.
+
+    The extension is a delta against the parent it was built on, so systemd must refuse to merge
+    it onto anything else: it pins the parent's ID and VERSION_ID, and the IMAGE_ID and
+    IMAGE_VERSION of a parent that is an image build. An extension that declares ID=_any matches
+    any OS and gets none of them.
+    """
+    if release.get("ID") == "_any":
+        return release
+    keys = ("ID", "VERSION_ID", "IMAGE_ID", "IMAGE_VERSION")
+    strict = {key: parent[key] for key in keys if key in parent and key not in release}
+    return strict | release
+
+
+def _extension_release(path: str, raw_fields: object, pin: bool) -> None:
+    """Write an extension-release file, pinned to the os-release of the root when `pin` is set."""
+    fields = dict(_mapping("extension_release", "fields", raw_fields))
+    if pin:
+        parent = {}
+        for candidate in ("/usr/lib/os-release", "/etc/os-release"):
+            if Path(candidate).is_file():
+                for line in Path(candidate).read_text().splitlines():
+                    key, sep, value = line.strip().partition("=")
+                    if key and sep and not key.startswith("#"):
+                        parent[key] = value.strip("\"'")
+                break
+        if "ID" not in parent:
+            util.fail("image op 'extension_release': the parent os-release lacks ID")
+        fields = pin_release(parent, fields)
+    destination = Path("/") / path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("".join(f"{key}={value}\n" for key, value in fields.items()))
+
+
 def _remove_glob(tree: Path, value: str) -> None:
     pattern = PurePosixPath(value)
     if not pattern.is_absolute() or ".." in pattern.parts:
@@ -295,6 +330,9 @@ def _apply(value: object, target: Path) -> None:
         case ["os_release", raw_fields]:
             with rootfs.chroot(target):
                 _merge_os_release(raw_fields)
+        case ["extension_release", str(path), raw_fields, bool(pin)]:
+            with rootfs.chroot(target):
+                _extension_release(path, raw_fields, pin)
         case ["depmod"]:
             finalize.depmod(target)
         case ["hwdb", bool(usr), bool(strict)]:

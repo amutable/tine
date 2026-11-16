@@ -10,9 +10,10 @@ load(
     "GPT_LABEL_LIMIT",
     "ImageInfo",
     "ImageToolsInfo",
+    "LayerOperation",
     "check_name",
     "declare_out",
-    "pkgdb_paths",
+    "declare_stripped",
     "spec_path",
     "terminal_image_command",
 )
@@ -51,6 +52,9 @@ def partition(
     check_name("partition artifact name", name)
     if label != None and len(label) > 36:
         fail("partition: label {!r} exceeds GPT's limit of 36 characters".format(label))
+    # repart expands specifiers such as %A in a label from the os-release of the build box, not of the image.
+    if label != None and "%" in label:
+        fail("partition: label {!r} contains %, which repart would expand as a specifier".format(label))
     if minimize not in (None, "off", "best", "guess"):
         fail("partition: invalid minimize value {!r}".format(minimize))
     if verity not in (None, "data", "hash", "signature"):
@@ -287,6 +291,7 @@ def declare_ddi(
     basename: str = "image",
     identifier: str | None = None,
     extension: dict[str, typing.Any] | None = None,
+    operations: list[LayerOperation] = [],
     exclude: list[str] = [],
     virtual_size: str | None = None,
 ) -> DdiOutput:
@@ -296,9 +301,21 @@ def declare_ddi(
     keeps it, for a system nothing ever resolves packages in. The image's `[pkgdb]` and `[sbom]`
     subtargets still capture it from the tree itself. `strip_paths` drops further files by glob, for
     what the partitions do not need but a sibling target reading the same layer still does.
-    `extension` makes the driver package the tree as an extension (see extension.bzl). The partitions
-    leave out the contents of the directories in `exclude`. `virtual_size` goes into the provider, see DdiInfo.
+    `extension` packages the tree as an extension (see extension.bzl). `operations` change the tree before
+    repart reads it. The partitions leave out the contents of the directories in `exclude`.
+    `virtual_size` goes into the provider, see DdiInfo.
     """
+    image = declare_stripped(
+        ctx,
+        tools = tools,
+        image = image,
+        name = "strip",
+        identifier = identifier,
+        strip_pkgdb = strip_pkgdb,
+        strip_paths = strip_paths,
+        operations = operations,
+    )
+
     _check_definitions(
         definitions,
         disk = disk,
@@ -396,11 +413,9 @@ def declare_ddi(
             }
             for value in imported_partitions
         ],
-        "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         "root_hash_out": None,
         "seed": seed,
         "signing": signing_key_spec(verity_key),
-        "strip_paths": strip_paths,
     }
 
     out = None
