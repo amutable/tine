@@ -50,8 +50,6 @@ class TestArchive(unittest.TestCase):
             (source / name).write_text(name)
         os.mkfifo(source / "fifo", 0o600)
         os.setxattr(source / "a", "user.example", b"value")
-        (source / "var/lib/database").mkdir(parents=True)
-        (source / "var/lib/database/contents").write_text("database")
         self.store = self.scratch / "store"
         storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
         self.spec = finalize.ImageSpec(lower=[str(self.store)])
@@ -67,7 +65,7 @@ class TestArchive(unittest.TestCase):
         spec = finalize.ImageSpec(lower=[str(self.store), str(child)])
 
         # The archive writers must group paths by the captured inodeToken rather than blob digest.
-        snapshot = finalize.snapshot(spec, epoch=EPOCH)
+        snapshot = storage.Snapshot(spec["lower"])
         archive._archive(snapshot, self.scratch / "image.tar", "tar", EPOCH, "none")
         archive._archive(snapshot, self.scratch / "image.cpio", "cpio", EPOCH, "none")
         with tarfile.open(self.scratch / "image.tar") as packed:
@@ -99,7 +97,7 @@ class TestArchive(unittest.TestCase):
         # links, independent equal files, modes, original nanoseconds and user attributes.
         out = self.scratch / "image.tar"
         with mock.patch.object(storage, "root", side_effect=AssertionError("unexpected reconstruction")):
-            archive._archive(finalize.snapshot(self.spec, epoch=EPOCH), out, "tar", EPOCH, "none")
+            archive._archive(storage.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
         with tarfile.open(out) as packed:
             objects = {entry.name: entry for entry in packed.getmembers()}
             self.assertTrue(objects["./linked"].islnk())
@@ -116,7 +114,7 @@ class TestArchive(unittest.TestCase):
         # Newc needs one payload and a shared inode per declared group, including empty files.
         # Equal contents alone must not give unrelated regular files the same inode.
         out = self.scratch / "image.cpio"
-        archive._archive(finalize.snapshot(self.spec, epoch=EPOCH), out, "cpio", EPOCH, "none")
+        archive._archive(storage.Snapshot(self.spec["lower"]), out, "cpio", EPOCH, "none")
         objects = {obj.name: obj for obj in cpio.read(out.read_bytes())}
         self.assertGreater(objects["./TRAILER!!!"].size, 0)
         self.assertEqual(objects["a"].ino, objects["linked"].ino)
@@ -130,9 +128,9 @@ class TestArchive(unittest.TestCase):
         self.assertTrue((dest / "empty").samefile(dest / "empty-linked"))
         self.assertFalse((dest / "a").samefile(dest / "b"))
 
-    def test_database_removal_matches_exported_manifest(self) -> None:
-        # Remove the database before writing both the archive and its listing. The manifest must
-        # describe the modes and timestamps that tar actually encodes.
+    def test_listing_matches_the_archive(self) -> None:
+        # The archive driver writes both the archive and its listing. The listing must describe the
+        # modes and timestamps that tar actually encodes.
         out, listing = self.scratch / "image.tar", self.scratch / "listing"
         spec = specs.write(
             self.scratch / "spec.json",
@@ -142,7 +140,6 @@ class TestArchive(unittest.TestCase):
                 "format": "tar",
                 "compression": "none",
                 "manifest": str(listing),
-                "pkgdb_paths": ["var/lib/database"],
             },
         )
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": str(EPOCH)}):
@@ -158,14 +155,12 @@ class TestArchive(unittest.TestCase):
                 self.assertEqual(ns, obj["mTimeNSec"])
         self.assertEqual(objects["a"]["mode"], 0o640)
         self.assertEqual(objects["linked"]["mode"], 0o640)
-        self.assertNotIn("var/lib/database", objects)
-        self.assertNotIn("var", objects)
 
     def test_snapshot_export_restores_after_materialization(self) -> None:
         # The snapshot store contains only safe blob names and a manifest. Copying the store before
         # export must not lose modes, times, hardlinks or logical filenames.
         out, copied = self.scratch / "snapshot", self.scratch / "copied"
-        archive._archive(finalize.snapshot(self.spec, epoch=EPOCH), out, "snapshot", EPOCH, "none")
+        archive._archive(storage.Snapshot(self.spec["lower"]), out, "snapshot", EPOCH, "none")
         shutil.copytree(out, copied, copy_function=shutil.copyfile)
         with chdir(self.scratch):
             archive.export(["--store", "copied", "exported"])
@@ -228,7 +223,6 @@ class TestArchive(unittest.TestCase):
                 "format": "tar",
                 "compression": "none",
                 "manifest": str(listing),
-                "pkgdb_paths": [],
             },
         )
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": str(EPOCH)}):
@@ -382,41 +376,9 @@ class TestArchive(unittest.TestCase):
             archive.export(["--store", str(self.store), str(destination)])
         self.assertFalse(destination.exists())
 
-    def test_database_removal_resolves_intermediate_symlinks(self) -> None:
-        # A database can be reached through a relative or absolute directory symlink. Direct
-        # terminal export must remove it inside the image in either case.
-        source = self.scratch / "source"
-        (source / "var/lib").rename(source / "relocated")
-        for index, target in enumerate(("../relocated", "/relocated")):
-            (source / "var/lib").unlink(missing_ok=True)
-            (source / "var/lib").symlink_to(target)
-            store = self.scratch / f"store-{index}"
-            storage.capture(storage.Root(source), store, epoch=CAPTURE_EPOCH)
-            with self.subTest(target=target):
-                spec = finalize.ImageSpec(lower=[str(store)])
-                snapshot = finalize.snapshot(spec, epoch=EPOCH, pkgdb_paths=["var/lib/database"])
-                names = {obj["name"] for obj in snapshot.objects[1:]}
-                self.assertNotIn("relocated/database", names)
-                self.assertNotIn("relocated/database/contents", names)
-                self.assertIn("var/lib", names)
-
-    def test_database_removal_updates_the_root_timestamp(self) -> None:
-        # Removing the last var subtree changes the root mtime, as removing it from a real tree
-        # would. That holds whether or not the database itself exists below var/lib.
-        source = self.scratch / "source"
-        for present in (True, False):
-            if not present:
-                shutil.rmtree(source / "var/lib/database")
-            os.utime(source, ns=(111, 111))
-            storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
-            with self.subTest(present=present):
-                snapshot = finalize.snapshot(self.spec, epoch=EPOCH, pkgdb_paths=["var/lib/database"])
-                self.assertEqual(snapshot.objects[0]["mTimeNSec"], EPOCH * 10**9)
-                self.assertNotIn("var", {obj["name"] for obj in snapshot.objects[1:]})
-
-    def test_missing_database_does_not_require_reconstruction(self) -> None:
+    def test_devices_do_not_require_reconstruction(self) -> None:
         # A cached snapshot can contain a device even when the current worker cannot create it.
-        # An absent database without symlink parents must still be archivable directly from blobs.
+        # Tar must still pack it directly from the snapshot.
         objects = uapi16.read(self.store / uapi16.MANIFEST)
         objects.append(
             {"name": "device", "type": "chr", "mode": 0o600, "mTimeNSec": 111, "major": 1, "minor": 3}
@@ -424,24 +386,9 @@ class TestArchive(unittest.TestCase):
         uapi16.write_objects(objects, self.store / uapi16.MANIFEST)
         out = self.scratch / "image.tar"
         with mock.patch.object(storage, "root", side_effect=AssertionError("unexpected reconstruction")):
-            snapshot = finalize.snapshot(self.spec, epoch=EPOCH, pkgdb_paths=["absent/database"])
-            archive._archive(snapshot, out, "tar", EPOCH, "none")
+            archive._archive(storage.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
         with tarfile.open(out) as packed:
             self.assertTrue(packed.getmember("./device").ischr())
-
-    def test_missing_database_leaves_nonempty_parent_times_unchanged(self) -> None:
-        # A missing database under a nonempty directory removes nothing. Its parent timestamps
-        # must remain unchanged rather than being set to the terminal epoch.
-        source = self.scratch / "source"
-        shutil.rmtree(source / "var/lib/database")
-        (source / "var/lib/keep").touch()
-        os.utime(source / "var/lib", ns=(333, 333))
-        os.utime(source, ns=(111, 111))
-        storage.capture(storage.Root(source), self.store, epoch=CAPTURE_EPOCH)
-        snapshot = finalize.snapshot(self.spec, epoch=EPOCH, pkgdb_paths=["var/lib/database"])
-        objects = {obj.get("name", "."): obj for obj in snapshot.objects}
-        self.assertEqual(objects["."]["mTimeNSec"], 111)
-        self.assertEqual(objects["var/lib"]["mTimeNSec"], 333)
 
     def test_cpio_listing_uses_terminal_timestamp_precision(self) -> None:
         # Cpio finalization must round the listing to whole seconds and omit user attributes,
@@ -455,7 +402,6 @@ class TestArchive(unittest.TestCase):
                 "manifest": str(listing),
                 "format": "cpio",
                 "compression": "none",
-                "pkgdb_paths": [],
             },
         )
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": str(EPOCH)}):
