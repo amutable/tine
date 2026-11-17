@@ -93,6 +93,33 @@ you do. It also refuses when resolving both package lists together picks other p
 got, for example `libcurl` where the parent has `libcurl-minimal`. Set `layered = False` to install such a
 box on its own.
 
+## Installing locally built packages
+
+A box can install packages that your project builds. Declare a local repository with the packages and
+list it in `additional_repositories`:
+
+```Starlark
+load("@tine//package:defs.bzl", "package")
+
+package.local_repository(
+    name = "systemd.repository",
+    packages = ["//packages/fedora/rawhide:systemd"],
+)
+
+box.new(
+    name = "dev.box",
+    additional_repositories = [":systemd.repository"],
+    packages = ["systemd"],
+    release = "catalog//:fedora.rawhide.release",
+)
+```
+
+The box prefers the packages of a local repository over those of its release, even when the release has a
+newer version. A box that uses local repositories resolves its packages during the build, so it takes no
+`architectures`. A child box installs from the local repositories of its parent as well.
+
+A box can't contain a package whose build runs in that same box: Buck rejects the dependency cycle.
+
 ## Building one box from any distribution
 
 When a box has to build from whichever release a project picks, select its packages per distribution

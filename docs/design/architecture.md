@@ -556,7 +556,15 @@ not decode stored whiteout markers, as that would walk every layer on every acti
 a box layer that deletes from the layers below.
 
 If the parent has different repositories, the box only shares the parent's package list and is installed
-on its own.
+on its own. A child box also installs from the local repositories of its parent, so it
+still layers over that parent. Without them, the child box would resolve the parent's package names from
+the release's repositories.
+
+A local repository of a box is indexed in the resolver box at the priority that a package manager gives
+local repositories, so the solver picks its packages over the release's. A locally built package changes
+whenever its sources do, so a committed lock would go stale on every rebuild. A box with a local repository
+therefore resolves during the build and keeps no lock. A root box has no resolver box to index the
+repository in, so a root box can't have local repositories.
 
 `cargo.package()` and `go.package()` add their `buildroot_packages` to their box in a layer that an anonymous
 target builds. Buck keys an anonymous target on its attributes, the box and the sorted package list, so
