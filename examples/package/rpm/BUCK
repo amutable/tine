@@ -230,3 +230,36 @@ box.sh_test(
     args = ["$(location :hello-image)"],
     distro = _DISTRO,
 )
+
+# A box prefers the locally built hello over Fedora's newer one, like the derived package manager above.
+box.new(
+    name = "hello.box",
+    additional_repositories = [":hello.repository"],
+    packages = ["hello"],
+    release = "catalog//:fedora.rawhide.release",
+)
+
+box.sh_test(
+    name = "hello-box-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = ":hello.box",
+    script = "test -e /usr/share/tine-package/archive",
+)
+
+# A child box installs from the local repositories of its parent, so it is a layer over the parent and
+# keeps the local hello.
+box.new(
+    name = "hello-child.box",
+    packages = ["jq"],
+    parent = ":hello.box",
+    release = "catalog//:fedora.rawhide.release",
+)
+
+box.sh_test(
+    name = "hello-child-box-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = ":hello-child.box",
+    script = "test -e /usr/share/tine-package/archive && jq --version",
+)

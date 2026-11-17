@@ -9,10 +9,12 @@ load("//package:release.bzl", "OsReleaseInfo")
 load(
     "//package:repository.bzl",
     "ConfiguredPackageRepositoryInfo",
+    "LocalPackageRepositoryInfo",
     "RepositoryUniverseInfo",
     "box_lock_path",
     "check_repository",
     "configure_repository",
+    "merge_repositories",
     "select_package_artifacts",
     "select_repositories",
 )
@@ -23,9 +25,14 @@ load(":runtime.bzl", "BoxInfo", "box_run")
 
 _REPOSITORY_PRIORITY = 99
 
+# A local repository takes precedence over the release's repositories, as it does in a package manager.
+_LOCAL_REPOSITORY_PRIORITY = 50
+
 BoxPackagesInfo = provider(
     doc = "The declarations of a box for a child box, or of its lock for one architecture for the child box's lock.",
     fields = {
+        # The local repositories of the box and its parents, which a child box installs from as well.
+        "additional_repositories": provider_field(list[Dependency], default = []),
         # The package system they are named in, which a child box must share.
         "package_system": provider_field(Dependency),
         # The top-level packages, its parent's among them, resolved for the configured architecture.
@@ -77,13 +84,20 @@ def _box_repositories(
     repositories: list[Dependency],
     package_system: Dependency,
     verifier_box: Dependency | BoxInfo | None,
+    resolver_box: Dependency | None,
 ) -> list[ConfiguredPackageRepositoryInfo]:
-    """The box's repositories at the native default priority, verified in `verifier_box` unless it is None."""
+    """The box's repositories, with the remote ones verified in `verifier_box` unless it is None.
+
+    A local repository is indexed in `resolver_box`, which only a root box lacks.
+    """
     keyrings = {}
     configured = []
     for repository in repositories:
         check_repository("box", repository)
-        configured.append(configure_repository(ctx, repository, _REPOSITORY_PRIORITY, package_system, verifier_box, keyrings))
+        if repository.get(LocalPackageRepositoryInfo) != None:
+            configured.append(configure_repository(ctx, repository, _LOCAL_REPOSITORY_PRIORITY, package_system, resolver_box, keyrings))
+        else:
+            configured.append(configure_repository(ctx, repository, _REPOSITORY_PRIORITY, package_system, verifier_box, keyrings))
     return configured
 
 def _solve(
@@ -145,7 +159,7 @@ def _install(
     packages = select_package_artifacts(
         ctx,
         transaction,
-        repositories = _box_repositories(ctx, repositories, package_system, box),
+        repositories = _box_repositories(ctx, repositories, package_system, box, box if isinstance(box, Dependency) else None),
         suffix = system.package_suffix,
         installed = installed,
     )
@@ -186,19 +200,28 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
     universe = release.repository_universe if release != None else ctx.attrs.repository_universe
     package_system = universe[RepositoryUniverseInfo].package_system
     system = package_system[PackageSystemInfo]
-    repositories = select_repositories(
-        universe,
-        ctx.attrs.enable_repository_groups,
-        ctx.attrs.disable_repository_groups,
-    )
-    configured_repositories = _box_repositories(ctx, repositories, package_system, None)
     parent = ctx.attrs.parent
     names = _effective_packages(ctx.attrs.packages, parent, package_system)
+    additional_repositories = (parent[BoxPackagesInfo].additional_repositories if parent != None else []) + ctx.attrs.additional_repositories
+    repositories = merge_repositories(
+        package_system,
+        select_repositories(
+            universe,
+            ctx.attrs.enable_repository_groups,
+            ctx.attrs.disable_repository_groups,
+        )
+        + additional_repositories,
+    )
 
     resolver_dep = ctx.attrs.resolver_box
     if resolver_dep == None and release != None:
         resolver_dep = release.box
     resolver_box = resolver_dep[BoxInfo] if resolver_dep != None else None
+    if additional_repositories and resolver_dep == None:
+        fail("box: a root box has no resolver box to index its additional repositories in")
+    if additional_repositories and ctx.attrs.lock != None:
+        fail("box: a box with additional repositories keeps no lock, because its packages are built locally")
+    configured_repositories = _box_repositories(ctx, repositories, package_system, None, resolver_dep)
 
     transaction = ctx.attrs.lock
     if transaction == None:
@@ -284,12 +307,21 @@ def _box_impl(ctx: AnalysisContext) -> list[Provider]:
         info,
         root,
         relaxed,
-        BoxPackagesInfo(packages = names, package_system = package_system),
+        BoxPackagesInfo(
+            additional_repositories = additional_repositories,
+            packages = names,
+            package_system = package_system,
+        ),
     ]
 
 _box = rule(
     impl = _box_impl,
     attrs = {
+        "additional_repositories": attrs.list(
+            attrs.dep(providers = [LocalPackageRepositoryInfo]),
+            default = [],
+            doc = "local repositories whose packages take precedence over the release's",
+        ),
         "disable_repository_groups": attrs.list(attrs.string(), default = []),
         "enable_repository_groups": attrs.list(attrs.string(), default = []),
         "labels": attrs.list(attrs.string(), default = []),
@@ -330,7 +362,7 @@ def _box_layer_impl(ctx: AnalysisContext) -> list[Provider]:
     package_system = parent[BoxPackagesInfo].package_system
     resolver = root.resolver if root.resolver != None else parent
     names = _effective_packages(ctx.attrs.packages, parent, package_system)
-    transaction = _resolve(ctx, package_system, resolver, _box_repositories(ctx, root.selected, package_system, None), names, root.arch)
+    transaction = _resolve(ctx, package_system, resolver, _box_repositories(ctx, root.selected, package_system, None, resolver), names, root.arch)
     layer = _install(
         ctx,
         package_system,
@@ -383,6 +415,7 @@ def _box_lock_impl(ctx: AnalysisContext) -> list[Provider]:
         ),
         release.package_system,
         None,
+        None,
     )
     packages = _effective_packages(ctx.attrs.packages, ctx.attrs.parent, release.package_system)
     return [
@@ -427,6 +460,7 @@ def new(
     name: str,
     packages: list[str] | Select,
     release: str | Select,
+    additional_repositories: list[str] | Select = [],
     architectures: list[str] = [],
     disable_repository_groups: list[str] | None = None,
     enable_repository_groups: list[str] | None = None,
@@ -450,6 +484,11 @@ def new(
     package system. When both are installed from the same repositories, the box is a layer over
     its parent unless `layered = False`; see "Box layers" in docs/design/architecture.md.
 
+    `additional_repositories` are local repositories, whose packages the box prefers over those of
+    its release. A child box also installs from the local repositories of its parent. A box with local
+    repositories resolves during the build, so it takes no `architectures`. A root box can't have
+    local repositories.
+
     `architectures` are the ones this box keeps a committed lock for: it is built for the host's
     alone, but refresh-catalog writes a lock per architecture, so a build on any of them has one to
     start from. A box that names none resolves during the build instead, which a root box cannot do.
@@ -469,6 +508,8 @@ def new(
         fail("box: a root box bootstraps itself and takes no resolver_box: {}".format(name))
     if root and parent != None:
         fail("box: a root box bootstraps itself and takes no parent: {}".format(name))
+    if (isinstance(additional_repositories, Select) or additional_repositories) and (root or architectures):
+        fail("box: a box with additional_repositories resolves during the build and can't be a root box or keep locks: {}".format(name))
     if root != (repository_universe != None):
         fail("box: a root box, and only a root box, takes repository_universe: {}".format(name))
     if isinstance(release, Select):
@@ -493,6 +534,7 @@ def new(
 
     _box(
         name = name,
+        additional_repositories = additional_repositories,
         packages = packages,
         release = None if root else release,
         repository_universe = repository_universe,
