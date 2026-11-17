@@ -472,6 +472,10 @@ runs the plan and install of its package manager in the tools box as well. The t
 build, so a new tool leaves the root box and its lock alone. The base release identifies where this userspace
 came from, not the only release it may operate on.
 
+A buildroot runs in the root box of its release. rpmbuild and the package manager run chrooted in the
+buildroot, so a buildroot action only needs Python and the package system outside of it. A buildroot doesn't
+depend on the tools box, so the tools box can contain packages that the project builds.
+
 A box runs on the build host. An image, a buildroot, a VM runner, a test and the AMI of a disk take their box
 as an ordinary dependency, so that the box takes their distribution. A box whose release follows the
 distribution, such as the tools box or `tine//tools:dev.box`, then builds from the release of the image.

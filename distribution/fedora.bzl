@@ -156,7 +156,10 @@ def _release(
     buildroot(
         name = name + ".buildroot",
         target_compatible_with = distribution.serves(name, architectures, in_box = True),
-        # The buildroot is configured for its release, so its box is the release's tools box.
+        # rpmbuild and dnf run chrooted in the buildroot. Outside of the chroot, a buildroot action only needs
+        # Python and the package system, and the root box contains both. The buildroot doesn't depend on the
+        # tools box, so the tools box can install a package that the buildroot builds.
+        box = ":" + name + ".box",
         incoming_transition = ":" + name + ".distribution",
         package_manager = ":" + name + ".package-manager",
         package_set = "buildroot",

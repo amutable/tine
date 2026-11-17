@@ -3,7 +3,7 @@
 
 """Shared native package buildroots."""
 
-load("//distribution:defs.bzl", "distribution")
+load("//box:runtime.bzl", "BoxInfo")
 load(":install.bzl", "install_packages")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
@@ -33,11 +33,11 @@ def _buildroot_impl(ctx: AnalysisContext) -> list[Provider]:
             fail("buildroot: unknown package set {!r}".format(ctx.attrs.package_set))
     if not packages:
         fail("buildroot: packages or package_set must be specified")
-    root = install_packages(ctx, ctx.attrs.package_manager, ctx.attrs._box, packages)
+    root = install_packages(ctx, ctx.attrs.package_manager, ctx.attrs.box, packages)
     return [
         DefaultInfo(default_output = root),
         BuildrootInfo(
-            box = ctx.attrs._box,
+            box = ctx.attrs.box,
             root = root,
             package_manager = ctx.attrs.package_manager,
         ),
@@ -47,6 +47,7 @@ _buildroot = rule(
     impl = _buildroot_impl,
     supports_incoming_transition = True,
     attrs = {
+        "box": attrs.dep(providers = [BoxInfo], doc = "the box that installs the buildroot and builds packages on it"),
         "package_manager": attrs.dep(providers = [PackageManagerInfo]),
         "package_set": attrs.option(
             attrs.string(),
@@ -58,7 +59,6 @@ _buildroot = rule(
             default = [],
             doc = "explicit packages installed in every package buildroot",
         ),
-        "_box": distribution.TOOLS_BOX_ATTR,
     },
 )
 
