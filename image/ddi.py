@@ -21,7 +21,7 @@ import specs
 import util
 
 import finalize
-import rootfs
+import storage
 import uapi16
 
 _SEED_NAMESPACE = uuid.UUID("5af2de99-4f9f-4e0b-a04b-bde36b068c4f")
@@ -88,21 +88,14 @@ class ImportedPartitionSpec(TypedDict):
     manifest: str | None
 
 
-class Release(TypedDict):
-    # The path of the extension-release file, relative to the image root.
-    path: str
-    # The driver writes the fields in this order.
-    fields: dict[str, str]
-
-
 class ExtensionSpec(TypedDict):
     # The number of leading lowers that form the parent image. Only the layers above them are packaged.
     parent: int
     # The seed derives from this target label, unless the spec gives a seed.
     identity: str
     name: str
-    # An extension has one extension-release file per class.
-    releases: list[Release]
+    # The image paths of the extension-release files, one per class.
+    releases: list[str]
 
 
 class Spec(finalize.ImageSpec):
@@ -120,17 +113,12 @@ class Spec(finalize.ImageSpec):
     definitions: list[WrittenPartitionSpec]
     partitions: list[ImportedPartitionSpec]
     root_hash_out: str | None
-    # Image paths holding the package database, stripped from the partitions.
-    pkgdb_paths: list[str]
-    # Globs, relative to the image root, of further files to strip from the partitions.
-    strip_paths: list[str]
     # Image directories whose contents the partitions leave out. The directories stay, empty.
     exclude: list[str]
     # Where to list what the composed disk carries, its partitions taken together.
     manifest: str | None
     # Filesystem -> the options mkfs is given for it.
     mkfs_options: dict[str, list[str]]
-    # The driver prepares the tree of an extension before repart copies it.
     extension: ExtensionSpec | None
 
 
@@ -169,7 +157,7 @@ class Definition:
         """The image paths this partition is populated from, whatever it is they are copied to."""
         return tuple(copy.split(":", 1)[0] for copy in self.copy_files)
 
-    def render(self, *, split: bool) -> str:
+    def render(self, *, split: bool, exclude: list[str]) -> str:
         lines = ["[Partition]", f"Type={self.type}"]
         _setting(lines, "Label", self.label)
         _setting(lines, "Format", self.filesystem)
@@ -181,6 +169,10 @@ class Definition:
         _setting(lines, "VerityMatchKey", self.verity_match_key)
         for copy in self.copy_files:
             lines.append(f"CopyFiles={copy}")
+        if self.copy_files:
+            # A trailing slash makes repart leave out the contents of the directory and keep the
+            # directory itself.
+            lines += [f"ExcludeFiles=/{directory.strip('/')}/" for directory in exclude]
         if split:
             # repart resolves this against the name of the image it writes, so a split artifact
             # leaves the run already named the way it is published: %t is the partition type and
@@ -250,82 +242,45 @@ def _derived_seed(
     return uuid.uuid5(_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _extension_seed(identity: str, name: str, releases: list[Release]) -> uuid.UUID:
-    """Derive the UUIDs of an extension from its name and release fields."""
+def _extension_seed(identity: str, name: str, releases: list[bytes]) -> uuid.UUID:
+    """Derive the UUIDs of an extension from its name and the contents of its release files."""
     digest = hashlib.sha256(identity.encode())
     digest.update(b"\0name\0" + name.encode())
     for release in releases:
-        for key, value in release["fields"].items():
-            digest.update(b"\0release\0" + key.encode() + b"=" + value.encode())
+        digest.update(b"\0release\0" + release)
     return uuid.uuid5(_EXTENSION_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _os_release(tree: Path) -> dict[str, str]:
-    """Parse the parent image's os-release for strict extension matching."""
-    for candidate in ("usr/lib/os-release", "etc/os-release"):
-        path = tree / candidate
-        if not path.is_file():
-            continue
-        fields = {}
-        for line in path.read_text().splitlines():
-            key, sep, value = line.strip().partition("=")
-            if key and sep and not key.startswith("#"):
-                fields[key] = value.strip("\"'")
-        return fields
-    util.fail("ddi: the parent image ships no os-release to match against")
-
-
-def pin_release(parent: dict[str, str], release: dict[str, str]) -> dict[str, str]:
-    """Add the parent's identity to the extension-release fields `release` does not set.
-
-    The extension is a delta against the parent it was built on, so systemd must refuse to merge
-    it onto anything else: it pins the parent's ID and VERSION_ID, and the IMAGE_ID and
-    IMAGE_VERSION of a parent that is an image build. An extension that declares ID=_any matches
-    any OS and gets none of them.
-    """
-    if release.get("ID") == "_any":
-        return release
-    keys = ("ID", "VERSION_ID", "IMAGE_ID", "IMAGE_VERSION")
-    strict = {key: parent[key] for key in keys if key in parent and key not in release}
-    return strict | release
-
-
-def _extension_layers(spec: Spec, extension: ExtensionSpec) -> tuple[list[Release], list[str | Path]]:
-    """Return the extension-release files and the layers the extension packages.
-
-    With a parent, the fields are pinned to the parent's os-release and the layers are the delta
-    above it. Without a parent, the function returns the releases and layers of the spec unchanged.
-    """
-    releases = extension["releases"]
-    parent = extension["parent"]
-    lowers: list[str | Path] = list(spec["lower"])
-    if not parent:
-        return releases, lowers
-    with rootfs.rootfs("/buildroot", lowers=lowers) as tree:
-        fields = _os_release(tree)
-    if "ID" not in fields:
-        util.fail("ddi: the parent os-release lacks ID")
-    pinned = [
-        Release(path=release["path"], fields=pin_release(fields, release["fields"])) for release in releases
+def _add_directories(snapshot: storage.Snapshot, full: list[uapi16.Object], names: list[str]) -> None:
+    """Add each top-level directory in `names` that `snapshot` lacks, with its metadata from `full`."""
+    present = {obj.get("name") for obj in snapshot.objects}
+    known = storage.by_name(full)
+    added = [
+        known.get(name, {"name": name, "type": "dir", "mode": 0o755, "mTimeNSec": full[0]["mTimeNSec"]})
+        for name in names
+        if name and name not in present
     ]
-    return pinned, lowers[parent:]
+    snapshot.objects = [snapshot.objects[0]] + sorted(
+        snapshot.objects[1:] + added, key=lambda obj: uapi16.order(obj["name"])
+    )
 
 
-def empty_directories(tree: Path, directories: list[str]) -> None:
-    """Remove the contents of each directory in `directories` below `tree`, and keep the directory."""
-    for relative in directories:
-        directory = tree / relative.lstrip("/")
-        if directory.is_dir() and not directory.is_symlink():
-            for child in directory.iterdir():
-                util.remove_path(child)
-
-
-def strip_files(tree: Path, patterns: list[str]) -> None:
-    """Remove everything below `tree` that one of the globs in `patterns` matches."""
-    for pattern in patterns:
-        # Sorted so a failure reports the same path every run, whatever order the tree is read in.
-        for path in sorted(tree.glob(pattern.lstrip("/"))):
-            util.remove_path(path)
+def _listing(
+    objects: list[uapi16.Object], roots: tuple[str, ...], exclude: list[str]
+) -> list[uapi16.Object]:
+    """Return the manifest of the objects that a partition copying `roots` contains."""
+    scope = uapi16.scope(roots)
+    excluded = [directory.strip("/") for directory in exclude]
+    listed: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE}]
+    for obj in objects[1:]:
+        name = obj["name"]
+        if scope != [""] and not any(name == root or name.startswith(root + "/") for root in scope):
+            continue
+        if any(name.startswith(directory + "/") for directory in excluded):
+            continue
+        listed.append(obj.copy())
+    uapi16.renumber(listed)
+    return listed
 
 
 def _write_definitions(
@@ -334,19 +289,21 @@ def _write_definitions(
     partitions: list[ImportedPartition],
     *,
     split: bool,
+    exclude: list[str],
 ) -> dict[str, str]:
     files = {}
     index = 0
     for partition in written:
         filename = f"{index:04}-{partition.definition.name}.conf"
-        (directory / filename).write_text(partition.definition.render(split=split))
+        (directory / filename).write_text(partition.definition.render(split=split, exclude=exclude))
         files[partition.definition.name] = filename
         index += 1
     for partition in partitions:
         metadata: dict[str, Any] = json.loads(partition.metadata.read_text())
         filename = f"{index:04}-{partition.definition.name}.conf"
-        copy_path = Path(f"/run/tine/repart/{index}.raw")
-        (directory / filename).write_text(partition.definition.render_import(copy_path, metadata))
+        # repart only takes an absolute CopyBlocks= path.
+        blocks = partition.blocks.absolute()
+        (directory / filename).write_text(partition.definition.render_import(blocks, metadata))
         index += 1
     return files
 
@@ -416,7 +373,9 @@ def _repart(
         "--dry-run=no",
         "--json=pretty",
         "--no-pager",
-        f"--root={tree}",
+        # With --root, repart opens CopyBlocks= paths below the tree, which doesn't contain the
+        # imported partitions. --copy-source only applies to CopyFiles= and ExcludeFiles=.
+        f"--copy-source={tree}",
         "--offline=yes",
         "--seed",
         str(seed),
@@ -467,60 +426,41 @@ def main(argv: list[str] | None = None) -> None:
     if not spec["out"] and not splits:
         util.fail("ddi: specify a disk output, split outputs, or both")
 
-    binds: list[tuple[str | Path, str | Path]] = [
-        (partition.blocks, f"/run/tine/repart/{index}.raw")
-        for index, partition in enumerate(partitions, start=len(written))
-    ]
     extension = spec["extension"]
-    releases: list[Release] = []
-    lowers = None
+    snapshot = storage.Snapshot(spec["lower"])
+    releases: list[bytes] = []
     if extension:
-        releases, lowers = _extension_layers(spec, extension)
+        full = snapshot.objects
+        objects = storage.by_name(full)
+        releases = [snapshot.content(objects[path]).read_bytes() for path in extension["releases"]]
+        if extension["parent"]:
+            storage.delta(snapshot, extension["parent"])
+        # The delta lacks a directory of the parent that the extension doesn't change, /opt most
+        # often. repart fails on a CopyFiles= source that doesn't exist.
+        sources = [source.strip("/") for partition in written for source in partition.definition.sources]
+        _add_directories(snapshot, full, sources)
+
+    # What each partition ends up containing, listed from the snapshot that repart copies. A
+    # definition takes the paths it names and nothing else, so a disk whose definitions are a /usr
+    # partition and an ESP has no listing of /var, which no partition contains.
+    listings = []
+    for partition in written:
+        if partition.manifest is not None:
+            listed = _listing(snapshot.objects, partition.definition.sources, spec["exclude"])
+            uapi16.write_listing(listed, partition.manifest)
+            listings.append(partition.manifest)
+
+    # An imported partition was listed by the invocation that filled it, and this one lists what it
+    # copies itself, so between them they list the whole disk. Imported first: a partition this
+    # invocation mounts over a directory another one contains is the one on top.
+    if spec["manifest"]:
+        imported = [it.manifest for it in partitions if it.manifest is not None]
+        uapi16.merge(imported + listings, Path(spec["manifest"]))
+
     with (
-        finalize.image(spec, program="ddi", lowers=lowers, binds=binds) as tree,
+        storage.root(snapshot, readonly=True) as restored,
         tempfile.TemporaryDirectory(prefix="repart.") as scratch_dir,
     ):
-        if extension:
-            # An extension identifies itself through its extension-release files. An os-release in
-            # the extension would replace the os-release of the parent image in the merged tree.
-            for path in ("usr/lib/os-release", "etc/os-release"):
-                (tree / path).unlink(missing_ok=True)
-        # The package database is a supply-chain artifact that the image's `[pkgdb]` and `[sbom]`
-        # subtargets capture from the tree, so partitions nothing resolves packages in can drop it.
-        for relative in spec["pkgdb_paths"]:
-            util.remove_path(tree / relative, with_parents=True)
-        strip_files(tree, spec["strip_paths"])
-        empty_directories(tree, spec["exclude"])
-
-        if extension:
-            # A delta may lack a directory the root partition copies, /opt most often. Create it,
-            # so that the DDI contains every directory of its classes.
-            for partition in written:
-                for source in partition.definition.sources:
-                    if source.strip("/"):
-                        (tree / source.strip("/")).mkdir(exist_ok=True)
-            for release in releases:
-                path = tree / release["path"]
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("".join(f"{key}={value}\n" for key, value in release["fields"].items()))
-
-        # What each partition ends up carrying, listed from the tree repart is about to copy. A
-        # definition takes the paths it names and nothing else, so a disk whose definitions are a
-        # /usr partition and an ESP has no listing of /var, which lands nowhere.
-        epoch = int(os.environ["SOURCE_DATE_EPOCH"])
-        listings = []
-        for partition in written:
-            if partition.manifest is not None:
-                uapi16.write(tree, partition.manifest, epoch, roots=partition.definition.sources)
-                listings.append(partition.manifest)
-
-        # An imported partition was listed by the invocation that filled it, and this one holds
-        # what it copies itself, so between them they list the whole disk. Imported first: a
-        # partition this invocation mounts over a directory another one holds is the one on top.
-        if spec["manifest"]:
-            imported = [it.manifest for it in partitions if it.manifest is not None]
-            uapi16.merge(imported + listings, Path(spec["manifest"]))
-
         scratch = Path(scratch_dir)
         repart_definitions = scratch / "repart.d"
         repart_definitions.mkdir()
@@ -529,6 +469,7 @@ def main(argv: list[str] | None = None) -> None:
             written,
             partitions,
             split=bool(splits),
+            exclude=spec["exclude"],
         )
 
         if spec["seed"] is not None:
@@ -543,7 +484,7 @@ def main(argv: list[str] | None = None) -> None:
         disk = scratch / f"{spec['basename']}.raw" if splits else out
         assert disk is not None  # one of a disk output and split outputs is required
         rows = _repart(
-            tree,
+            restored.path,
             repart_definitions,
             disk,
             seed=seed,

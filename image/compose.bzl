@@ -15,6 +15,7 @@ load(
     "ImageArchiveInfo",
     "declare_image_archive",
     "declare_image_directory",
+    "image_directory_providers",
 )
 load(
     ":boot.bzl",
@@ -138,7 +139,6 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
         # instead of packages.
         package_sets = ["initrd"] + ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     cpio = declare_image_archive(
@@ -152,6 +152,7 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
     return image_providers(
         default_outputs = [cpio.archive],
         extra = [InitrdInfo(cpio = cpio, image = image), cpio],
+        sub_targets = {"manifest": [DefaultInfo(default_output = cpio.manifest)]},
         image = image,
     )
 
@@ -223,7 +224,6 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = generated(ctx.attrs.ops, ctx.attrs.packages + ctx.attrs.package_sets),
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     archive = declare_image_archive(
@@ -236,6 +236,7 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
     return image_providers(
         default_outputs = [archive.archive],
         extra = [archive],
+        sub_targets = {"manifest": [DefaultInfo(default_output = archive.manifest)]},
         image = image,
     )
 
@@ -268,7 +269,6 @@ def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = ctx.attrs.ops,
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     return declare_extension(
@@ -305,7 +305,6 @@ def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
         ops = _PORTABLE_MOUNT_POINTS + generated(ctx.attrs.ops, ctx.attrs.packages + ctx.attrs.package_sets),
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     return declare_portable(
@@ -350,7 +349,6 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         package_sets = ctx.attrs.package_sets,
         parent = ctx.attrs.parent[ImageInfo] if ctx.attrs.parent != None else None,
         packages = ctx.attrs.packages,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = version,
     )
 
@@ -484,7 +482,8 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             "initrd": [
                 DefaultInfo(
                     default_output = initrd_info.cpio.archive,
-                    sub_targets = published_metadata_subtargets(initrd_info.image, "{}.initrd".format(basename), version),
+                    sub_targets = published_metadata_subtargets(initrd_info.image, "{}.initrd".format(basename), version)
+                    | {"manifest": [DefaultInfo(default_output = initrd_info.cpio.manifest)]},
                 ),
                 initrd_info,
             ],
@@ -539,7 +538,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     sub_targets = dict(composed.sub_targets)
     sub_targets.update(manifest_sub_targets(manifests))
     sub_targets.update(boot_sub_targets)
-    sub_targets["directory"] = [DefaultInfo(default_output = directory.directory), directory]
+    sub_targets["directory"] = image_directory_providers(directory)
     if bootable:
         sub_targets["ami"] = declare_ami(
             ctx.actions,
@@ -594,7 +593,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         default_outputs = [raw],
         extra = [directory, composed.info, published] + boot_providers,
         image = top,
-        sub_targets = sub_targets | published_metadata_subtargets(top, basename, version),
+        sub_targets = published_metadata_subtargets(top, basename, version) | sub_targets,
     )
 
 _DISK_ATTRS = (

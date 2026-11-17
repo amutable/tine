@@ -5,6 +5,7 @@
 
 import errno
 import os
+import stat
 import tempfile
 import unittest
 from contextlib import ExitStack, chdir, nullcontext
@@ -13,6 +14,7 @@ from typing import override
 from unittest import mock
 
 import rootfs
+import storage
 from isolation import Bind
 
 
@@ -41,8 +43,6 @@ class TestSourceOverlay(unittest.TestCase):
         (self.source / "escaping-dangling-link").symlink_to(self.scratch / "absent")
         (self.source / "empty").mkdir()
         (self.source / "readonly").mkdir(mode=0o555)
-        for name in (".wh.original", ".wh..wh..opq", ".esc.literal"):
-            (self.source / name).write_text(name, encoding="utf-8")
         # overlayfs takes the mode and the times of the mount root from the upper directory. The
         # setgid bit and the old timestamp make the test fail if the root has the mode and the
         # times of a fresh upper directory.
@@ -59,7 +59,7 @@ class TestSourceOverlay(unittest.TestCase):
             pass
         self.assertIn("Locked mounts below the source can cause EINVAL", "".join(raised.exception.__notes__))
 
-    def test_preserves_the_tree_without_decoding_image_markers(self) -> None:
+    def test_preserves_the_tree(self) -> None:
         with chdir(self.project), rootfs.source_overlay(Path("input"), self.scratch / "build/src") as tree:
             original = {path.relative_to(self.source) for path in self.source.rglob("*")}
             self.assertEqual({path.relative_to(tree) for path in tree.rglob("*")}, original)
@@ -185,7 +185,7 @@ class TestBuildrootScratch(unittest.TestCase):
             mock.patch.dict(os.environ),
         ):
             os.environ.pop("BUCK_SCRATCH_PATH", None)
-            with rootfs.rootfs(scratch / "target", lowers=[lower], apivfs=True) as tree:
+            with rootfs.rootfs(scratch / "target", bind=lower, apivfs=True) as tree:
                 (tree / "var/tmp/staged").write_text("staged", encoding="utf-8")
                 self.assertTrue((tree / "var/tmp").is_mount())
                 self.assertEqual(list(scratch.glob("var-tmp.*")), [])
@@ -204,7 +204,7 @@ class TestBuildrootScratch(unittest.TestCase):
         with (
             mock.patch.dict(os.environ, environment),
             mock.patch.object(tempfile, "tempdir", None),
-            rootfs.rootfs(scratch / "target", lowers=[lower], apivfs=True) as tree,
+            rootfs.rootfs(scratch / "target", bind=lower, apivfs=True) as tree,
         ):
             (tree / "var/tmp/staged").write_text("staged", encoding="utf-8")
             backing = next(scratch.glob("var-tmp.*"))
@@ -227,13 +227,15 @@ class TestMountPoints(unittest.TestCase):
                 self.subTest(apivfs=apivfs),
                 rootfs.rootfs(
                     scratch / "target",
-                    lowers=[lower],
+                    bind=lower,
                     binds=[] if apivfs else [(scratch, "/run/project")],
                     apivfs=apivfs,
                 ) as tree,
             ):
+                # The bind of `scratch` is on the same filesystem as the root, so is_mount() can't detect
+                # it. `scratch` contains `lower`, and the root doesn't.
                 if not apivfs:
-                    self.assertTrue((tree / outside.relative_to("/") / "project").is_mount())
+                    self.assertTrue((tree / outside.relative_to("/") / "project/lower").is_dir())
                 self.assertFalse(outside.is_mount())
                 self.assertFalse((outside / "project").exists())
 
@@ -350,7 +352,7 @@ class TestCaptureOnExit(unittest.TestCase):
             with rootfs.capture_on_exit(output):
                 pass
 
-        capture.assert_called_once_with(output, None)
+        capture.assert_called_once_with(output)
 
     def test_capture_failure_does_not_hide_body_failure(self) -> None:
         output = Path("output")
@@ -376,46 +378,62 @@ class TestCaptureOnExit(unittest.TestCase):
 
 
 class TestCapture(unittest.TestCase):
-    def test_keeps_an_opaque_mark_only_where_a_lower_layer_has_the_directory(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
-            lower, upper = Path(directory) / "lower", Path(directory) / "upper"
-            (lower / "usr/share/doc/old").mkdir(parents=True)
-            (lower / "usr/share/doc/old/file").write_text("old")
-            for name in ("old", "new"):
-                (upper / "usr/share/doc" / name).mkdir(parents=True, exist_ok=True)
-                os.setxattr(str(upper / "usr/share/doc" / name), b"user.overlay.opaque", b"y")
-
-            rootfs.capture(upper, [lower])
-
-            self.assertEqual(rootfs.deletions(upper), [Path("usr/share/doc/old/.wh..wh..opq")])
-            self.assertRaises(OSError, os.getxattr, str(upper / "usr/share/doc/new"), b"user.overlay.opaque")
-
-    def test_keeps_every_opaque_mark_without_lower_layers(self) -> None:
+    def test_escapes_backslashes_in_read_only_directories(self) -> None:
+        # Buck can't store a name with a backslash, and renaming it needs write access to its directory.
+        # Capture a tree with a read-only directory that contains such a name, and check that the name is
+        # escaped.
         with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
             tree = Path(directory)
-            (tree / "new").mkdir()
-            os.setxattr(str(tree / "new"), b"user.overlay.opaque", b"y")
+            (tree / "readonly").mkdir()
+            (tree / "readonly/back\\slash").write_text("kept")
+            (tree / "readonly").chmod(0o555)
 
             rootfs.capture(tree)
 
-            self.assertEqual(rootfs.deletions(tree), [Path("new/.wh..wh..opq")])
+            self.assertEqual((tree / "readonly").stat().st_mode & 0o777, 0o755)
+            self.assertEqual([path.name for path in (tree / "readonly").iterdir()], [".esc.back%5Cslash"])
 
 
-class TestDeletions(unittest.TestCase):
-    def test_lists_whiteouts_and_opaque_markers_only(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
-            delta = Path(directory)
-            (delta / "etc/opaque").mkdir(parents=True)
-            (delta / "etc/added").write_text("added")
-            (delta / "etc/.wh.removed").write_bytes(b"")
-            (delta / "etc/opaque/.wh..wh..opq").write_bytes(b"")
-            (delta / ".esc..wh.esc%5Caped").write_bytes(b"")
-            (delta / ".esc.back%5Cslash").write_text("kept")
+class TestWriteBuckTree(unittest.TestCase):
+    @override
+    def setUp(self) -> None:
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp")))
+        self.tree = self.scratch / "tree"
+        self.tree.mkdir()
+        self.store = self.scratch / "store"
 
-            self.assertEqual(
-                rootfs.deletions(delta),
-                [Path(".esc..wh.esc%5Caped"), Path("etc/.wh.removed"), Path("etc/opaque/.wh..wh..opq")],
-            )
+    def test_buck_tree_contains_only_what_buck_stores(self) -> None:
+        # A box layer directory must contain only regular files, directories and symlinks with modes
+        # that Buck stores. Capture a tree with a hardlink, an extended attribute, a private directory
+        # and a name containing a backslash. The Buck tree must contain separate files with normalized
+        # modes, no extended attributes and the escaped name.
+        (self.tree / "a").write_text("identical")
+        (self.tree / "a").chmod(0o640)
+        (self.tree / "b").write_text("identical")
+        (self.tree / "b").chmod(0o755)
+        os.link(self.tree / "a", self.tree / "linked")
+        os.setxattr(self.tree / "a", "user.example", b"value")
+        (self.tree / "private").mkdir(mode=0o700)
+        (self.tree / "back\\slash").write_text("escaped")
+        (self.tree / "link").symlink_to("a")
+        storage.capture(storage.Root(self.tree), self.store, epoch=0)
+        out = self.scratch / "out"
+        rootfs.write_buck_tree(storage.Snapshot([self.store]), out)
+        self.assertEqual(stat.S_IMODE((out / "a").stat().st_mode), 0o644)
+        self.assertEqual(stat.S_IMODE((out / "b").stat().st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE((out / "private").stat().st_mode), 0o755)
+        self.assertFalse((out / "a").samefile(out / "linked"))
+        self.assertEqual((out / "linked").read_text(), "identical")
+        self.assertEqual(os.listxattr(out / "a"), [])
+        self.assertEqual((out / ".esc.back%5Cslash").read_text(), "escaped")
+        self.assertEqual(os.readlink(out / "link"), "a")
+
+    def test_buck_tree_rejects_special_files(self) -> None:
+        # Buck cannot store a FIFO. Writing the Buck tree of a snapshot that contains one must fail.
+        os.mkfifo(self.tree / "fifo")
+        storage.capture(storage.Root(self.tree), self.store, epoch=0)
+        with self.assertRaises(SystemExit):
+            rootfs.write_buck_tree(storage.Snapshot([self.store]), self.scratch / "out")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> None:
 
     epoch = int(os.environ["SOURCE_DATE_EPOCH"])
     out = Path(spec["out"])
-    with finalize.image(spec, program="pkgdb") as tree:
+    with finalize.image(spec) as tree:
         source = tree / debfile.ADMINDIR
         status = source / "status"
         if not status.is_file():

@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Finalizing an image: the generators a layer persists, and the preparation a terminal applies.
+"""Finalizing an image: the generators a layer persists, and the roots and snapshots terminals read.
 
 A generator turns installed package content into the derived state a system boots from, such as
 the module and hardware databases or the locale archive. Each is one image operation of its own,
-and what it writes is an ordinary file, so a layer captures it. Terminal preparation is the other
-half: the authored tmpfiles snippets a driver applies to the stack it just mounted, which no
-layer can hold.
+and what it writes is an ordinary file, so a layer captures it.
 """
 
 import bz2
@@ -18,73 +16,30 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Generator, Sequence
+from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
 
 from util import fail
 
 import rootfs
+import storage
 
 
 class ImageSpec(TypedDict):
     """The half of a terminal driver's spec that names the image itself."""
 
     lower: list[str]
-    tmpfiles: list[str]
-
-
-# The directories whose whole point is a mode, so a layer cannot carry them: sticky and
-# world-writable, which is exactly what Buck cannot store and the tar filter strips.
-_WORLD_WRITABLE = ("tmp", "var/tmp")
-
-
-def world_writable(tree: Path) -> None:
-    """Restore the mode on the temporary directories, which nothing upstream of here can keep.
-
-    Buck stores no mode beyond the executable bit, so a package's `0o1777` is gone by the time a
-    layer is a build artifact however faithfully it was extracted. Here is the last point before
-    the image is written, and the only one where the mode survives into it.
-    """
-    for name in _WORLD_WRITABLE:
-        path = tree / name
-        if path.is_dir() and not path.is_symlink():
-            path.chmod(0o1777)
 
 
 @contextlib.contextmanager
-def image(
-    spec: ImageSpec,
-    *,
-    program: str,
-    lowers: Sequence[str | Path] | None = None,
-    binds: Sequence[tuple[str | Path, str | Path]] | None = None,
-) -> Generator[Path]:
-    """Mount the image stack the spec names and yield the finalized tree."""
-    with rootfs.rootfs(
-        "/buildroot", lowers=spec["lower"] if lowers is None else lowers, binds=binds
-    ) as tree:
-        # Before the snippets, so an image that states a mode of its own still wins.
-        world_writable(tree)
-        apply_tmpfiles(tree, spec["tmpfiles"], program=program)
+def image(spec: ImageSpec) -> Generator[Path]:
+    """Reconstruct the root of the image the spec names and mount it read-only at /buildroot."""
+    with (
+        storage.root(storage.Snapshot(spec["lower"]), readonly=True) as restored,
+        rootfs.rootfs("/buildroot", bind=restored.path) as tree,
+    ):
         yield tree
-
-
-def apply_tmpfiles(tree: Path, snippets: list[str], *, program: str) -> None:
-    """Apply authored tmpfiles configuration beneath `tree`."""
-    if not snippets:
-        return
-    tmpfiles = shutil.which("systemd-tmpfiles")
-    if tmpfiles is None:
-        fail(f"{program}: systemd-tmpfiles is required to finalize this image")
-
-    config = "".join(snippet if snippet.endswith("\n") else snippet + "\n" for snippet in snippets)
-    subprocess.run(
-        [tmpfiles, "--create", f"--root={tree}", "-"],
-        input=config,
-        text=True,
-        check=True,
-    )
 
 
 def _box_tool(name: str, what: str) -> str:

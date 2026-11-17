@@ -121,27 +121,13 @@ def scope(roots: Sequence[str]) -> list[str]:
     return kept
 
 
-def entries(tree: Path, roots: Sequence[str] = ()) -> Iterator[Entry]:
-    """Yield every inode below `tree` in manifest order, or only those `roots` reach.
+def entries(tree: Path) -> Iterator[Entry]:
+    """Yield every inode below `tree` in manifest order.
 
     Pre-order, because the format wants a directory's contents to follow it immediately, and sorted
     on the raw name bytes, which is an order neither the locale nor the filesystem can shift.
-
-    A root the image does not have is skipped rather than refused: repart copies what a definition
-    names if it is there, so the ESP definition can name both /boot and /efi for images that have
-    one or the other.
     """
-    for name in scope(roots) if roots else [""]:
-        if name == "":
-            yield from _below(tree, "")
-            continue
-        path = tree / name
-        if not path.is_symlink() and not path.exists():
-            continue
-        st = path.lstat()
-        yield Entry(name=check_name(name), path=path, st=st)
-        if stat.S_ISDIR(st.st_mode):
-            yield from _below(path, name + "/")
+    yield from _below(tree, "")
 
 
 def _below(directory: Path, prefix: str) -> Iterator[Entry]:
@@ -177,8 +163,11 @@ def _digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> Object:
-    """Describe one inode using UAPI.16 metadata and content fields."""
+def file_object(entry: Entry, *, epoch: int, token: int | None = None, digest: str | None = None) -> Object:
+    """Describe one inode using UAPI.16 metadata and content fields.
+
+    `digest` is the known SHA-256 of a regular file's contents. Without it, the file is read.
+    """
     kind = inode_type(entry.st.st_mode)
     obj: Object = {"name": entry.name, "type": kind}
     target = os.fsencode(os.readlink(entry.path)) if kind == "lnk" else b""
@@ -197,6 +186,28 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> Object
     obj["mTimeNSec"] = min(entry.st.st_mtime_ns, epoch * _NANOSECONDS)
     if entry.st.st_mtime_ns < 0:
         fail(f"manifest: {entry.name!r} has a timestamp before the UNIX epoch")
+    attributes: dict[str, Xattr] = {}
+    for name in sorted(os.listxattr(entry.path, follow_symlinks=False)):
+        if not name.startswith("user.") or name.startswith("user.overlay."):
+            continue
+        short = name.removeprefix("user.")
+        if not short or any(ord(c) < 32 or ord(c) == 127 for c in short):
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        try:
+            short.encode("utf-8")
+        except UnicodeEncodeError:
+            fail(f"manifest: unsupported extended attribute name {name!r}")
+        value = os.getxattr(entry.path, name, follow_symlinks=False)
+        try:
+            text = value.decode("utf-8")
+        except UnicodeDecodeError:
+            text = None
+        if text is None or "\0" in text:
+            attributes[short] = {"base64": base64.b64encode(value).decode("ascii")}
+        else:
+            attributes[short] = {"text": text}
+    if attributes:
+        obj["extendedAttributes"] = {"user": attributes}
     if token is not None:
         obj["inodeToken"] = token
     if kind == "lnk":
@@ -204,10 +215,27 @@ def file_object(entry: Entry, *, epoch: int, token: int | None = None) -> Object
         # it inline; base64 also spares it the UTF-8 rule a name has to satisfy.
         obj["contents"] = [{"literal": base64.b64encode(target).decode("ascii")}]
     if kind == "reg":
-        # No `contents`: for a regular file the format then implies the file of that name beside
-        # the manifest, which is what this manifest describes.
-        obj["sha256"] = _digest(entry.path)
+        obj["sha256"] = digest or _digest(entry.path)
     return obj
+
+
+def symlink_target(obj: Object) -> str:
+    return os.fsdecode(base64.b64decode(obj["contents"][0]["literal"]))
+
+
+def xattr_value(value: Xattr) -> bytes:
+    return value["text"].encode() if "text" in value else base64.b64decode(value["base64"])
+
+
+def write_listing(objects: Sequence[Object], out: Path) -> int:
+    # The `contents` of a regular file names a blob, and the blob only exists inside a store.
+    listed: list[Object] = []
+    for obj in objects:
+        copy = obj.copy()
+        if copy.get("type") != "lnk":
+            copy.pop("contents", None)
+        listed.append(copy)
+    return write_objects(listed, out)
 
 
 def _record(obj: Object) -> bytes:
@@ -218,31 +246,8 @@ def _record(obj: Object) -> bytes:
     )
 
 
-def records(tree: Path, epoch: int, roots: Sequence[str] = ()) -> Iterator[bytes]:
-    """The whole sequence for `tree`: the root object, then one object per inode below it."""
-    # The root object carries the media type alone, which is what marks the sequence a manifest.
-    # Its mode and mtime would be the ephemeral overlay upper's rather than the image's, and the
-    # format defaults a nameless first object to a directory anyway.
-    yield _record({"mediaType": MEDIA_TYPE})
-    found = list(entries(tree, roots))
-    tokens = hardlink_tokens(found)
-    for entry in found:
-        yield _record(file_object(entry, epoch=epoch, token=tokens.get(entry.inode)))
-    yield _record({"mediaType": TRAILER_TYPE})
-
-
-def write(tree: Path, out: Path, epoch: int, roots: Sequence[str] = ()) -> int:
-    written = 0
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("wb") as stream:
-        for record in records(tree, epoch, roots):
-            stream.write(record)
-            written += 1
-    return written
-
-
 def read(source: Path) -> list[Object]:
-    """Read a manifest that `write` or `write_objects` produced.
+    """Read a manifest that `write_objects` produced.
 
     Only a complete manifest ends with the trailer, so a manifest that a failed write cut short fails
     here instead of becoming a snapshot.
@@ -292,11 +297,15 @@ def merge(sources: Sequence[Path], out: Path) -> int:
             objects[str(obj["name"])] = obj
         offset += highest
 
-    tokens: dict[int, int] = {}
-    counts = Counter(obj.get("inodeToken") for obj in objects.values() if obj.get("inodeToken"))
     ordered = [objects[name] for name in sorted(objects, key=order)]
-    for obj in ordered:
+    renumber(ordered)
+    return write_objects([{"mediaType": MEDIA_TYPE}, *ordered], out)
+
+
+def renumber(objects: Sequence[Object]) -> None:
+    tokens: dict[int, int] = {}
+    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    for obj in objects:
         token = obj.pop("inodeToken", None)
         if isinstance(token, int) and counts[token] > 1:
             obj["inodeToken"] = tokens.setdefault(token, len(tokens) + 1)
-    return write_objects([{"mediaType": MEDIA_TYPE}, *ordered], out)

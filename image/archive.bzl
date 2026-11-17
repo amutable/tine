@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Archive and materialized-directory image outputs."""
+"""Archive and directory image outputs."""
 
 load("//distribution:defs.bzl", "distribution")
 load(
@@ -10,7 +10,7 @@ load(
     "ImageInfo",
     "ImageToolsInfo",
     "declare_out",
-    "pkgdb_paths",
+    "declare_stripped",
     "terminal_image_command",
 )
 
@@ -22,13 +22,16 @@ ImageArchiveInfo = provider(
     fields = {
         "archive": provider_field(Artifact),
         "format": provider_field(str),
+        "manifest": provider_field(Artifact),
     },
 )
 
 ImageDirectoryInfo = provider(
-    doc = "A materialized logical image directory.",
+    doc = "A stored snapshot and its command for faithful directory export.",
     fields = {
         "directory": provider_field(Artifact),
+        "export": provider_field(RunInfo),
+        "manifest": provider_field(Artifact),
     },
 )
 
@@ -48,7 +51,9 @@ def declare_image_archive(
     keeps it, for a root nothing ever resolves packages in. The image's `[pkgdb]` subtarget still
     captures the database from the tree itself.
     """
+    image = declare_stripped(ctx, tools = tools, image = image, name = "strip-" + format, identifier = identifier, strip_pkgdb = strip_pkgdb)
     out = declare_out(ctx, identifier, "image." + format + _COMPRESSION_EXT[compression])
+    listing = declare_out(ctx, identifier, "image." + format + ".Uapi16Manifest")
     cmd = terminal_image_command(
         ctx,
         # One image can be archived in several formats, so the spec is named like the output.
@@ -59,12 +64,12 @@ def declare_image_archive(
         spec = {
             "compression": compression,
             "format": format,
+            "manifest": listing.as_output(),
             "out": out.as_output(),
-            "pkgdb_paths": pkgdb_paths(image) if strip_pkgdb else [],
         },
     )
     ctx.actions.run(cmd, category = "image_" + format, identifier = identifier or format)
-    return ImageArchiveInfo(archive = out, format = format)
+    return ImageArchiveInfo(archive = out, format = format, manifest = listing)
 
 ARCHIVE_ATTRS = {
     "compression": attrs.enum(COMPRESSIONS, default = "none"),
@@ -78,8 +83,8 @@ def declare_image_directory(
     image: ImageInfo,
     identifier: str | None = None,
 ) -> ImageDirectoryInfo:
-    """Declare a directory materialization from a resolved logical image."""
-    out = declare_out(ctx, identifier, "image.rootfs", dir = True)
+    """Declare the stored snapshot of a resolved logical image and the command that exports it."""
+    out = declare_out(ctx, identifier, "image.snapshot", dir = True)
     cmd = terminal_image_command(
         ctx,
         driver = "directory",
@@ -89,21 +94,26 @@ def declare_image_directory(
         spec = {
             "compression": "none",
             "format": "directory",
+            "manifest": None,
             "out": out.as_output(),
-            "pkgdb_paths": [],
         },
     )
     ctx.actions.run(cmd, category = "image_directory", identifier = identifier or "directory")
-    return ImageDirectoryInfo(directory = out)
+    export = RunInfo(args = cmd_args(tools.archive[RunInfo], "export", "--store", out))
+    return ImageDirectoryInfo(directory = out, manifest = out.project("Uapi16Manifest"), export = export)
+
+def image_directory_providers(info: ImageDirectoryInfo) -> list[Provider]:
+    """Return the providers of a `[directory]` target or sub-target for `info`."""
+    return [DefaultInfo(default_output = info.directory, sub_targets = {"manifest": [DefaultInfo(default_output = info.manifest)]}), info.export, info]
 
 def _image_directory_impl(ctx: AnalysisContext) -> list[Provider]:
     info = declare_image_directory(ctx, tools = ctx.attrs._tools[ImageToolsInfo], image = ctx.attrs.image[ImageInfo])
-    return [DefaultInfo(default_output = info.directory), info]
+    return image_directory_providers(info)
 
 _image_directory = rule(
     impl = _image_directory_impl,
     attrs = {
-        "image": attrs.dep(providers = [ImageInfo], doc = "the logical image to materialize"),
+        "image": attrs.dep(providers = [ImageInfo], doc = "the logical image to store"),
     }
     | IMAGE_TOOLS_ATTR,
     supports_incoming_transition = True,

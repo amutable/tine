@@ -8,6 +8,8 @@ buck test tine//image:test
 
 import errno
 import os
+import shutil
+import stat
 import struct
 import tempfile
 import unittest
@@ -20,6 +22,12 @@ import specs
 
 import layer
 import rootfs
+import storage
+import uapi16
+from isolation import umount2
+
+# Captures in these tests keep every timestamp, so they clamp to an epoch after all of them.
+CAPTURE_EPOCH = 2**31
 
 
 class TestImageWrites(unittest.TestCase):
@@ -33,6 +41,8 @@ class TestImageWrites(unittest.TestCase):
         self.out = self.scratch / "out"
         self.out.mkdir()
         (self.project / "source").write_text("copied", encoding="utf-8")
+        # The sandbox sets SOURCE_DATE_EPOCH for every action, and layer.main() clamps times to it.
+        self.enterContext(mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": str(2**31)}))
 
     def _build(self, operations: list[object], lower: Path | None = None) -> None:
         spec = specs.write(
@@ -40,7 +50,6 @@ class TestImageWrites(unittest.TestCase):
             {
                 "out": str(self.out),
                 "lower": [str(lower)] if lower is not None else [],
-                "work": str(self.scratch / "work") if lower is not None else None,
                 "install": None,
                 "operations": operations,
             },
@@ -59,7 +68,7 @@ class TestImageWrites(unittest.TestCase):
 
         with (
             chdir(self.project),
-            rootfs.rootfs(self.scratch / "target", bind=self.out, capture_bind=True) as target,
+            rootfs.rootfs(self.scratch / "target", bind=self.out) as target,
         ):
             layer._apply(["copy", "source", "/alias/file"], target)
             layer._apply(["os_release", {"ID": "test"}], target)
@@ -68,16 +77,63 @@ class TestImageWrites(unittest.TestCase):
         self.assertEqual((inside / "file").read_text(encoding="utf-8"), "copied")
         self.assertEqual((inside / "os-release").read_text(encoding="utf-8"), 'ID="test"\n')
 
+    def test_copies_get_the_modes_of_a_checkout_under_umask_0022(self) -> None:
+        # A checkout made under umask 0002 has group-writable files and directories. Copy a directory
+        # with a file and an executable from such a checkout, and copy the file on its own. The copies
+        # must get 0644 and 0755, because git only stores the executable bit.
+        checkout = self.scratch / "checkout"
+        (checkout / "dir").mkdir(parents=True)
+        (checkout / "dir/file").write_text("data")
+        (checkout / "dir/file").chmod(0o664)
+        (checkout / "dir/tool").write_text("#!/bin/sh\n")
+        (checkout / "dir/tool").chmod(0o775)
+        (checkout / "dir").chmod(0o775)
+        layer._copy(checkout / "dir", self.out / "copied")
+        layer._copy(checkout / "dir/file", self.out / "single")
+        modes = {
+            name: stat.S_IMODE((self.out / name).stat().st_mode)
+            for name in ("copied", "copied/file", "copied/tool", "single")
+        }
+        self.assertEqual(
+            modes, {"copied": 0o755, "copied/file": 0o644, "copied/tool": 0o755, "single": 0o644}
+        )
+
+    def test_copies_leave_existing_image_files_and_directories_alone(self) -> None:
+        # Copy a checkout directory with an extended attribute into an image directory that a package
+        # created with mode 0700, onto a file that has a second name in the image, and into a new
+        # subdirectory. The image directory must keep its mode and get no attribute, the other name of the
+        # file must keep its contents, and the new subdirectory must get mode 0755 and no attribute.
+        checkout = self.scratch / "checkout"
+        (checkout / "private/new").mkdir(parents=True)
+        (checkout / "private/file").write_text("copied")
+        (checkout / "private/new/file").write_text("copied")
+        for directory in (checkout / "private", checkout / "private/new"):
+            directory.chmod(0o775)
+            os.setxattr(directory, "user.checkout", b"value")
+        (self.out / "private").mkdir(mode=0o700)
+        (self.out / "private/file").write_text("packaged")
+        os.link(self.out / "private/file", self.out / "other-name")
+        layer._copy(checkout / "private", self.out / "private")
+        self.assertEqual(stat.S_IMODE((self.out / "private").stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE((self.out / "private/new").stat().st_mode), 0o755)
+        self.assertEqual(os.listxattr(self.out / "private"), [])
+        self.assertEqual(os.listxattr(self.out / "private/new"), [])
+        self.assertEqual((self.out / "private/file").read_text(), "copied")
+        self.assertEqual((self.out / "other-name").read_text(), "packaged")
+
     def test_a_copy_source_must_stay_relative_to_the_project(self) -> None:
         for source in ("/absolute", "../outside", "source/../../outside"):
             with self.subTest(source=source), self.assertRaisesRegex(SystemExit, "relative project path"):
                 layer._apply(["copy", source, "/destination"], self.out)
 
     def test_a_derived_layer_exposes_a_readonly_project_only_to_copy_and_run(self) -> None:
+        # Copy and run must see a read-only project, while removals affect only the image snapshot.
         lower = self.scratch / "lower"
         lower.mkdir()
         (lower / "cache.pyc").write_text("image cache", encoding="utf-8")
         (self.project / "cache.pyc").write_text("cache", encoding="utf-8")
+        stored = self.scratch / "stored"
+        storage.capture(storage.Root(lower), stored, epoch=CAPTURE_EPOCH)
 
         def run(tag: str, cmd: object, env: object, cwd: str | None = None) -> None:
             self.assertEqual(cwd, layer.PROJECT)
@@ -94,13 +150,87 @@ class TestImageWrites(unittest.TestCase):
                     ["run", ["command"], {}, True],
                     ["remove", "/**/*.pyc"],
                 ],
-                lower,
+                stored,
             )
 
         command.assert_called_once()
-        self.assertEqual((self.out / "copied").read_text(encoding="utf-8"), "copied")
-        self.assertTrue((self.out / ".wh.cache.pyc").is_file())
+        with storage.root(storage.Snapshot([stored, self.out])) as restored:
+            tree = restored.path
+            self.assertEqual((tree / "copied").read_text(encoding="utf-8"), "copied")
+            self.assertFalse((tree / "cache.pyc").exists())
         self.assertTrue((self.project / "cache.pyc").exists())
+
+    def test_commands_see_inherited_metadata_and_can_override_it(self) -> None:
+        # Capture before artifact copying, then check a command sees the original metadata and
+        # explicit hardlinks. Its metadata changes must become authoritative in the child snapshot.
+        source = self.scratch / "source-root"
+        source.mkdir()
+        (source / "file").write_text("contents")
+        (source / "file").chmod(0o640)
+        os.utime(source / "file", ns=(123, 123))
+        os.link(source / "file", source / "linked")
+        parent = self.scratch / "parent"
+        storage.capture(storage.Root(source), parent, epoch=CAPTURE_EPOCH)
+        copied = self.scratch / "copied-parent"
+        shutil.copytree(parent, copied, copy_function=shutil.copyfile)
+
+        def command(*args: object) -> None:
+            path = Path("/buildroot/file")
+            self.assertEqual(path.stat().st_mtime_ns, 123)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
+            self.assertTrue(path.samefile("/buildroot/linked"))
+            path.chmod(0o600)
+            os.utime(path, ns=(456, 456))
+
+        with mock.patch.object(layer, "_run", side_effect=command):
+            self._build([["run", ["command"], {}, False]], copied)
+        with storage.root(storage.Snapshot([copied, self.out])) as restored:
+            tree = restored.path
+            self.assertEqual(stat.S_IMODE((tree / "file").stat().st_mode), 0o600)
+            self.assertEqual((tree / "linked").stat().st_mtime_ns, 456)
+        self.assertEqual(list((self.out / "blobs").iterdir()), [])
+
+    def test_a_live_writer_prevents_capture(self) -> None:
+        # A command retains an open image file after it returns. Strict unmount must fail before
+        # capture can publish contents that the retained descriptor could still change.
+        descriptor = -1
+
+        def command(*args: object) -> None:
+            nonlocal descriptor
+            descriptor = os.open("/buildroot/file", os.O_WRONLY | os.O_CREAT, 0o644)
+
+        try:
+            with mock.patch.object(layer, "_run", side_effect=command), self.assertRaises(OSError) as error:
+                self._build([["run", ["command"], {}, False]])
+            self.assertEqual(error.exception.errno, errno.EBUSY)
+            self.assertFalse((self.out / uapi16.MANIFEST).exists())
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+                if Path("/buildroot").is_mount():
+                    umount2("/buildroot", 0)
+
+    def test_commands_create_hardlinks_to_inherited_files(self) -> None:
+        # A command links an inherited independent file and changes its data and mode. The next
+        # image must keep the new aliases hardlinked, with the new data and mode.
+        source = self.scratch / "source-root"
+        source.mkdir()
+        (source / "file").write_text("contents")
+        parent = self.scratch / "parent"
+        storage.capture(storage.Root(source), parent, epoch=CAPTURE_EPOCH)
+
+        def command(*args: object) -> None:
+            os.link("/buildroot/file", "/buildroot/linked")
+            Path("/buildroot/file").write_text("changed")
+            Path("/buildroot/linked").chmod(0o600)
+
+        with mock.patch.object(layer, "_run", side_effect=command):
+            self._build([["run", ["command"], {}, False]], parent)
+        with storage.root(storage.Snapshot([parent, self.out])) as restored:
+            tree = restored.path
+            self.assertTrue((tree / "file").samefile(tree / "linked"))
+            self.assertEqual((tree / "linked").read_text(), "changed")
+            self.assertEqual(stat.S_IMODE((tree / "file").stat().st_mode), 0o600)
 
 
 class TestRemove(unittest.TestCase):
@@ -157,35 +287,33 @@ class TestRemove(unittest.TestCase):
                 layer._remove_glob(Path("/"), pattern)
 
 
-class TestNormalization(unittest.TestCase):
-    def test_modes(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="layer-test.", dir="/var/tmp") as scratch:
-            tree = Path(scratch)
-            tree.chmod(0o700)
-            (tree / "sub").mkdir()
-            (tree / "sub").chmod(0o1777)
-            (tree / "sub/file").write_text("file")
-            (tree / "sub/file").chmod(0o664)
-            (tree / "sub/secret").write_text("secret")
-            (tree / "sub/secret").chmod(0o600)
-            (tree / "sub/script").write_text("script")
-            (tree / "sub/script").chmod(0o777)
-            (tree / "sub/mount").write_text("mount")
-            (tree / "sub/mount").chmod(0o4755)
-            (tree / "link").symlink_to("sub/secret")
-            os.mkfifo(tree / "fifo", 0o600)
+class TestPinRelease(unittest.TestCase):
+    PARENT = {"ID": "fedora", "VERSION_ID": "45", "NAME": "Fedora Linux"}
+    BUILD = {"IMAGE_ID": "demo", "IMAGE_VERSION": "7"}
 
-            layer._normalize_modes(tree)
+    def test_pins_id_and_version_id(self) -> None:
+        pinned = layer.pin_release(self.PARENT, {"SYSEXT_SCOPE": "portable"})
+        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "45", "SYSEXT_SCOPE": "portable"})
+        # The op writes the fields in this order, and the extension seed derives from the file.
+        self.assertEqual(list(pinned), ["ID", "VERSION_ID", "SYSEXT_SCOPE"])
 
-            self.assertEqual(tree.stat().st_mode & 0o7777, 0o755)
-            self.assertEqual((tree / "sub").stat().st_mode & 0o7777, 0o755)
-            self.assertEqual((tree / "sub/file").stat().st_mode & 0o7777, 0o644)
-            self.assertEqual((tree / "sub/secret").stat().st_mode & 0o7777, 0o644)
-            self.assertEqual((tree / "sub/script").stat().st_mode & 0o7777, 0o755)
-            self.assertEqual((tree / "sub/mount").stat().st_mode & 0o7777, 0o755)
-            self.assertTrue((tree / "link").is_symlink())
-            # not content: whatever it is, it is not ours to rewrite
-            self.assertEqual((tree / "fifo").lstat().st_mode & 0o7777, 0o600)
+    def test_release_overrides_the_parent(self) -> None:
+        pinned = layer.pin_release(self.PARENT, {"VERSION_ID": "46"})
+        self.assertEqual(pinned, {"ID": "fedora", "VERSION_ID": "46"})
+
+    def test_rolling_parent_pins_only_id(self) -> None:
+        pinned = layer.pin_release({"ID": "arch"}, {})
+        self.assertEqual(pinned, {"ID": "arch"})
+
+    def test_pins_the_image_build(self) -> None:
+        pinned = layer.pin_release(self.PARENT | self.BUILD, {"SYSEXT_VERSION_ID": "1"})
+        self.assertEqual(
+            pinned, {"ID": "fedora", "VERSION_ID": "45"} | self.BUILD | {"SYSEXT_VERSION_ID": "1"}
+        )
+
+    def test_any_pins_nothing(self) -> None:
+        pinned = layer.pin_release(self.PARENT | self.BUILD, {"ID": "_any"})
+        self.assertEqual(pinned, {"ID": "_any"})
 
 
 def _elf(
@@ -231,7 +359,7 @@ class TestExecutableStacks(unittest.TestCase):
             (tree / "lib/empty").write_bytes(b"")
 
             self.assertEqual(
-                layer._executable_stacks(tree),
+                layer._executable_stacks(storage.Root(tree)),
                 [
                     "/bin/missing: no PT_GNU_STACK",
                     "/bin/rwe: executable stack",
@@ -239,3 +367,16 @@ class TestExecutableStacks(unittest.TestCase):
                     "/lib/i386-missing.so: no PT_GNU_STACK",
                 ],
             )
+
+    def test_skips_files_of_the_layers_below(self) -> None:
+        # A file that a lower layer contains was checked when that layer was built. Restore a root
+        # whose lower layer contains a program with an executable stack, and check that only a new
+        # program with an executable stack is reported.
+        with tempfile.TemporaryDirectory(prefix="layer-test.", dir="/var/tmp") as scratch:
+            source, store = Path(scratch) / "source", Path(scratch) / "store"
+            source.mkdir()
+            (source / "inherited").write_bytes(_elf(stack=0o7))
+            storage.capture(storage.Root(source), store, epoch=CAPTURE_EPOCH)
+            with storage.root(storage.Snapshot([store])) as restored:
+                (restored.path / "added").write_bytes(_elf(stack=0o7))
+                self.assertEqual(layer._executable_stacks(restored), ["/added: executable stack"])

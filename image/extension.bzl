@@ -116,7 +116,6 @@ def _declare_preset(
     seed: str | None,
     verity_key: SigningKeyInfo | None,
     extension: dict[str, typing.Any] | None = None,
-    tmpfiles: list[str] | None = None,
     extra: list[Provider] = [],
 ) -> list[Provider]:
     """Declare a DDI of one verity protected root partition, and return the providers of its rule.
@@ -149,7 +148,6 @@ def _declare_preset(
         strip_pkgdb = extension != None,
         verity_key = verity_key,
         extension = extension,
-        tmpfiles = tmpfiles,
     )
     info = output.info
     published = PublishedInfo(
@@ -165,7 +163,7 @@ def _declare_preset(
         default_outputs = [info.disk],
         extra = [info, published] + extra,
         image = image,
-        sub_targets = output.sub_targets | published_metadata_subtargets(image, basename, version, filename),
+        sub_targets = published_metadata_subtargets(image, basename, version, filename) | output.sub_targets,
     )
 
 def declare_extension(
@@ -197,15 +195,10 @@ def declare_extension(
     basename, systemd_arch = ddi_names("extension", name, version, arch)
 
     layers = 0
-    tmpfiles = image.tmpfiles
     if parent != None:
         if len(parent.layers) >= len(image.layers):
             fail("{}: image must layer a delta on top of parent".format(name))
         layers = len(parent.layers)
-
-        # The tmpfiles lines of the parent belong to the parent. Applied to the delta, they would
-        # create files of the parent in the extension, which then replace the parent's own on merge.
-        tmpfiles = image.tmpfiles[len(parent.tmpfiles) :]
 
     copy_files = []
     releases = []
@@ -251,7 +244,6 @@ def declare_extension(
         copy_files = copy_files,
         seed = seed,
         verity_key = verity_key,
-        tmpfiles = tmpfiles,
         extension = {
             "identity": str(ctx.label),
             "name": name,

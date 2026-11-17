@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "artifacts", argv)
 
     source = _read_source(Path(spec["manifest"]), spec["artifact"])
-    with finalize.image(spec, program="artifacts") as tree:
+    with finalize.image(spec) as tree:
         if spec["artifact"] in _TEXT_ARTIFACTS:
             _extract_text(tree, source, Path(spec["out"]))
         else:

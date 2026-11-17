@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast, override
 from unittest import mock
@@ -33,6 +33,15 @@ class BuildRpm(unittest.TestCase):
         self.project.mkdir()
         self.auxiliary = self.scratch / "auxiliary"
         self.auxiliary.write_text("packaging input\n")
+        # The tests replace the buildroot mount, so the buildroot doesn't need a snapshot to restore.
+        self.enterContext(mock.patch.object(build.builder.storage, "Snapshot"))
+        self.enterContext(
+            mock.patch.object(
+                build.builder.storage,
+                "root",
+                return_value=contextlib.nullcontext(build.builder.storage.Root(Path("buildroot"))),
+            )
+        )
 
     def specification(
         self,
@@ -394,67 +403,53 @@ class BuildRpm(unittest.TestCase):
         self.assertEqual(self.spec_file.read_text(), "Name: example\n")
         self.assertEqual(list((topdir / "CHECKOUT").iterdir()), [])
 
-    def test_capture_makes_build_trees_removable_after_unmount(self) -> None:
-        for persistent in (False, True):
-            for outcome in (0, 1, RuntimeError("rpmbuild interrupted")):
-                with self.subTest(persistent=persistent, outcome=outcome):
-                    case = Path(tempfile.mkdtemp(dir=self.scratch))
-                    topdir = case / "topdir"
-                    # The persistent build directory is an output, so it is in the project. rpmbuild
-                    # writes to it through its mount at topdir/BUILD while the project is read-only.
-                    build_dir = Path(tempfile.mkdtemp(dir=self.project)) / "state" if persistent else None
-                    directories = [topdir / "BUILDROOT" / "usr"]
-                    if build_dir is not None:
-                        directories.append(topdir / "BUILD" / "installed")
-                    # The build directory content is at `build_dir` again after the unmount.
-                    captured = list(directories)
-                    if build_dir is not None:
-                        captured[-1] = build_dir / "installed"
+    def test_escapes_names_in_the_persistent_build_directory(self) -> None:
+        # Buck stores the persistent build directory and can't store a name with a backslash. Let
+        # rpmbuild write such a name into BUILDROOT and into the persistent build directory, and check
+        # that only the build directory contains the escaped name afterwards, for every outcome of the
+        # build. A successful build must also remove topdir.
+        for outcome in (0, 1, RuntimeError("rpmbuild interrupted")):
+            with self.subTest(outcome=outcome):
+                case = Path(tempfile.mkdtemp(dir=self.scratch))
+                topdir = case / "topdir"
+                # The persistent build directory is an output, so it is in the project. rpmbuild writes to
+                # it through its mount at topdir/BUILD while the project is read-only.
+                build_dir = Path(tempfile.mkdtemp(dir=self.project)) / "state"
 
-                    def run(
-                        *_args: object,
-                        trees: list[Path] = directories,
-                        result: int | RuntimeError = outcome,
-                        **_kwargs: object,
-                    ) -> subprocess.CompletedProcess[str]:
-                        for directory in trees:
-                            directory.mkdir(parents=True)
-                            (directory / "payload").write_text("keep\n")
-                            directory.chmod(0o555)
-                        if isinstance(result, RuntimeError):
-                            raise result
-                        return subprocess.CompletedProcess([], result)
+                def run(
+                    *_args: object,
+                    top: Path = topdir,
+                    result: int | RuntimeError = outcome,
+                    **_kwargs: object,
+                ) -> subprocess.CompletedProcess[str]:
+                    for directory in (top / "BUILDROOT", top / "BUILD"):
+                        directory.mkdir(parents=True, exist_ok=True)
+                        (directory / "back\\slash").write_text("keep\n")
+                    if isinstance(result, RuntimeError):
+                        raise result
+                    return subprocess.CompletedProcess([], result)
 
-                    @contextlib.contextmanager
-                    def mounted(trees: list[Path] = directories) -> Generator[None]:
-                        try:
-                            yield
-                        finally:
-                            for directory in trees:
-                                self.assertEqual(directory.stat().st_mode & 0o777, 0o555)
-
-                    with (
-                        contextlib.chdir(self.project),
-                        mock.patch.object(build.builder.rootfs, "rootfs", return_value=mounted()),
-                        mock.patch.object(build.subprocess, "run", side_effect=run),
-                        mock.patch.object(build.builder.shutil, "rmtree") as remove,
-                        mock.patch.object(tempfile, "tempdir", str(case)),
-                    ):
-                        spec = self.specification(build_dir=build_dir)
-                        if isinstance(outcome, RuntimeError):
-                            with self.assertRaises(RuntimeError) as raised:
-                                build.build_rpm(spec)
-                            self.assertIs(raised.exception, outcome)
-                        else:
-                            self.assertEqual(build.build_rpm(spec), outcome)
-
-                    for directory in captured:
-                        self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
-                        self.assertEqual((directory / "payload").read_text(), "keep\n")
-                    if outcome == 0:
-                        remove.assert_called_once_with(topdir)
+                with (
+                    contextlib.chdir(self.project),
+                    mock.patch.object(build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()),
+                    mock.patch.object(build.subprocess, "run", side_effect=run),
+                    mock.patch.object(build.builder.shutil, "rmtree") as remove,
+                    mock.patch.object(tempfile, "tempdir", str(case)),
+                ):
+                    spec = self.specification(build_dir=build_dir)
+                    if isinstance(outcome, RuntimeError):
+                        with self.assertRaises(RuntimeError) as raised:
+                            build.build_rpm(spec)
+                        self.assertIs(raised.exception, outcome)
                     else:
-                        remove.assert_not_called()
+                        self.assertEqual(build.build_rpm(spec), outcome)
+
+                self.assertEqual([path.name for path in build_dir.iterdir()], [".esc.back%5Cslash"])
+                self.assertEqual([path.name for path in (topdir / "BUILDROOT").iterdir()], ["back\\slash"])
+                if outcome == 0:
+                    remove.assert_called_once_with(topdir)
+                else:
+                    remove.assert_not_called()
 
 
 if __name__ == "__main__":

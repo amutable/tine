@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Logical filesystem images built as ordered overlay deltas."""
+"""Logical filesystem images stored as complete snapshots and immutable blobs."""
 
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
@@ -120,7 +120,7 @@ ImageSbomInfo = provider(
 )
 
 ImageInfo = provider(
-    doc = "A logical filesystem image represented by an ordered delta stack and lazy metadata.",
+    doc = "A logical filesystem image represented by snapshot stores and lazy metadata.",
     fields = {
         "box": provider_field(Dependency),
         # Accumulated install specs; they seed the local-packages closure of every derived layer
@@ -133,8 +133,6 @@ ImageInfo = provider(
         # Absent only when the image installs no packages and so has no package system.
         "pkgdb": provider_field(Artifact | None, default = None),
         "sbom": provider_field(ImageSbomInfo),
-        # Ownership is deliberately not represented: image outputs use uid/gid 0.
-        "tmpfiles": provider_field(list[str]),
     },
 )
 
@@ -143,7 +141,6 @@ def _image_command(
     *,
     box_dep: Dependency,
     layers: list[Artifact],
-    tmpfiles: list[str],
     exe: Dependency,
     driver: str,
     identifier: str | None,
@@ -160,7 +157,7 @@ def _image_command(
         specs.args(
             ctx.actions,
             spec_path(identifier, driver),
-            {"lower": layers, "tmpfiles": tmpfiles} | spec,
+            {"lower": layers} | spec,
         ),
     )
 
@@ -176,7 +173,7 @@ def terminal_image_command(
 ) -> cmd_args:
     """Run a terminal driver against one finalized logical-image stack.
 
-    The stack and its deferred tmpfiles join the driver's own fields in one spec. `signing_access`
+    The stack joins the driver's own fields in one spec. `signing_access`
     grants the driver what an externally held signing key needs from the host.
     """
     return _image_command(
@@ -188,7 +185,6 @@ def terminal_image_command(
         identifier = identifier,
         layers = image.layers,
         spec = spec,
-        tmpfiles = image.tmpfiles,
     )
 
 def pkgdb_paths(image: ImageInfo) -> list[str]:
@@ -351,6 +347,13 @@ def _merge_os_release(fields: dict[str, str]) -> LayerOperation:
     """Merge quoted KEY="value" assignments into the image's /usr/lib/os-release."""
     return ("os_release", fields)
 
+def extension_release_operation(path: str, fields: dict[str, str], pin: bool) -> LayerOperation:
+    """Write the extension-release file `path` with `fields`.
+
+    With `pin`, the file also matches the os-release of the image below it (see layer.pin_release).
+    """
+    return ("extension_release", path, fields, pin)
+
 def _depmod() -> LayerOperation:
     """Rebuild the module indexes for every kernel the image installs."""
     return ("depmod",)
@@ -502,7 +505,6 @@ def _declare_pkgdb(
     *,
     box_dep: Dependency,
     layers: list[Artifact],
-    tmpfiles: list[str],
     package_manager: Dependency,
     identifier: str | None,
 ) -> Artifact:
@@ -516,7 +518,6 @@ def _declare_pkgdb(
         identifier = identifier,
         layers = layers,
         spec = {"out": out.as_output()},
-        tmpfiles = tmpfiles,
     )
     ctx.actions.run(cmd, category = "image_pkgdb", identifier = identifier or "pkgdb")
     return out
@@ -527,7 +528,6 @@ def _declare_manifest(
     tools: ImageToolsInfo,
     box_dep: Dependency,
     layers: list[Artifact],
-    tmpfiles: list[str],
     identifier: str | None,
 ) -> Artifact:
     # The name the format reserves for itself, so the listing can be dropped beside a tree of the
@@ -541,7 +541,6 @@ def _declare_manifest(
         identifier = identifier,
         layers = layers,
         spec = {"out": out.as_output()},
-        tmpfiles = tmpfiles,
     )
     ctx.actions.run(cmd, category = "image_manifest", identifier = identifier or "manifest")
     return out
@@ -552,7 +551,6 @@ def _declare_sbom(
     tools: ImageToolsInfo,
     box_dep: Dependency,
     layers: list[Artifact],
-    tmpfiles: list[str],
     source_name: str,
     version: str,
     identifier: str | None,
@@ -573,7 +571,6 @@ def _declare_sbom(
             "spdx": spdx.as_output(),
             "syft": specs.executable(tools.syft),
         },
-        tmpfiles = tmpfiles,
     )
     ctx.actions.run(cmd, category = "image_sbom", identifier = identifier or "sbom")
 
@@ -591,7 +588,6 @@ def declare_image(
     parent: ImageInfo | None = None,
     box_dep: Dependency | None = None,
     package_manager: Dependency | None = None,
-    tmpfiles: list[str] = [],
     install_docs: bool = True,
     install_langs: list[str] = [],
     source_name: str | None = None,
@@ -614,7 +610,6 @@ def declare_image(
         box_dep = parent.box
         package_manager = parent.package_manager
         layers = parent.layers
-        tmpfiles = parent.tmpfiles + tmpfiles
         parent_install_specs = parent.install_specs
     else:
         if box_dep == None:
@@ -645,14 +640,12 @@ def declare_image(
             )
             package_manager_info = package_manager[PackageManagerInfo]
 
-        delta = declare_out(ctx, identifier, "delta", dir = True)
-        work = declare_out(ctx, identifier, "overlay.work", dir = True) if layers else None
+        snapshot = declare_out(ctx, identifier, "snapshot", dir = True)
         spec = {
             "install": None,
             "lower": layers,
             "operations": [_encode_operation(operation, tools.python) for operation in operations],
-            "out": delta.as_output(),
-            "work": work.as_output() if work != None else None,
+            "out": snapshot.as_output(),
         }
         if package_manager_info != None:
             system = package_manager_info.package_system[PackageSystemInfo]
@@ -675,7 +668,7 @@ def declare_image(
         )
         ctx.actions.run(cmd, category = "image", identifier = identifier or "layer", **external_signing_execution(signing_access))
 
-        layers = layers + [delta]
+        layers = layers + [snapshot]
         install_specs = parent_install_specs + install_specs
     else:
         install_specs = parent_install_specs
@@ -688,7 +681,6 @@ def declare_image(
             identifier = identifier,
             layers = layers,
             package_manager = package_manager,
-            tmpfiles = tmpfiles,
         )
     return ImageInfo(
         box = box_dep,
@@ -700,7 +692,6 @@ def declare_image(
             box_dep = box_dep,
             identifier = identifier,
             layers = layers,
-            tmpfiles = tmpfiles,
         ),
         package_manager = package_manager,
         pkgdb = pkgdb,
@@ -711,11 +702,32 @@ def declare_image(
             identifier = identifier,
             layers = layers,
             source_name = source_name or ctx.label.name,
-            tmpfiles = tmpfiles,
             version = version,
         ),
-        tmpfiles = tmpfiles,
     )
+
+def declare_stripped(
+    ctx: AnalysisContext,
+    *,
+    tools: ImageToolsInfo,
+    image: ImageInfo,
+    name: str,
+    identifier: str | None = None,
+    strip_pkgdb: bool = False,
+    strip_paths: list[str] = [],
+    ops: list[LayerOperation] = [],
+) -> ImageInfo:
+    """Return `image` with `ops` applied and the package database and `strip_paths` removed.
+
+    A terminal output reads the result. The changes are a layer of their own, which the image's
+    `[pkgdb]` and `[sbom]` subtargets don't see, and which only exists when there is something to
+    change. `name` tells the layer apart from the other layers that `identifier` declares.
+    """
+    removed = (pkgdb_paths(image) if strip_pkgdb else []) + strip_paths
+    ops = ops + [_remove("/" + path.lstrip("/")) for path in removed]
+    if not ops:
+        return image
+    return declare_image(ctx, tools = tools, ops = ops, parent = image, identifier = _path(identifier, name))
 
 IMAGE_OPERATION_ATTR = attrs.one_of(
     # A command takes attrs.arg() whether or not it chroots, so an artifact argument reads the
@@ -793,11 +805,6 @@ IMAGE_ATTRS = {
         default = [],
         doc = "native packages to install before this layer's operations run",
     ),
-    "tmpfiles": attrs.list(
-        attrs.string(),
-        default = [],
-        doc = "deferred tmpfiles.d lines for paths, modes, and xattrs; ownership is ignored",
-    ),
     "version": attrs.string(default = "0", doc = "SBOM source version"),
     "_box": distribution.TOOLS_BOX_ATTR,
 } | IMAGE_TOOLS_ATTR
@@ -814,7 +821,6 @@ def _image_impl(ctx: AnalysisContext) -> list[Provider]:
         package_sets = ctx.attrs.package_sets,
         packages = ctx.attrs.packages,
         parent = ctx.attrs.parent[ImageInfo] if ctx.attrs.parent != None else None,
-        tmpfiles = ctx.attrs.tmpfiles,
         version = ctx.attrs.version,
     )
     return image_providers(
@@ -870,7 +876,7 @@ def layer(
     target_compatible_with: list[str] | Select | None = None,
     **kwargs,
 ) -> None:
-    """Create an initial image or apply one delta to a parent image."""
+    """Create an initial image or apply operations on top of a parent image."""
     _image(
         name = name,
         ops = flatten_operations(ops),
