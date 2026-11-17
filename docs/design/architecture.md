@@ -73,6 +73,11 @@ therefore writes the fallback cell into the project's generated `.buckconfig`, u
 the cell. The project's `//buildroots` package maps importer-generated `//buildroots/<family>:<release>`
 names to catalog targets.
 
+tine loads two files from every catalog: `releases.bzl` lists the releases that images build for, and
+`tools.bzl` lists the packages and local repositories that the tools box installs in addition to its own.
+Starlark has no optional `load()`, and Buck fails on a missing file or symbol. A catalog that adds nothing
+to the tools box therefore still provides `tools.bzl` with empty lists.
+
 Catalog targets use `<family>.<release>[.<component>].<role>` names. A rolling channel occupies the release
 segment like any other release. Singular `.repository` targets own remotes, plural `.repositories` targets
 define universes, and release, box, package-manager, and buildroot targets use their corresponding
@@ -469,8 +474,9 @@ the distribution of the target that depends on it, and selects the release of th
 distribution, such as an `exec_dep`, gets the tools box of the catalog's default release. An image runs in
 the tools box, so it builds with the tools of its own release. A package manager names no box, and an image
 runs the plan and install of its package manager in the tools box as well. The tools box resolves during the
-build, so a new tool leaves the root box and its lock alone. The base release identifies where this userspace
-came from, not the only release it may operate on.
+build, so a new tool leaves the root box and its lock alone. The catalog's `tools.bzl` adds packages and
+local repositories to the tools box. The base release identifies where this userspace came from, not the only
+release it may operate on.
 
 A buildroot runs in the root box of its release. rpmbuild and the package manager run chrooted in the
 buildroot, so a buildroot action only needs Python and the package system outside of it. A buildroot doesn't
@@ -1559,9 +1565,10 @@ distribution's script around `localedef`, so the driver runs the same loop itsel
 `localedef` with `--prefix` and `I18NPATH` set to directories in the image, and it finds each locale's
 source and charmap inside the image's root. The layer runs in the tools box of the image's own release,
 which resolves its packages from the release's repositories, its additional repositories included. An image
-whose kmod and glibc come from those repositories gets an index and a locale archive in the formats it
-reads. The `additional_repositories` and `local_packages` of a package manager do not reach the tools box,
-so an image that installs kmod or glibc from them is finalized with the release's versions.
+whose kmod and glibc come from those repositories gets an index and a locale archive in the formats it reads.
+The `additional_repositories` and `local_packages` of a package manager do not reach the tools box, so an
+image that installs kmod or glibc from them is finalized with the release's versions, unless the catalog's
+`tools.bzl` adds the same local repositories to the tools box.
 
 ### Reproducibility and caching
 

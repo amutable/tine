@@ -3,6 +3,7 @@
 
 """The axis an image's distribution is selected on."""
 
+load("@catalog//:tools.bzl", "TOOLS_BOX")
 load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
 load("//box:defs.bzl", "box")
 load("//platform:architecture.bzl", "architecture")
@@ -74,6 +75,7 @@ distribution.box_host(name = "release.host")
 # the root box of the default release.
 box.new(
     name = "tools.box",
+    additional_repositories = TOOLS_BOX.additional_repositories,
     packages = (
         [
             "ca-certificates",
@@ -173,6 +175,7 @@ box.new(
                 "x86_64": ["edk2-ovmf", "qemu-system-x86-core"],
             }),
         })
+        + TOOLS_BOX.packages
     ),
     release = distribution.release_target("release"),
     parent = distribution.release_target("box"),
