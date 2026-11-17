@@ -23,7 +23,7 @@ def pinned_packaging(
     packaging = ctx.actions.declare_output("__tine/packaging", dir = True)
     ctx.actions.run(
         cmd_args(
-            # The tools box of the buildroot contains no git.
+            # The box of the buildroot contains no git.
             box.run(box = box.layer(ctx, buildroot.box, [git]), exe = driver, network = True),
             # The pin file is the fetch's only input, so an edit elsewhere in the checkout does not rerun the fetch.
             specs.args(ctx.actions, "packaging.spec.json", {"distro": distro, "out": packaging.as_output(), "pin": pin, "subdir": subdir}),

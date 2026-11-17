@@ -65,7 +65,7 @@ box.sh_test(
 # A box whose release is a select() on the distribution takes this as its incoming transition.
 distribution.box_host(name = "release.host")
 
-# Images, buildroots and VMs run in the tools box of the release that the build chooses. An execution
+# Images and VMs run in the tools box of the release that the build chooses. An execution
 # dependency, and a build that chooses no release, get the tools box of the catalog's default release.
 # Images of every family sign and boot in the tools box of their release, so the package list names the
 # VM stack and the PKCS#11 client for every family. An image runs its package operations in the tools box
