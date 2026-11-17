@@ -98,6 +98,25 @@ of the release. `tine//distribution:tools.box` adds the image assembly tools and
 root box of the release that the build chooses, and images build in it. The tools stay in the box and out of
 the built images. How a box bootstraps itself is described in [architecture.md](../design/architecture.md).
 
+The catalog adds packages and local repositories to the tools box in `tools.bzl`, beside its `BUCK` file.
+Every catalog has to have one. To build images with a locally built systemd, list its repository there:
+
+```Starlark
+load("@tine//distribution:defs.bzl", "distribution")
+
+TOOLS_BOX = struct(
+    additional_repositories = distribution.select({
+        "DEFAULT": [],
+        "fedora": ["root//packages:systemd.repository"],
+    }),
+    packages = [],
+)
+```
+
+The tools box prefers the packages of a local repository over those of its release (see
+[box.md](box.md#installing-locally-built-packages)). The repository has to be visible to
+`tine//distribution`. A repository is built for one distribution, so select it per distribution.
+
 ## Commands
 
 The wrapper commands work from anywhere in the root project:
@@ -262,8 +281,9 @@ image that installs no kmod or systemd of its own still gets its indexes and dat
 box of the image's release. It installs its packages from the release's repositories, so its tools match an
 image that installs kmod, systemd and glibc from those repositories. The `additional_repositories` and
 `local_packages` of a package manager do not reach the box: an image that installs kmod, systemd or glibc
-from them still gets the release's `depmod`, `systemd-hwdb` and `localedef`. The layer that runs a generator
-captures what it writes, so it is built once and cached rather than repeated by every terminal output.
+from them still gets the release's `depmod`, `systemd-hwdb` and `localedef`, unless the catalog's `tools.bzl`
+adds the same local repositories to the tools box. The layer that runs a generator captures what it writes,
+so it is built once and cached rather than repeated by every terminal output.
 
 `image.archive`, `image.portable`, `image.disk`'s root filesystem, and `image.initrd` end their operations
 with `image.ops.depmod()`, `image.ops.hwdb()` and `image.ops.locale_gen()` at their defaults, because a

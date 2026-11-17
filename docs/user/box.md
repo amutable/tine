@@ -119,6 +119,9 @@ newer version. A box that uses local repositories resolves its packages during t
 `architectures`. A child box installs from the local repositories of its parent as well.
 
 A box can't contain a package whose build runs in that same box: Buck rejects the dependency cycle.
+Package buildroots run in the root box of their release, so any other box can install the packages that
+your project builds. To build images with a locally built tool, add its repository to the tools box in the
+catalog's `tools.bzl`, as [images.md](images.md) describes.
 
 ## Building one box from any distribution
 
