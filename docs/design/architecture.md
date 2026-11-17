@@ -1381,14 +1381,15 @@ behavior is defined. Ownership and named ACL entries are deliberately unsupporte
 uid/gid zero.
 
 Tar uses deterministic PAX archives and stores Linux xattrs using `SCHILY.xattr.*` headers. The newc cpio
-format has no general xattr representation. Tar/cpio entries are ordered. Mtimes are clamped to the fixed
-assembly epoch. Tar and cpio store whole seconds. The cpio reader/writer aligns regular-file payloads and
-uses `copy_file_range` when possible so large archives can share extents on reflink-capable filesystems.
-`compression = "zstd"` compresses the finished archive in the same action, so the uncompressed form never
-becomes a Buck artifact; zstd's multi-threaded output is byte-identical to its single-threaded output, so
-this stays reproducible. The initrd uses it, while the kernel-modules cpio that `uki.py` appends stays raw
-because the distribution already ships each module compressed; the kernel unpacks the concatenation as
-independently compressed segments.
+format has no general xattr representation. Tar/cpio entries are ordered and encode hardlinked regular files
+as hardlinks, independently of content identity. Mtimes are clamped to the fixed assembly epoch. Tar and cpio
+store whole seconds. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when
+possible so large archives can share extents on reflink-capable filesystems. `compression = "zstd"`
+compresses the finished archive in the same action, so the uncompressed form never becomes a Buck artifact;
+zstd's multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The
+initrd uses it, while the kernel-modules cpio that `uki.py` appends stays raw because the distribution
+already ships each module compressed; the kernel unpacks the concatenation as independently compressed
+segments.
 
 `declare_ddi()` in `ddi.bzl` deliberately distinguishes `definitions` from `partitions`. Definitions describe
 new partitions to populate directly from `image.ImageInfo`: repart reads a temporary root reconstructed
