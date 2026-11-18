@@ -108,6 +108,21 @@ bootstrap interpreter by default. Pass `box` to run with a box's interpreter and
 also declares a type check against the selected environment. `env` can contain artifact references such
 as `$(location //target)`, and applies to both `buck test` and `buck run`.
 
+### Binding the glibc loader
+
+The pinned Python names the glibc loader at the standard path of its platform, such as
+`/lib64/ld-linux-x86-64.so.2`. NixOS keeps its loader in the Nix store and has a stub at the standard path.
+When no loader runs from the standard path, tine reads the loader of its own `python3` from `/proc/self/maps`
+and binds it over the standard path, in a user and mount namespace of its own. tine enters that namespace
+before it starts the cache shim, so the shim and every Buck action inherit the bind. The actions keep their
+command lines and their cache keys. The shim runs for longer than the command, so this namespace contains
+no project mounts. tine creates the mounts of `tine mount` in a nested namespace afterwards. A re-executed
+or nested tine finds a working loader at the standard path and binds nothing.
+
+A loader that runs from the standard path stays in place, even when the `python3` of tine uses another one.
+A `python3` from Nix on another distribution uses the loader of Nix, and the programs of the distribution
+need the loader of the distribution.
+
 ### Building with out-of-tree checkouts
 
 A cell root must be project-relative, so Buck cannot point a cell directly at an external directory.

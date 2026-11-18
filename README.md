@@ -20,7 +20,11 @@ The host needs only:
  [sysctl](https://www.freedesktop.org/software/systemd/man/latest/sysctl.d.html):
    `kernel.apparmor_restrict_unprivileged_userns=0`.
  * A host root that supports `pivot_root()`; some kernels cannot pivot an initramfs root
- * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against
+ * glibc ≥ 2.17, which the pinned Python that starts every sandbox links against. The pinned Python looks
+   for the glibc loader at the standard path, such as `/lib64/ld-linux-x86-64.so.2`. NixOS keeps its loader
+   elsewhere and has a stub at the standard path. When no loader runs from the standard path, `tine` binds
+   the loader of the host's `python3` over it in its own mount namespace. The bind needs a file at the
+   standard path, which NixOS's `environment.stub-ld.enable` option creates.
  * `python3` ≥ 3.14 on `PATH`, or ≥ 3.12 together with `zstd`
  * `git`
  * `/bin/sh`, which runs the fetch of a Rust project's git dependencies

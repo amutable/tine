@@ -48,6 +48,11 @@ MOUNTS = "mounts"
 MOUNT_CONFIG = f"{HOME}/tine-mounts.toml"
 MOUNT_TARGET_LABEL = "tine:mount-target"
 TINE_MOUNTS_ENV = "TINE_MOUNTS"
+# The pinned Python links against glibc and names the loader at the standard path of its platform.
+GLIBC_LOADERS = {
+    "aarch64": Path("/lib/ld-linux-aarch64.so.1"),
+    "x86_64": Path("/lib64/ld-linux-x86-64.so.2"),
+}
 MOUNT_LOCK = f"{HOME}/tine-mount.lock"
 PROJECT_IGNORE = "ignore"
 # `project.is_dev()` reads this list of project paths.
@@ -81,9 +86,24 @@ FLAG_ISOLATION = "--isolation-dir"
 # This never actually gets read or written, it's just an unique identifier.
 ISOLATION_COMPLETE = "tine-complete"
 
-# Buck subcommands that run no action, and so need no cache shim. Naming the inert ones rather than
-# the active ones, so that forgetting one here errs on the side of starting an unnecessary shim.
-BUCK_COMMAND_NO_ACTION = (None, "clean", "complete", "help", "kill", "killall", "log", "root", "status")
+# Buck subcommands that run no action, and so need neither the cache shim nor the glibc loader bind.
+# The tuple names the inert subcommands rather than the active ones. A subcommand missing here then
+# starts an unnecessary shim or bind instead of skipping a needed one.
+BUCK_COMMAND_NO_ACTION = (
+    None,
+    "audit",
+    "clean",
+    "complete",
+    "cquery",
+    "help",
+    "kill",
+    "killall",
+    "log",
+    "root",
+    "status",
+    "targets",
+    "uquery",
+)
 
 VALUE_FLAGS = (
     FLAG_ISOLATION,
@@ -870,8 +890,58 @@ def namespace_gitdirs(root: Path) -> dict[Path, str]:
     return {root / target: gitdir for target, gitdir in gitdirs.items()}
 
 
-def create_mount_namespace(root: Path, mounts: dict[str, str]) -> str:
-    """Build the declared mounts in a private namespace and encode their table."""
+def mapped_loader(name: str) -> Path | None:
+    """Return the path of the loader called `name` that the kernel mapped into this process."""
+    for line in Path("/proc/self/maps").read_text().splitlines():
+        path = line.split(maxsplit=5)[-1]
+        if path.endswith("/" + name):
+            return Path(path)
+    return None
+
+
+def loader_runs(path: Path) -> bool:
+    """Return whether the glibc loader at `path` runs."""
+    import subprocess
+
+    try:
+        return (
+            subprocess.run(
+                [path, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
+
+
+def glibc_loader() -> tuple[Path, Path] | None:
+    """Return the host's glibc loader and the standard path to bind it at, if no loader runs from there.
+
+    NixOS keeps its loader in the Nix store, so the pinned Python cannot start there. The python3 that
+    runs this script uses that loader.
+    """
+    standard = GLIBC_LOADERS.get(os.uname().machine)
+    if standard is None:
+        return None
+    # A musl host maps a musl loader, which cannot start a glibc program.
+    host = mapped_loader(standard.name)
+    if host is None:
+        return None
+    if standard.exists():
+        # A python3 from Nix on another distribution uses the loader of Nix, and the distribution's
+        # loader at the standard path must stay in place for the distribution's programs.
+        if standard.samefile(host) or loader_runs(standard):
+            return None
+    elif not standard.is_symlink():
+        fail(
+            f"the pinned Python needs a glibc loader at {standard}, and there is no file there to "
+            f"bind {host} over; NixOS creates one with environment.stub-ld.enable"
+        )
+    return host, standard
+
+
+def enter_mount_namespace() -> None:
+    """Enter a new user namespace and a new mount namespace inside it."""
     try:
         isolation.check_kernel()
         # Always create a user namespace, even with CAP_SYS_ADMIN, to scope mount authority to this
@@ -884,6 +954,25 @@ def create_mount_namespace(root: Path, mounts: dict[str, str]) -> str:
         fail("cannot create the mount namespace")
     except OSError as error:
         fail(f"cannot create the mount namespace: {error}")
+
+
+def bind_glibc_loader() -> None:
+    """Bind the host's glibc loader over the standard path in a namespace of its own, if needed."""
+    loader = glibc_loader()
+    if loader is None:
+        return
+    source, target = loader
+    enter_mount_namespace()
+    try:
+        with isolation.Bind(source, target, readonly=True) as bind:
+            bind.attach()
+    except OSError as error:
+        fail(f"cannot bind {source} over {target}: {error}")
+
+
+def create_mount_namespace(root: Path, mounts: dict[str, str]) -> str:
+    """Build the declared mounts in a private namespace and encode their table."""
+    enter_mount_namespace()
 
     gitdirs: dict[str, str] = {}
     for target, source in mounts.items():
@@ -1778,6 +1867,8 @@ def buck_command(argv: list[str]) -> None:
     ensure_home(root)
     settings = project_settings(root)
     command = parse_buck_command(argv)
+    if command.subcommand not in BUCK_COMMAND_NO_ACTION:
+        bind_glibc_loader()
     cache = cache_shim.settings(settings, root, SETTINGS)
     if cache is not None:
         config = read_project_buckconfig(root)
@@ -1785,8 +1876,9 @@ def buck_command(argv: list[str]) -> None:
         # would win silently and leave tine starting a shim nothing talks to.
         if RE_CLIENT in config:
             fail(f"[{RE_CLIENT}] is reserved while [{cache_shim.SECTION}] in {SETTINGS} configures a cache")
-        # Before entering the namespace, or the shim would hold every mount in it for as long as it
-        # runs. The cost is that its pin comes from the outer checkout rather than a mounted cell's.
+        # Before entering the namespace of the project mounts, or the shim would keep every project
+        # mount mounted for as long as it runs. The cost is that its pin comes from the outer checkout
+        # rather than a mounted cell's.
         # TINE_MOUNTS means entering the namespace already re-executed this, which ensured it once.
         if command.subcommand not in BUCK_COMMAND_NO_ACTION and not os.environ.get(TINE_MOUNTS_ENV):
             cache_shim.ensure(cache, lambda: before_shim(root, settings, command.isolation))

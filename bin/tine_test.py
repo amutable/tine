@@ -1068,6 +1068,89 @@ class TestMountPrivacy(MountTestCase):
         self.assertEqual(read_generated_buckconfig(path), {})
 
 
+def loader(path: Path, code: int) -> Path:
+    """Write a script at `path` that stands in for a loader and exits with `code`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\nexit {code}\n")
+    path.chmod(0o755)
+    return path
+
+
+class TestGlibcLoader(unittest.TestCase):
+    """Find the host's glibc loader when no loader runs from the standard path."""
+
+    @override
+    def setUp(self) -> None:
+        self.dir = scratch(self)
+        machine = os.uname().machine
+        self.name = tine.GLIBC_LOADERS[machine].name
+        self.standard = self.dir / "lib" / self.name
+        self.standard.parent.mkdir()
+        self.host = loader(self.dir / "store" / self.name, 0)
+        patched = unittest.mock.patch.dict(tine.GLIBC_LOADERS, {machine: self.standard})
+        patched.start()
+        self.addCleanup(patched.stop)
+
+    def mapped(self, path: Path | None) -> None:
+        """Make glibc_loader() see `path` as the loader of the running python3."""
+        patched = unittest.mock.patch.object(tine, "mapped_loader", return_value=path)
+        patched.start()
+        self.addCleanup(patched.stop)
+
+    def test_finds_the_loader_of_this_process(self) -> None:
+        # The interpreter that runs the tests uses the glibc loader of its platform.
+        mapped = tine.mapped_loader(self.name)
+        assert mapped is not None
+        self.assertEqual(mapped.name, self.name)
+        self.assertTrue(tine.loader_runs(mapped))
+        self.assertIsNone(tine.mapped_loader("ld-missing.so.1"))
+
+    def test_the_standard_loader_needs_no_bind(self) -> None:
+        # A host whose python3 uses the loader at the standard path needs no bind. The kernel maps the
+        # loader under its resolved path, such as /usr/lib/ld-linux-x86-64.so.2 on Arch, so the mapped
+        # path is a symlink to the standard path here. The loader exits with 127, so only the samefile()
+        # check makes glibc_loader() return None.
+        loader(self.standard, 127)
+        mapped = self.dir / "usr" / "lib" / self.standard.name
+        mapped.parent.mkdir(parents=True)
+        mapped.symlink_to(self.standard)
+        self.mapped(mapped)
+        self.assertIsNone(tine.glibc_loader())
+
+    def test_a_working_loader_stays_in_place(self) -> None:
+        # A python3 from Nix on another distribution uses a loader in the Nix store. The loader of
+        # the distribution at the standard path runs, so its programs keep it.
+        self.mapped(self.host)
+        loader(self.standard, 0)
+        self.assertIsNone(tine.glibc_loader())
+
+    def test_a_stub_is_replaced(self) -> None:
+        # On NixOS, python3 uses a loader in the Nix store, and the standard path is a symlink to a
+        # stub that exits with 127.
+        self.mapped(self.host)
+        self.standard.symlink_to(loader(self.dir / "stub" / "stub-ld", 127))
+        self.assertEqual(tine.glibc_loader(), (self.host, self.standard))
+
+    def test_a_dangling_symlink_is_replaced(self) -> None:
+        # glibc_loader() returns a dangling symlink at the standard path as the target of the bind.
+        # test_loader_is_bound_over_a_dangling_symlink checks that the bind covers such a symlink.
+        self.mapped(self.host)
+        self.standard.symlink_to(self.dir / "missing")
+        self.assertEqual(tine.glibc_loader(), (self.host, self.standard))
+
+    def test_a_musl_host_is_left_alone(self) -> None:
+        # A musl python3 maps no glibc loader, and a musl loader cannot start the pinned glibc Python.
+        self.mapped(None)
+        self.assertIsNone(tine.glibc_loader())
+
+    def test_no_file_to_bind_over(self) -> None:
+        # Without a file at the standard path, there is no mount point, and the wrapper fails with a
+        # hint instead of letting every action fail to start.
+        self.mapped(self.host)
+        with self.assertRaisesRegex(SystemExit, "no file there to bind"):
+            tine.glibc_loader()
+
+
 class TestNamespaces(MountTestCase):
     """Create and inspect bind mounts in child-process namespaces."""
 
@@ -1193,6 +1276,42 @@ class TestNamespaces(MountTestCase):
         self.answer(mounted)
         for path, content in before.items():
             self.assertEqual(path.read_bytes(), content)
+
+    def test_loader_is_bound_over_the_standard_path(self) -> None:
+        # bind_glibc_loader() binds the host's loader read-only over the file at the standard path, in
+        # a namespace of its own. The project mounts go into a nested namespace, which still sees the
+        # bound loader. The file outside both namespaces stays unchanged.
+        loader = scratch(self).resolve() / "ld-linux-x86-64.so.2"
+        loader.write_text("the host's loader")
+        stub = self.root / "ld-linux-x86-64.so.2"
+        stub.write_text("a stub")
+
+        def mounted() -> str:
+            with unittest.mock.patch.object(tine, "glibc_loader", return_value=(loader, stub)):
+                tine.bind_glibc_loader()
+            with self.assertRaises(OSError):
+                stub.write_text("changed")
+            self.create({"sub": str(self.source)})
+            return stub.read_text() + ", " + (self.root / "sub" / "witness").read_text()
+
+        self.assertEqual(self.answer(mounted), "the host's loader, the mounted directory's")
+        self.assertEqual(stub.read_text(), "a stub")
+
+    def test_loader_is_bound_over_a_dangling_symlink(self) -> None:
+        # The bind covers a symlink at the standard path itself, so a symlink whose target is missing
+        # still gets the host's loader.
+        loader = scratch(self).resolve() / "ld-linux-x86-64.so.2"
+        loader.write_text("the host's loader")
+        standard = self.root / "ld-linux-x86-64.so.2"
+        standard.symlink_to(self.root / "missing")
+
+        def mounted() -> str:
+            with unittest.mock.patch.object(tine, "glibc_loader", return_value=(loader, standard)):
+                tine.bind_glibc_loader()
+            return standard.read_text()
+
+        self.assertEqual(self.answer(mounted), "the host's loader")
+        self.assertTrue(standard.is_symlink())
 
     def check_mount_change(self, *, replace_source: bool) -> None:
         mounts = {"sub": str(self.source)}
@@ -1827,8 +1946,12 @@ class TestBuckCommand(unittest.TestCase):
     def running(self) -> collections.abc.Generator[list[object]]:
         execve: list[object] = []
         self.served: list[object] = []
+        self.bound: list[object] = []
         with contextlib.ExitStack() as patches:
             patch = unittest.mock.patch.object
+            patches.enter_context(
+                patch(tine, "bind_glibc_loader", side_effect=lambda: self.bound.append(len(self.served)))
+            )
             # Like the real one with nothing serving yet: what it readies is what Buck would start.
             patches.enter_context(
                 patch(cache_shim, "ensure", side_effect=lambda _, ready: self.served.append(ready()))
@@ -1864,6 +1987,9 @@ class TestBuckCommand(unittest.TestCase):
             with self.subTest(argv=argv), self.running():
                 tine.buck_command(argv)
                 self.assertEqual(self.served, [])
+                # The subcommands skip the loader bind, so they work on a host with no file at the
+                # standard path.
+                self.assertEqual(self.bound, [])
 
     def test_a_configured_cache_reaches_the_generated_block(self) -> None:
         cache = self.configure_cache()
@@ -1873,6 +1999,15 @@ class TestBuckCommand(unittest.TestCase):
         self.assertEqual(
             read_generated_buckconfig(self.root / tine.LOCAL)[tine.RE_CLIENT], tine.cache_client(cache)
         )
+
+    def test_the_loader_is_bound_before_the_shim_starts(self) -> None:
+        # The build of the shim and the shim itself run the pinned Python, so the command binds the
+        # host's glibc loader before it starts the shim. No shim has started when the bind runs.
+        self.configure_cache()
+        with self.running():
+            tine.buck_command(["build", "//..."])
+        self.assertEqual(self.bound, [0])
+        self.assertEqual(len(self.served), 1)
 
     def test_starting_the_shim_takes_the_address_out(self) -> None:
         """Buck tries a configured cache despite `--no-remote-cache`, and nothing answers it yet."""
