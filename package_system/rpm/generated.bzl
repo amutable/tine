@@ -6,20 +6,13 @@
 load("@prelude//:native.bzl", "native")
 load("//package:local_packages.bzl", "local_packages")
 load("//platform:architecture.bzl", "architecture")
-load(":rules.bzl", "rpm_package")
+load(":rules.bzl", "rpm_lookaside", "rpm_package")
 
 # Keep these records aligned with the importer's generated schema.
-SourceMetadata = record(
-    url = str,
-    sha256sum = str,
-    size = int,  # archive size in bytes
-)
-
 SrcpkgMetadata = record(
     build_requires = dict[str, list[str]],  # "_all" + per-arch conditional extras
     # producing build arch → pkgname → {Files, Requires, Recommends, Provides}
     binaries = dict[str, dict[str, dict[str, list[str]]]],
-    sources = list[SourceMetadata],
     version = str,  # main-package version; recorded metadata, not consumed by the build (spec drives it)
     release = str,
     dist = str,
@@ -43,7 +36,10 @@ def _by_architecture(meta: SrcpkgMetadata, value: typing.Callable) -> Select:
 def _parse_metadata(meta: PackageMetadata) -> SrcpkgMetadata:
     """Validate one generated JSON value and return its typed representation."""
     data = dict(meta)
-    data["sources"] = [SourceMetadata(**source) for source in data["sources"]]
+
+    # An older importer recorded the archives of the `sources` file in srcpkg.json. The build downloads the
+    # archives that the `sources` file lists instead.
+    data.pop("sources", None)
     return SrcpkgMetadata(**data)
 
 def _declare_rpm_package(
@@ -51,6 +47,7 @@ def _declare_rpm_package(
     buildroot: str,
     meta: SrcpkgMetadata,
     buildroot_packages: list[str],
+    lookaside: str | None = None,
     in_place_packaging: str | None = None,
     in_place_packaging_distro: str | None = None,
     in_place_rpmbuild_options: list[str] = [],
@@ -59,17 +56,16 @@ def _declare_rpm_package(
 ) -> None:
     spec = "{}/{}.spec".format(package, package)
     srcs = []
-    for source in meta.sources:
-        out = source.url.rsplit("/", 1)[-1]
-        target = "{}--{}".format(package, out)
-        native.http_file(
-            name = target,
-            out = out,
-            urls = [source.url],
-            sha256 = source.sha256sum,
-            size_bytes = source.size,
+    if native.glob(["{}/sources".format(package)]):
+        if lookaside == None:
+            fail("rpm_branch: {} has a sources file, but the branch has no lookaside URL; set `lookaside` in the branch's _properties.json".format(package))
+        rpm_lookaside(
+            name = "{}--lookaside".format(package),
+            package = package,
+            sources = "{}/sources".format(package),
+            url = lookaside,
         )
-        srcs.append(":" + target)
+        srcs.append(":{}--lookaside".format(package))
     srcs += native.glob(["{}/*".format(package)], exclude = [spec])
     rpm_package(
         name = package,
@@ -289,6 +285,13 @@ _buildrequires_graph = rule(
     },
 )
 
+# The lookaside caches of the distributions that the importer imports from. The defaults are here rather than
+# in the BUCK that the importer generates, so an existing BUCK needs no regeneration when one changes.
+_LOOKASIDE = {
+    "centos": "https://sources.stream.centos.org/sources/rpms",
+    "fedora": "https://src.fedoraproject.org/repo/pkgs/rpms",
+}
+
 def rpm_branch(
     buildroot: str,
     packages: dict[str, PackageMetadata],
@@ -297,13 +300,19 @@ def rpm_branch(
     in_place_packaging: dict[str, str] = {},
     in_place_rpmbuild_options: dict[str, list[str]] = {},
     in_place_specs: dict[str, str] = {},
+    lookaside: str | None = None,
     seed_only_packages: list[str] = [],
     rpmbuild_options: dict[str, list[str]] = {},
 ) -> None:
-    """Declare a branch, its self-hosting buildroot edges, and its local-packages universe."""
+    """Declare a branch, its self-hosting buildroot edges, and its local-packages universe.
+
+    The packages download the archives that their `sources` files list from the lookaside cache at
+    `lookaside`, or from the lookaside cache of `distro`."""
     if in_place_packaging and distro == None:
         # The importer writes `distro` into a BUCK it regenerates. An older BUCK doesn't pass it.
         fail("rpm_branch: in_place_packaging needs the branch's distro; regenerate the branch's BUCK with the importer")
+    if lookaside == None:
+        lookaside = _LOOKASIDE.get(distro)
     metadata = {name: _parse_metadata(meta) for name, meta in packages.items()}
     for pin in seed_only_packages:
         if pin not in metadata:
@@ -346,6 +355,7 @@ def rpm_branch(
             buildroot = buildroot,
             meta = metadata[name],
             buildroot_packages = [":" + dep for dep in locks[name]],
+            lookaside = lookaside,
             in_place_packaging = in_place_packaging.get(name),
             in_place_packaging_distro = distro if name in in_place_packaging else None,
             in_place_rpmbuild_options = in_place_rpmbuild_options.get(name, []),

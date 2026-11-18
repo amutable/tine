@@ -3,6 +3,7 @@
 
 """Stage an RPM spec in an rpmbuild tree, and assemble the arguments that rpmbuild parses it with."""
 
+import filecmp
 from pathlib import Path
 from typing import NamedTuple, TypedDict
 
@@ -48,12 +49,6 @@ class Staged(NamedTuple):
     cwd: Path | None
 
 
-def reject_symlinks(path: Path, what: str) -> None:
-    for component in (path, *path.parents):
-        if component.is_symlink():
-            util.fail(f"rpmbuild: {what} is a symlink: {component}")
-
-
 def source_files(paths: list[str]) -> list[Path]:
     """Return the Source and Patch files of `paths`, with each directory replaced by its top-level files.
 
@@ -65,14 +60,21 @@ def source_files(paths: list[str]) -> list[Path]:
         # The copy into SOURCES follows symlinks, and it runs outside the chroot where the project is
         # readable. A symlink in a fetched or unpacked tree, or a sub-target of one, would put a file of
         # the project into the package.
-        reject_symlinks(path, "the source")
+        util.reject_symlinks(path, "rpmbuild: the source")
         if not path.is_dir():
             files.append(path)
             continue
         if links := sorted(file.name for file in path.iterdir() if file.is_symlink()):
             util.fail(f"rpmbuild: {path} contains symlinks at its top level: {', '.join(links)}")
         files += sorted(file for file in path.iterdir() if file.is_file())
-    return files
+    chosen: dict[str, Path] = {}
+    for file in files:
+        other = chosen.setdefault(file.name, file)
+        # Overlapping directories and files in srcs can name the same source. rpmbuild finds a source
+        # by its file name, so only two different files with one name are an error.
+        if other != file and not filecmp.cmp(other, file, shallow=False):
+            util.fail(f"rpmbuild: {other} and {file} are different sources with the name {file.name}")
+    return list(chosen.values())
 
 
 def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
@@ -101,7 +103,7 @@ def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
     else:
         # The spec is read outside the chroot. A spec symlink in a fetched tree would read a file of the
         # project.
-        reject_symlinks(spec_file, "RPM spec")
+        util.reject_symlinks(spec_file, "rpmbuild: RPM spec")
         source_spec = spec_file
         sourcedir = None
         for s in source_files(parse["sources"]):

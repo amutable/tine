@@ -12,7 +12,6 @@ Dependencies: git, rpm, rpm-build (rpmspec). Everything else happens over REST.
 """
 
 import argparse
-import hashlib
 import json
 import logging
 import platform
@@ -22,6 +21,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xmlrpc.client
 from pathlib import Path
@@ -79,7 +79,6 @@ class DistroConfig(TypedDict):
     """Everything we need to import from one upstream distro."""
 
     dist_git: str  # clone-URL prefix; a package's clone URL is '<dist_git><packagename>.git'
-    lookaside: str  # base; a source URL is '<lookaside>/<pkg>/<file>/<hashtype>/<hash>/<file>'
     koji_hub: str  # koji XML-RPC endpoint
     koji_pkgs: str  # built-rpm download base ('<koji_pkgs>/<n>/<v>/<r>/<arch>/<nvra>.rpm')
     dist: str  # regex matching this distro's release dist tag (r'\.fc\d+', r'\.el\d+')
@@ -92,6 +91,7 @@ class BranchProperties(TypedDict):
     in_place_packaging: NotRequired[dict[str, str]]  # package -> checkout-relative file of per-distro pins
     in_place_rpmbuild_options: NotRequired[dict[str, list[str]]]
     in_place_specs: NotRequired[dict[str, str]]
+    lookaside: NotRequired[str]  # override the lookaside cache of the distro, such as with a mirror
     seed_only_packages: NotRequired[list[str]]  # source packages; see packages.md
     rpmbuild_options: NotRequired[dict[str, list[str]]]  # package -> --with/--without/--define
 
@@ -100,7 +100,6 @@ class BranchProperties(TypedDict):
 DISTROS: dict[str, DistroConfig] = {
     "fedora": {
         "dist_git": "https://src.fedoraproject.org/rpms/",
-        "lookaside": "https://src.fedoraproject.org/repo/pkgs/rpms",
         "koji_hub": "https://koji.fedoraproject.org/kojihub",
         "koji_pkgs": "https://kojipkgs.fedoraproject.org/packages",
         "dist": r"\.fc\d+",
@@ -108,7 +107,6 @@ DISTROS: dict[str, DistroConfig] = {
     },
     "centos": {
         "dist_git": "https://gitlab.com/redhat/centos-stream/rpms/",
-        "lookaside": "https://sources.stream.centos.org/sources/rpms",
         "koji_hub": "https://kojihub.stream.centos.org/kojihub",
         "koji_pkgs": "https://kojihub.stream.centos.org/kojifiles/packages",
         "dist": r"\.el\d+",
@@ -153,17 +151,6 @@ class BinaryMetadata(TypedDict):
     Files: list[str]
 
 
-class SourceMetadata(TypedDict):
-    """One upstream source archive."""
-
-    url: str
-    # buck's http_file wants SHA256; `sources` has SHA512
-    sha256sum: str
-    # archive byte size, recorded for free at download; lets buck skip the HEAD probe for an
-    # already-downloaded archive
-    size: int
-
-
 class SrcpkgMetadata(TypedDict):
     """Contents of packages/<srcpkg>.json."""
 
@@ -172,7 +159,6 @@ class SrcpkgMetadata(TypedDict):
     build_requires: dict[BuildRequiresArch, list[str]]
     # a noarch rpm appears under every build arch that produces it
     binaries: dict[Arch, dict[str, BinaryMetadata]]
-    sources: list[SourceMetadata]
     # project_build_fields() adds version, release, dist and source_date_epoch on the main branch
     # only. rpm.branch reads them because it can't derive them from the other fields.
     version: NotRequired[str]
@@ -552,7 +538,7 @@ def metadata_from_rpms(
     (a leftover from a foreign srpm-task arch) would poison the other arches' buildroots, so it
     crashes instead.
     """
-    meta: SrcpkgMetadata = {"build_requires": {}, "binaries": {}, "sources": []}
+    meta: SrcpkgMetadata = {"build_requires": {}, "binaries": {}}
     assert rpmfiles, "no rpms given"
     defines = spec_defines(rpmfiles[0])
     options = rpmbuild_options or []
@@ -648,45 +634,6 @@ def predict_dist(meta: SrcpkgMetadata) -> None:
                 binmeta[key] = [native_disttag(s) for s in binmeta[key]]
 
 
-def parse_sources(sources_file: Path) -> list[tuple[str, str, str]]:
-    """Parse a dist-git `sources` file into (hashtype, filename, hexdigest) tuples.
-
-    Handles the current BSD form ('SHA512 (foo.tar.gz) = abc...') and the legacy
-    '<md5>  foo.tar.gz' form. A package with no external archives has no file (-> [])."""
-    entries: list[tuple[str, str, str]] = []
-    for line in sources_file.read_text().splitlines() if sources_file.exists() else []:
-        if not line.strip():
-            continue
-        if m := re.match(r"(\w+) \((.+)\) = ([0-9a-fA-F]+)$", line):
-            entries.append((m.group(1), m.group(2), m.group(3)))
-        else:
-            digest, filename = line.split()
-            entries.append(("md5", filename, digest))
-    return entries
-
-
-def compute_sources(sources_file: Path, distro: str, packagename: str) -> list[SourceMetadata]:
-    """Resolve a `sources` file to the srcpkg.json `sources` list of {url, sha256sum, size} objects.
-
-    buck's http_file needs each archive's SHA256, but the lookaside is keyed by SHA512. We
-    also want the archive size to avoid an extra HEAD lookup.
-
-    FIXME: we keep the upstream distro's lookaside URLs until we re-upload to our own cache.
-    """
-    sources: list[SourceMetadata] = []
-    for hashtype, filename, hexdigest in parse_sources(sources_file):
-        base = DISTROS[distro]["lookaside"]
-        url = f"{base}/{packagename}/{filename}/{hashtype.lower()}/{hexdigest}/{filename}"
-        logging.info("%s: fetching %s from the lookaside", packagename, filename)
-        logging.debug("GET %s", url)
-        data = urlopen_retry(url)
-        # validate current sum
-        actual = hashlib.new(hashtype, data).hexdigest()
-        assert actual == hexdigest.lower(), f"{filename}: {hashtype} mismatch ({actual} != {hexdigest})"
-        sources.append({"url": url, "sha256sum": hashlib.sha256(data).hexdigest(), "size": len(data)})
-    return sorted(sources, key=lambda s: s["url"])
-
-
 def import_commits(
     koji: xmlrpc.client.ServerProxy,
     wt: Path,
@@ -702,36 +649,21 @@ def import_commits(
     Per commit: mirror its dist-git tree into packages/<distro>/<branch>/<pkg>/, recompute
     the sibling .json from its koji build (unbuilt CI/test commits carry the previous
     metadata forward), and commit keeping the upstream author and message. An unbuilt commit
-    that changes nothing we track is skipped entirely (see below).
-
-    The source archives' SHA256 are part of that metadata, but recomputing them means
-    downloading from the lookaside, so we only do it when the `sources` file actually changes
-    -- the common rebuild/CI commit leaves it untouched and reuses the previous result.
+    that changes nothing we track is skipped entirely (see below). The build downloads the
+    archives that the mirrored `sources` file lists from the lookaside cache.
     """
     rel = f"packages/{distro}/{branch}/{packagename}"
     pkgdir = wt / rel
     metafile = wt / f"{rel}.json"
-    # Seed the sources state from the last imported commit, so update-upstreams continuing an
-    # existing import only re-downloads when a new commit touches `sources`.
-    prev_sources = (pkgdir / "sources").read_text() if (pkgdir / "sources").exists() else ""
-    sources_meta = (
-        cast(SrcpkgMetadata, json.loads(metafile.read_text()))["sources"] if metafile.exists() else []
-    )
     for c in commits:
         git("checkout", "--quiet", c, cwd=clone)
         if pkgdir.exists():
             shutil.rmtree(pkgdir)
         shutil.copytree(clone, pkgdir, ignore=shutil.ignore_patterns(".git"))
 
-        cur_sources = (pkgdir / "sources").read_text() if (pkgdir / "sources").exists() else ""
-        if cur_sources != prev_sources:
-            sources_meta = compute_sources(pkgdir / "sources", distro, packagename)
-            prev_sources = cur_sources
-
         build = find_build(koji, distro, packagename, url, c, branch)
         if build:
             meta = fetch_metadata_from_koji(koji, distro, build, pkgdir / f"{packagename}.spec")
-            meta["sources"] = sources_meta
             write_json(metafile, meta)
 
         # The metadata file only exists once the package has had its first build, so don't
@@ -1078,13 +1010,11 @@ def rpm_metadata(
     metafile = _root() / f"{rel}.json"
     options = branch_properties((_root() / rel).parent).get("rpmbuild_options", {}).get(packagename, [])
     meta = metadata_from_rpms([Path(r) for r in rpms], _root() / rel / f"{packagename}.spec", options)
-    # The rpms give relationships/file lists, but not the lookaside `sources` (those come from
-    # dist-git) nor the buck projection; carry the sources over and re-derive the projection so a
-    # recompute of an imported package doesn't drop them.
+    # The rpms don't contain the fields that project_build_fields() adds, so the recompute adds them
+    # again.
     sde = 0
     if metafile.exists():
         old = cast(SrcpkgMetadata, json.loads(metafile.read_text()))
-        meta["sources"] = old.get("sources", [])
         sde = old.get("source_date_epoch") or 0
     project_build_fields(meta, sde)
     write_json(metafile, meta)
@@ -1379,9 +1309,9 @@ def project_build_fields(meta: SrcpkgMetadata, source_date_epoch: int) -> None:
 
     These are the rpm_package inputs its Starlark macro can't compute itself: version/release come
     off a binary's self-provide (regex), dist is our dist tag, and source_date_epoch is the
-    commit's author date. build_requires, binaries, and sources are left as-is -- the macro reads
-    them straight from the metadata (each arch's produced subpackage set is that arch's `binaries`
-    bucket; each source's http_file `out` is its URL basename).
+    commit's author date. build_requires and binaries are left as-is -- the macro reads them
+    straight from the metadata (each arch's produced subpackage set is that arch's `binaries`
+    bucket).
     """
     d = build_dist(meta)
     dist = d + NATIVE_DIST if d else "." + NATIVE_DIST
@@ -1424,6 +1354,10 @@ def regenerate_buck(branchdir: Path) -> None:
     if not has_properties:
         loads.append("_properties = {}")
 
+    # The BUCK passes every property of _properties.json to rpm.branch(), over the defaults, and
+    # rpm.branch() fails on a property that it doesn't know. A new property then needs no new line in the
+    # BUCK of an existing branch.
+    defaults = {"buildroot": f"//buildroots/{distro}:{branch}"}
     lines = ["# @generated -- do not edit (regenerated on import/update).", *loads, "", "PACKAGES = {"]
     lines += [f'    "{p}": {_load_symbol(p)},' for p in pkgs]
     lines += [
@@ -1431,39 +1365,46 @@ def regenerate_buck(branchdir: Path) -> None:
         "",
         "rpm.branch(",
         "    packages = PACKAGES,",
-        f'    buildroot = _properties.get("buildroot", "//buildroots/{distro}:{branch}"),',
-        '    buildroot_only_packages = _properties.get("buildroot_only_packages", []),',
         f'    distro = "{distro}",',
-        '    in_place_packaging = _properties.get("in_place_packaging", {}),',
-        '    in_place_rpmbuild_options = _properties.get("in_place_rpmbuild_options", {}),',
-        '    in_place_specs = _properties.get("in_place_specs", {}),',
-        '    seed_only_packages = _properties.get("seed_only_packages", []),',
-        '    rpmbuild_options = _properties.get("rpmbuild_options", {}),',
+        f"    **({json.dumps(defaults, sort_keys=True)} | _properties)",
         ")",
     ]
     (branchdir / "BUCK").write_text("\n".join(lines) + "\n")
 
 
-def fetch_sources(pkgdir: Path, distro: str, packagename: str) -> None:
+def fetch_sources(pkgdir: Path, distro: str, packagename: str, lookaside: str | None = None) -> None:
     """Download a package's source archives from the upstream lookaside into pkgdir (uncommitted).
 
-    Via dist-git-client, which validates the SHA512 as it downloads. No-op when the package ships
-    no `sources` file.
+    Via dist-git-client, which validates the SHA512 as it downloads. `lookaside` is the URL of the
+    lookaside cache, as the `lookaside` property of the branch gives it, or None for the cache of the
+    distro. No-op when the package ships no `sources` file.
     """
     sources = pkgdir / "sources"
     if not (sources.exists() and sources.read_text().strip()):
         return
     logging.info("fetching %s sources from the %s lookaside", packagename, distro)
-    cmd = [
-        "dist-git-client",
-        "--loglevel",
-        "warning",
-        "--forked-from",
-        DISTROS[distro]["dist_git"] + packagename + ".git",
-        "sources",
-    ]
-    logging.debug("%s  (cwd=%s)", " ".join(cmd), pkgdir)
-    subprocess.run(cmd, cwd=pkgdir, check=True)
+    clone_url = DISTROS[distro]["dist_git"] + packagename + ".git"
+    with tempfile.TemporaryDirectory() as configdir:
+        cmd = ["dist-git-client", "--loglevel", "warning"]
+        if lookaside is not None:
+            # dist-git-client takes the URL of the lookaside cache from a configuration that it matches
+            # against the host of the clone URL. ConfigParser reads a % as the start of an interpolation.
+            url = urllib.parse.urlsplit(lookaside)
+            path = "/".join(part for part in url.path.split("/") if part)
+            pattern = "/".join(
+                part for part in (path, "{name}/{filename}/{hashtype}/{hash}/{filename}") if part
+            )
+            config = (
+                "[tine]\n"
+                f"clone_hostnames = {urllib.parse.urlsplit(clone_url).hostname}\n"
+                f"lookaside_location = {url.scheme}://{url.netloc}\n"
+                f"lookaside_uri_pattern = {pattern}\n"
+            )
+            (Path(configdir) / "tine.ini").write_text(config.replace("%", "%%"))
+            cmd += ["--configdir", configdir]
+        cmd += ["--forked-from", clone_url, "sources"]
+        logging.debug("%s  (cwd=%s)", " ".join(cmd), pkgdir)
+        subprocess.run(cmd, cwd=pkgdir, check=True)
 
 
 def srpm(packagename: str, distro: str | None = None, branch: str | None = None) -> Path:
@@ -1481,7 +1422,7 @@ def srpm(packagename: str, distro: str | None = None, branch: str | None = None)
     spec = pkgdir / f"{packagename}.spec"
     assert spec.exists(), f"{rel}: no {packagename}.spec"
 
-    fetch_sources(pkgdir, distro, packagename)
+    fetch_sources(pkgdir, distro, packagename, branch_properties(pkgdir.parent).get("lookaside"))
 
     builddir = _root() / "_build"  # also holds binary rpms from mockbuild
     builddir.mkdir(exist_ok=True)

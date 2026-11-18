@@ -583,12 +583,13 @@ build, because it has no target that a committed lock could belong to.
 
 ### Execution isolation and target roots
 
-All build actions run through `box.run()` and `box/sandbox.py`. The sandbox mounts the box's
-userspace read-only over an otherwise isolated namespace, supplies API and temporary filesystems, clears the
-host environment, disables network by default, and gives build actions unprivileged fakeroot behavior. A
-build action runs as root, and its sync calls succeed without doing anything. When the sandbox maps only
-one user ID, for example when tine runs as an unprivileged user, the action's chown calls also succeed
-without doing anything.
+Build actions run through `box.run()` and `box/sandbox.py`. The action of `rpm.lookaside()` that reads a
+`sources` file and the action of `rpm.srpm()` run tine's Python outside a box, because they need no tools of
+a box. The sandbox mounts the box's userspace read-only over an otherwise isolated namespace, supplies API
+and temporary filesystems, clears the host environment, disables network by default, and gives build
+actions unprivileged fakeroot behavior. A build action runs as root, and its sync calls succeed without
+doing anything. When the sandbox maps only one user ID, for example when tine runs as an unprivileged user,
+the action's chown calls also succeed without doing anything.
 
 The project is mounted at `/tine/project` and the action runs there, rather than at the path it is checked
 out under. A checkout is then free to live anywhere, including under a directory the box populates
@@ -746,7 +747,16 @@ An `rpm_package` action:
    such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
    `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
    first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
-   from that commit. The project is read-only until the driver exits;
+   from that commit. A directory in `srcs`, such as a `git.fetch()` of a dist-git repository, contributes the
+   files at its top level. `rpm.lookaside()` lists the archives of the `sources` file of a dist-git
+   repository in one action, with tine's Python outside a box. A dynamic action then downloads each archive
+   with Buck's `download_file`, which checks its SHA-512 digest. A download depends only on the line of its
+   archive in `sources`, so the build downloads nothing again while that line stays the same. The output
+   directory of `rpm.lookaside()` goes in the `srcs` of the package. `rpm.branch()` declares an
+   `rpm.lookaside()` for the `sources` file of each package, with the lookaside cache of the branch's
+   distribution. `rpm.srpm()` unpacks a source RPM into a directory for `srcs`, with a driver that fails on
+   any entry that is not a regular file with a plain name. The project is read-only until the build driver
+   exits;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -779,7 +789,7 @@ names none, and gets no per-release aliases either.
 
 Entry points: `package_system/rpm/{rules,catalog,generated}.bzl`,
 `package_system/rpm/{snapshot,plan,install,pkgdb,createrepo,build,extract,rpmfile}.py` and
-`package_system/rpm/{rpmbuild,buildrequires}.py`.
+`package_system/rpm/{rpmbuild,buildrequires,lookaside,srpm}.py`.
 
 ### The alpm package system
 
@@ -1786,6 +1796,9 @@ belong to one package system are listed in its own section instead:
 - Rust source builds cover crates.io and git sources; another registry is rejected. A git dependency's
   integrity rests on the commit hash the lock records: SHA-1 for ordinary repositories, which is weaker
   than the SHA-256 pinning everything else here uses.
+- `rpm.lookaside()` fails on a `sources` file that lists an MD5 digest, which the `sources` files of old
+  packages do, because Buck's downloads can't check MD5. The package has to list the SHA-512 digest
+  upstream.
 - `cargo-auditable` is a pinned upstream release binary rather than a source-built one, so the Rust build
   path is not itself part of the source-trust chain.
 - Four build steps reach the network instead of downloading content with a recorded byte hash: Rust Git
