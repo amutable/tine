@@ -115,9 +115,11 @@ def _library(
 
 def _box_python_binary_impl(ctx: AnalysisContext) -> list[Provider]:
     tree = ctx.actions.copied_dir("tree", flat_tree([ctx.attrs.main], ctx.attrs.deps))
+    # A relaxed box keeps the host's PATH. A python3 of the host, such as one that uv or mise installs
+    # under $HOME, can come before /usr/bin on that PATH, and it lacks the packages of the box.
     command = cmd_args(
         box.run(ctx.attrs.box[box.Info], relaxed = True),
-        "python3",
+        "/usr/bin/python3",
         "-B",
         tree.project(ctx.attrs.main.short_path),
     )
