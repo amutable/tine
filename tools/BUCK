@@ -20,6 +20,7 @@ _RELEASE = "catalog//:default.release"
 http.tool(
     name = "python3",
     args = ["-B"],
+    bootstrap = True,
     path = "bin/python3",
     spec = _pins["python3"],
     visibility = ["PUBLIC"],

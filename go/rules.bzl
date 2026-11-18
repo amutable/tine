@@ -303,7 +303,7 @@ def go_releases_snapshot_path(name: str) -> str:
     """
     return "snapshot/go/{}.json".format(name.removesuffix(".releases"))
 
-def _go_toolchains_impl(actions: AnalysisActions, arch: str, snapshot: ArtifactValue, target: str) -> list[Provider]:
+def _go_toolchains_impl(actions: AnalysisActions, arch: str, snapshot: ArtifactValue, target: str, untar: RunInfo) -> list[Provider]:
     toolchains = {}
     for release, archives in snapshot.read_json().items():
         archive = archives.get(arch)
@@ -311,7 +311,9 @@ def _go_toolchains_impl(actions: AnalysisActions, arch: str, snapshot: ArtifactV
             fail("go.releases {}: the snapshot contains no {} archive for {}".format(target, release, arch))
         download = actions.declare_output(release + ".tar.gz")
         actions.download_file(download.as_output(), archive["url"], sha256 = archive["sha256"], size_bytes = archive["size"])
-        toolchains[release] = actions.extract_archive(release, download, strip_prefix = "go")
+        unpacked = actions.declare_output(release, dir = True)
+        actions.run(cmd_args(untar, download, unpacked.as_output()), category = "untar", identifier = release)
+        toolchains[release] = unpacked.project("go")
     return [GoToolchainsInfo(toolchains = toolchains)]
 
 _go_toolchains = dynamic_actions(
@@ -320,6 +322,7 @@ _go_toolchains = dynamic_actions(
         "arch": dynattrs.value(str),
         "snapshot": dynattrs.artifact_value(),
         "target": dynattrs.value(str),
+        "untar": dynattrs.value(RunInfo),
     },
 )
 
@@ -329,7 +332,7 @@ def _go_releases_impl(ctx: AnalysisContext) -> list[Provider]:
     # write it.
     snapshot = ctx.attrs.snapshot if ctx.attrs.snapshot != None else ctx.actions.write_json("empty-snapshot.json", {})
     toolchains = ctx.actions.dynamic_output_new(
-        _go_toolchains(arch = ctx.attrs._arch, snapshot = snapshot, target = str(ctx.label.raw_target())),
+        _go_toolchains(arch = ctx.attrs._arch, snapshot = snapshot, target = str(ctx.label.raw_target()), untar = ctx.attrs._untar[RunInfo]),
     )
     spec = specs.args(
         ctx.actions,
@@ -352,6 +355,7 @@ _go_releases = rule(
         # The go.releases target is a go_package's exec dependency, so this is the architecture of the box.
         "_arch": attrs.string(default = architecture.configured()),
         "_snapshot": attrs.exec_dep(providers = [RunInfo], default = "tine//go:releases"),
+        "_untar": attrs.exec_dep(providers = [RunInfo], default = "tine//http:untar"),
     },
 )
 

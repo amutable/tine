@@ -64,11 +64,14 @@ http.tool(
 The arguments of `http.tool()` beyond `spec`:
 
 - Without `path` or `directory`, the download is the program itself.
-- `path` names the program inside an archive. The program is the target's output.
+- `path` names the program inside an archive. The program is the target's output. The archive is a tar
+  archive, uncompressed or compressed with gzip, bzip2, xz or zstd.
 - `directory = True` makes the whole unpacked archive the target's output, for a tool that needs the files
   beside its program. `path` then names the program that `buck run` runs. Without `path`, the target has
   nothing to run.
 - `compressed = True` decompresses a download that is a single zstd-compressed program.
+- `bootstrap = True` marks the pin of the Python that runs tine's drivers. The host's `python3` unpacks its
+  archive, because that Python cannot run before its own archive is unpacked.
 - `args` come before the arguments given to `buck run`.
 
 ## Updating the pins

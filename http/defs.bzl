@@ -4,7 +4,7 @@
 """The public HTTP download API, exported as the `http` namespace."""
 
 # Explicit loads keep Starlark type checking precise.
-load("@prelude//:rules.bzl", "http_archive", "http_file")
+load("@prelude//:rules.bzl", "http_file")
 load("//platform:architecture.bzl", "architecture")
 
 def _tool_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -14,6 +14,13 @@ def _tool_impl(ctx: AnalysisContext) -> list[Provider]:
         ctx.actions.run(
             cmd_args(ctx.attrs.unzstd[RunInfo], src, out.as_output()),
             category = "unzstd",
+        )
+        src = out
+    elif ctx.attrs.untar != None:
+        out = ctx.actions.declare_output(ctx.label.name, dir = True)
+        ctx.actions.run(
+            cmd_args(ctx.attrs.untar[RunInfo], src, out.as_output()),
+            category = "untar",
         )
         src = out
     root = src.project(ctx.attrs.strip_prefix) if ctx.attrs.strip_prefix else src
@@ -32,12 +39,24 @@ _tool = rule(
         "args": attrs.list(attrs.string(), default = []),
         "directory": attrs.bool(default = False),
         "path": attrs.option(attrs.string(), default = None),
-        "src": attrs.source(allow_directory = True),
+        "src": attrs.source(),
         "strip_prefix": attrs.option(attrs.string(), default = None),
-        # The decompressor is a python.binary, and the bootstrap interpreter that runs it is an
-        # http_tool. A dep on the decompressor in every http_tool would make the interpreter depend on
-        # itself, so only a compressed download sets `unzstd`.
+        # `untar` and `unzstd` are python.binary targets, and the pinned Python runs them. The pinned Python
+        # is an http_tool too, so a dep on `untar` or `unzstd` in every http_tool makes it depend on itself.
+        # Only a download that needs `untar` or `unzstd` sets the attribute. The pinned Python's own archive
+        # uses `tine//http:host-untar` instead.
+        "untar": attrs.option(attrs.exec_dep(providers = [RunInfo]), default = None),
         "unzstd": attrs.option(attrs.exec_dep(providers = [RunInfo]), default = None),
+    },
+)
+
+def _host_python_script_impl(ctx: AnalysisContext) -> list[Provider]:
+    return [DefaultInfo(default_output = ctx.attrs.src), RunInfo(args = cmd_args("python3", "-SIB", ctx.attrs.src))]
+
+host_python_script = rule(
+    impl = _host_python_script_impl,
+    attrs = {
+        "src": attrs.source(),
     },
 )
 
@@ -72,6 +91,7 @@ def http_tool(
     path: str | None = None,
     compressed: bool = False,
     directory: bool = False,
+    bootstrap: bool = False,
     visibility: list[str] | None = None,
 ) -> None:
     """Pin a prebuilt program as http.file does, for `buck run` and as an executable dependency.
@@ -80,15 +100,16 @@ def http_tool(
     `strip_prefix`. `path` selects a member of an archive; `compressed` decompresses a bare
     zstd-compressed binary, which Buck's http rules cannot unpack themselves. `directory` makes the whole
     unpacked archive the default output, and `path` then names the program that `buck run` runs.
+    `bootstrap` marks the pin of the Python that runs tine's drivers, whose archive the host's python3 unpacks.
     """
     if directory and compressed:
         fail("http.tool {}: a compressed download is a single binary, not a directory".format(name))
-    if path == None and not directory:
-        http_pinned_file(name = name + "-download", spec = spec, executable = True)
-        strip_prefix = None
-    else:
-        http_archive(name = name + "-download", **_download(spec))
-        strip_prefix = architecture.select({cpu: e.get("strip_prefix") for cpu, e in spec["platforms"].items()})
+    archive = path != None or directory
+    http_pinned_file(name = name + "-download", spec = spec, executable = not archive)
+    strip_prefix = architecture.select({cpu: e.get("strip_prefix") for cpu, e in spec["platforms"].items()}) if archive else None
+    untar = None
+    if archive:
+        untar = "tine//http:host-untar" if bootstrap else "tine//http:untar"
     _tool(
         name = name,
         args = args or [],
@@ -96,6 +117,7 @@ def http_tool(
         path = path,
         src = ":{}-download".format(name),
         strip_prefix = strip_prefix,
+        untar = untar,
         unzstd = "tine//http:unzstd" if compressed else None,
         visibility = visibility,
     )
