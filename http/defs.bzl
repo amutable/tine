@@ -26,10 +26,11 @@ def _tool_impl(ctx: AnalysisContext) -> list[Provider]:
     root = src.project(ctx.attrs.strip_prefix) if ctx.attrs.strip_prefix else src
     if not ctx.attrs.directory:
         program = root.project(ctx.attrs.path) if ctx.attrs.path != None else root
-        return [DefaultInfo(default_output = program), RunInfo(args = cmd_args(program, ctx.attrs.args))]
+        # python3 reads its standard library from the unpacked archive, beside bin/python3. Buck only writes out
+        # the files that an action declares as inputs. Without the whole archive as an input, python3 fails to start.
+        return [DefaultInfo(default_output = program), RunInfo(args = cmd_args(program, ctx.attrs.args, hidden = src))]
     providers = [DefaultInfo(default_output = root)]
     if ctx.attrs.path != None:
-        # `buck run` needs the whole unpacked archive, because a program such as go reads the files beside it.
         providers.append(RunInfo(args = cmd_args(root.project(ctx.attrs.path), ctx.attrs.args, hidden = src)))
     return providers
 
