@@ -3,6 +3,7 @@
 
 """Pinned files and prebuilt tools, downloaded and verified by Buck."""
 
+load("//http:defs.bzl", "host_python_script")
 load("//python:defs.bzl", "python")
 
 # The pinned CPython is new enough to have zstd in its standard library.
@@ -11,4 +12,19 @@ python.binary(
     name = "unzstd",
     main = "unzstd.py",
     visibility = ["PUBLIC"],
+)
+
+# The pinned CPython runs `untar`, because some pins are xz-compressed and a host's python3 can lack lzma.
+# PUBLIC: an `http.tool` that unpacks an archive in a consuming project depends on it.
+python.binary(
+    name = "untar",
+    main = "untar.py",
+    visibility = ["PUBLIC"],
+)
+
+# The pinned CPython cannot run before its archive is unpacked, so the host's python3 unpacks its archive.
+host_python_script(
+    name = "host-untar",
+    src = "untar.py",
+    visibility = ["tine//tools:python3"],
 )

@@ -32,10 +32,10 @@ The host needs only:
 
 tine uses the host's `python` and `git` to bootstrap itself and to read the project's git state, such as the
 version an image derives from it. A build also runs the host's `git` to fetch git checkouts, and the host's
-`git` and `/bin/sh` to fetch the git dependencies of Rust projects. Every other tool a build runs is pinned.
-The first [`tine`](bin/tine) invocation that runs Buck fetches and verifies the pinned Buck2 binary into
-`${XDG_CACHE_HOME:-~/.cache}/tine/buck2` (one directory per pin, safe to delete); everything else is fetched
-and cached by Buck itself.
+`git` and `/bin/sh` to fetch the git dependencies of Rust projects. It unpacks the pinned Python with the
+host's `python3`. Every other tool a build runs is pinned. The first [`tine`](bin/tine) invocation that runs
+Buck fetches and verifies the pinned Buck2 binary into `${XDG_CACHE_HOME:-~/.cache}/tine/buck2` (one
+directory per pin, safe to delete); everything else is fetched and cached by Buck itself.
 
 ### HOME directory
 
