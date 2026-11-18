@@ -40,6 +40,34 @@ class TestConfigureBox(unittest.TestCase):
             self.assertEqual(nsswitch.readlink(), Path("/etc/authselect/nsswitch.conf"))
 
 
+class TestSortSgmlCatalogs(unittest.TestCase):
+    def test_sorts_catalogs_and_leaves_sorted_ones_alone(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
+            root = Path(scratch)
+            sgml = root / "etc/sgml"
+            sgml.mkdir(parents=True)
+            catalog = sgml / "catalog"
+            catalog.write_text(
+                'CATALOG "/etc/sgml/xml-docbook-4.5.cat"\nCATALOG "/etc/sgml/sgml-docbook-4.5.cat"\n'
+            )
+            ordered = sgml / "sgml-docbook-4.5.cat"
+            ordered.write_text('CATALOG "/usr/share/sgml/a/catalog"\nCATALOG "/usr/share/sgml/b/catalog"\n')
+            os.utime(ordered, ns=(0, 0))
+            outside = root / "outside.cat"
+            outside.write_text("b\na\n")
+            (sgml / "linked.cat").symlink_to(outside)
+
+            installer._sort_sgml_catalogs(root)
+
+            self.assertEqual(
+                catalog.read_text(),
+                'CATALOG "/etc/sgml/sgml-docbook-4.5.cat"\nCATALOG "/etc/sgml/xml-docbook-4.5.cat"\n',
+            )
+            # Not rewritten, so an overlay would not copy it up.
+            self.assertEqual(ordered.stat().st_mtime_ns, 0)
+            self.assertEqual(outside.read_text(), "b\na\n")
+
+
 class TestRun(unittest.TestCase):
     def test_package_scripts_tolerate_unmapped_acl_groups(self) -> None:
         # The test box mounts /var/tmp as tmpfs, so a host mounted with noacl cannot hide this failure.

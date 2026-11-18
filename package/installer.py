@@ -115,6 +115,27 @@ def _configure_box(installroot: Path) -> None:
     resolv.symlink_to("../run/systemd/resolve/stub-resolv.conf")
 
 
+def _sort_sgml_catalogs(installroot: Path) -> None:
+    """Put the lines of the SGML catalogs that scriptlets maintain into one fixed order.
+
+    libxml2 writes an SGML catalog in a random order. Sort them to keep every SGML DTD ahead of the
+    XML ones, the only order the docbook-dtds scriptlet asks for. A catalog that is already sorted
+    is left alone, so a lower layer's copy is not copied up into the delta.
+
+    Drop this once https://gitlab.gnome.org/GNOME/libxml2/-/merge_requests/495 reaches the
+    distributions.
+    """
+    sgml = installroot / "etc/sgml"
+    for catalog in [sgml / "catalog", *sgml.glob("*.cat")]:
+        # An absolute symlink means a path inside the root, but this process would follow it outside.
+        if catalog.is_symlink() or not catalog.is_file():
+            continue
+        data = catalog.read_bytes()
+        ordered = b"".join(line + b"\n" for line in sorted(data.splitlines()))
+        if ordered != data:
+            catalog.write_bytes(ordered)
+
+
 def _normalize(installroot: Path, spec: InstallSpec) -> None:
     """Settle what an install leaves behind whichever package system performed it.
 
@@ -131,6 +152,7 @@ def _normalize(installroot: Path, spec: InstallSpec) -> None:
     # and every action that runs in the root misses the shared cache. tine's pacman drivers keep their
     # keyring in a directory of their own.
     shutil.rmtree(installroot / "etc/pacman.d/gnupg", ignore_errors=True)
+    _sort_sgml_catalogs(installroot)
     if spec["box_config"]:
         _configure_box(installroot)
 
