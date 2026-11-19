@@ -19,6 +19,10 @@ from util import fail
 MEDIA_TYPE = "application/vnd.uapi.16.manifest"
 TRAILER_TYPE = "application/vnd.uapi.16.trailer"
 
+# A manifest without `features` records only the default features of the format, which leave out
+# mTimeNSec and extended attributes. file_object() writes the fields of every feature listed here.
+FEATURES = ["device", "gid", "hardlink", "mode", "mtime", "sha256", "size", "symlink", "uid", "user-xattr"]
+
 # RFC7464 frames every JSON text with a leading record separator and a trailing line feed.
 _RS = b"\x1e"
 _LF = b"\n"
@@ -54,6 +58,7 @@ class Object(TypedDict, total=False):
     """One record of a UAPI.16 manifest."""
 
     mediaType: str
+    features: list[str]
     name: str
     type: str
     mode: int
@@ -255,13 +260,20 @@ def read(source: Path) -> list[Object]:
     records = source.read_bytes().split(_RS)[1:]
     if not records or records[-1] != _record({"mediaType": TRAILER_TYPE})[1:]:
         fail(f"manifest: {source} is incomplete: missing trailer")
-    return [json.loads(record) for record in records[:-1]]
+    objects: list[Object] = [json.loads(record) for record in records[:-1]]
+    # storage.restore() creates a file without extendedAttributes without user xattrs. The format only
+    # allows that when the manifest lists `user-xattr`.
+    if not objects or objects[0].get("features") != FEATURES:
+        fail(f"manifest: {source} does not record the features {', '.join(FEATURES)}")
+    return objects
 
 
 def write_objects(objects: Sequence[Object], out: Path) -> int:
+    root = objects[0].copy()
+    root["features"] = FEATURES
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("wb") as stream:
-        for obj in objects:
+        for obj in [root, *objects[1:]]:
             stream.write(_record(obj))
         stream.write(_record({"mediaType": TRAILER_TYPE}))
     return len(objects) + 1

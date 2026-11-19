@@ -1159,8 +1159,10 @@ explicit hardlink groups are in the manifest. Regular-file contents are immutabl
 contains only blobs absent from its parents; the ordered store list remains an explicit input to every
 consumer. Content references use `blobs/<sha256>` in the combined store namespace, resolved in store order.
 A store with parents therefore needs its declared parent stores to resolve its references. Standalone
-directory exports include every referenced blob. The root object of a snapshot also holds the metadata of
-the root directory. The listing of a partition has a root object with only the media type.
+directory exports include every referenced blob. Every root object lists the `features` of the manifest,
+because the default features of UAPI.16 leave out modification times and extended attributes. The root
+object of a snapshot also holds the metadata of the root directory. The listing of a partition has a root
+object with only the media type and the features.
 
 Equal bytes share storage without sharing an inode. Reproducible `inodeToken` counters identify explicit
 hardlink groups independently of content digests. A metadata-only change changes the manifest and therefore
