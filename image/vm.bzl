@@ -78,11 +78,10 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
         # image's loader/keys/auto keys on first boot.
         run.add("--secure-boot=yes")
 
-    # Secure Boot brings one for the expected-PCR policy to be measured into, but an image needs a
-    # TPM whenever it seals anything to one, which a repart definition asking for Encrypt=tpm2 does
-    # on first boot, Secure Boot or not.
-    if ctx.attrs.secure_boot or ctx.attrs.tpm:
-        run.add("--tpm=yes")
+    # Unset, Secure Boot brings a TPM for the expected-PCR policy to be measured into. Always say
+    # which: left to itself, vmspawn attaches one whenever swtpm is installed, which the tools box does.
+    tpm = ctx.attrs.tpm if ctx.attrs.tpm != None else ctx.attrs.secure_boot
+    run.add("--tpm={}".format("yes" if tpm else "no"))
 
     if ctx.attrs.coco != None:
         run.add("--coco={}".format(ctx.attrs.coco))
@@ -219,9 +218,10 @@ _image_vm = rule(
             default = False,
             doc = "boot with Secure Boot capable firmware",
         ),
-        "tpm": attrs.bool(
-            default = False,
-            doc = "attach a software TPM, which Secure Boot implies",
+        "tpm": attrs.option(
+            attrs.bool(),
+            default = None,
+            doc = "whether to attach a software TPM; unset, the guest has one with `secure_boot` and none without",
         ),
         "vmspawn_args": attrs.list(
             attrs.arg(),

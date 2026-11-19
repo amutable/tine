@@ -442,7 +442,8 @@ when needed:
   name. Each DDI is named `<name>.raw` in the guest. With `secure_boot`, vmspawn picks Secure Boot capable
   firmware without pre-enrolled keys, so an image carrying `loader/keys/auto` enrollment files enrolls them
   on first boot and then boots with Secure Boot enforced, and attaches a software TPM so the UKI's signed
-  expected-PCR policy is measured.
+  expected-PCR policy is measured. `tpm` overrides that either way: true attaches one without Secure
+  Boot, false leaves it out with Secure Boot. Unset and without Secure Boot, the guest has no TPM.
 
 `image.archive` builds one logical image from operations and writes it as a deterministic tar or newc cpio
 archive, optionally zstd-compressed (`compression = "zstd"`). `image.sysext`, `image.confext` and
