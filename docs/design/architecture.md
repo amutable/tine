@@ -758,12 +758,12 @@ and runtime package closures are still delegated to libdnf5 at buildroot-plan ti
 An `rpm_package` action:
 
 1. obtains the shared base root from its `BuildrootInfo`;
-2. resolves and installs its BuildRequires delta, preferring RPMs from `buildroot_packages` over upstream. A
-   hand-written `rpm.package()` also installs the BuildRequires of the spec that it builds. Analysis cannot
+2. resolves its BuildRequires over the base root, preferring RPMs from `buildroot_packages` over upstream. A
+   hand-written `rpm.package()` also resolves the BuildRequires of the spec that it builds. Analysis cannot
    read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
-   the build's options in the base root and the delta. It writes the BuildRequires that are missing, and a
-   second delta installs them. That delta is empty when the spec needs nothing more;
-3. overlays the base and the deltas, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
+   the build's options in the base root with the declared BuildRequires installed. It writes the
+   BuildRequires that are missing, and a second solve takes the declared and the missing ones together;
+3. overlays their delta on the base, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
    or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
    directory under a mount rather than the mounted tree, so each directory mount below the source tree,
    such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
@@ -794,6 +794,10 @@ names none, and gets no per-release aliases either.
   `rpm.branch()` derives `buildroot_packages` from them, and Buck cannot add a target dependency that an
   action output discovers. A queried BuildRequires on a package of the branch would install it from
   upstream.
+- The query runs in the base root with the declared BuildRequires, and the build in the base root with the
+  solve of the declared and the queried ones together. That solve can choose another provider or version for
+  a declared requirement, and the build root is then not a superset of the root that
+  `%generate_buildrequires` ran in. Nothing detects that.
 - Build cycles fall back to upstream RPMs for ordinary intra-SCC edges, so the package set is not a fully
   self-hosted fixed point.
 - Builds use `--nocheck`; package test policy is not implemented.

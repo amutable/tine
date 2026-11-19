@@ -118,7 +118,10 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
             source_tree,
             stack,
         )
-        stack = stack + [recipe_delta(ctx, "rpm_package", base_buildroot, stack, ctx.attrs.buildroot_packages, buildrequires)]
+        stack = [
+            base_buildroot.root,
+            recipe_delta(ctx, "rpm_package", base_buildroot, ctx.attrs.build_requires, ctx.attrs.buildroot_packages, buildrequires),
+        ]
 
     return package_build(
         ctx,

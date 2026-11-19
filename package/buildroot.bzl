@@ -115,21 +115,24 @@ def recipe_delta(
     ctx: AnalysisContext,
     owner: str,
     base: BuildrootInfo,
-    stack: list[Artifact],
+    build_requires: list[str],
     buildroot_packages: list[Dependency],
     requires: Artifact,
 ) -> Artifact:
-    """Return a delta over `stack` that installs the JSON list `requires` of build dependencies.
+    """Return a delta over the base root that installs `build_requires` and the JSON list `requires`.
 
-    The solve of the delta prefers the packages of `buildroot_packages` over the repositories of the
-    package manager. `owner` starts a failure message.
+    The delta replaces the one of `package_buildroot()`. Both lists are solved together in the base root.
+    That solve can choose another provider or version for a package of `build_requires` than
+    `package_buildroot()` does, so its root isn't always a superset of that one. The solve prefers the
+    packages of `buildroot_packages` over the repositories of the package manager. `owner` starts a failure
+    message.
     """
     return install_packages(
         ctx,
         base.package_manager,
         base.box,
-        [],
-        stack = stack,
+        build_requires,
+        stack = [base.root],
         extra_packages = _extra_packages(owner, base, buildroot_packages),
         install_files = [requires],
         identifier = "recipe",
