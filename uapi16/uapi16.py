@@ -19,6 +19,10 @@ from util import fail
 MEDIA_TYPE = "application/vnd.uapi.16.manifest"
 TRAILER_TYPE = "application/vnd.uapi.16.trailer"
 
+# A manifest without `features` records only the default features of the format, which leave out
+# mTimeNSec and extended attributes. file_object() writes the fields of every feature listed here.
+FEATURES = ["device", "gid", "hardlink", "mode", "mtime", "sha256", "size", "symlink", "uid", "user-xattr"]
+
 # RFC7464 frames every JSON text with a leading record separator and a trailing line feed.
 _RS = b"\x1e"
 _LF = b"\n"
@@ -54,6 +58,7 @@ class Object(TypedDict, total=False):
     """One record of a UAPI.16 manifest."""
 
     mediaType: str
+    features: list[str]
     name: str
     type: str
     mode: int
@@ -252,6 +257,27 @@ def _record(obj: Object) -> bytes:
     )
 
 
+_FIELDS = {
+    "reg": ("mode", "sha256", "size"),
+    "dir": ("mode",),
+    "lnk": ("contents",),
+    "fifo": ("mode",),
+    "sock": ("mode",),
+    "chr": ("mode", "major", "minor"),
+    "blk": ("mode", "major", "minor"),
+}
+
+
+def _check_fields(source: Path, obj: object) -> None:
+    # A store that Buck did not write, such as one that `export --store` reads, can lack any field.
+    # storage.restore() reads every field below and fails with a KeyError on a missing one.
+    if not isinstance(obj, dict) or not isinstance(obj.get("name"), str) or obj.get("type") not in _FIELDS:
+        fail(f"manifest: {source} contains an object without a name or a known type: {obj!r}")
+    for field in ("mTimeNSec", *_FIELDS[obj["type"]]):
+        if field not in obj:
+            fail(f"manifest: {source} lists {obj['name']!r} without {field}")
+
+
 def read(source: Path) -> list[Object]:
     """Read a manifest that `write_objects` produced.
 
@@ -261,13 +287,23 @@ def read(source: Path) -> list[Object]:
     records = source.read_bytes().split(_RS)[1:]
     if not records or records[-1] != _record({"mediaType": TRAILER_TYPE})[1:]:
         fail(f"manifest: {source} is incomplete: missing trailer")
-    return [json.loads(record) for record in records[:-1]]
+    objects: list[Object] = [json.loads(record) for record in records[:-1]]
+    for obj in objects[1:]:
+        _check_fields(source, obj)
+    # storage.restore() gives a file no user xattrs when its object has no extendedAttributes. UAPI.16
+    # only defines that meaning when the manifest lists `user-xattr`. A reader must ignore the order of
+    # the features and every feature it does not know.
+    if not objects or not set(FEATURES) <= set(objects[0].get("features", [])):
+        fail(f"manifest: {source} does not record the features {', '.join(FEATURES)}")
+    return objects
 
 
 def write_objects(objects: Sequence[Object], out: Path) -> int:
+    root = objects[0].copy()
+    root["features"] = FEATURES
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("wb") as stream:
-        for obj in objects:
+        for obj in [root, *objects[1:]]:
             stream.write(_record(obj))
         stream.write(_record({"mediaType": TRAILER_TYPE}))
     return len(objects) + 1

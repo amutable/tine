@@ -37,6 +37,18 @@ expected_root = {
     "mode": 0o555,
     "uid": 0,
     "gid": 0,
+    "features": [
+        "device",
+        "gid",
+        "hardlink",
+        "mode",
+        "mtime",
+        "sha256",
+        "size",
+        "symlink",
+        "uid",
+        "user-xattr",
+    ],
 }
 assert {key: root.get(key) for key in expected_root} == expected_root and "name" not in root, root
 assert files, "the manifest lists no files at all"
