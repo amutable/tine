@@ -42,6 +42,39 @@ box.sh_test(
     args = ["$(source hello_archive_check.py)", "$(location :hello-buildroot-packages)"],
 )
 
+# Build roots don't get sent to the shared cache (huge and fast to build locally), so building them
+# must be reproducible. Otherwise all downstream jobs like the actually built packages are cache
+# misses as well. Test problematic packages here to ensure they keep working.
+[
+    rpm.package(
+        name = "buildroot-twice-" + copy,
+        distro = _DISTRO,
+        package = "hello",
+        spec = "hello/hello.spec",
+        # xmlcatalog writes SGML catalogs in random order:
+        # https://gitlab.gnome.org/GNOME/libxml2/-/merge_requests/495
+        build_requires = ["docbook-dtds"],
+        buildroot = _BUILDROOT,
+        release = "1",
+        source_date_epoch = 1754006400,
+        subpackages = ["hello"],
+    )
+    for copy in ("a", "b")
+]
+
+box.sh_test(
+    name = "buildroot-twice-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = _CHECK_BOX,
+    script = 'python3 "$@"',
+    args = [
+        "$(source buildroot_twice_check.py)",
+        "$(location :buildroot-twice-a[buildroot])",
+        "$(location :buildroot-twice-b[buildroot])",
+    ],
+)
+
 # The archive path runs %prep and emits both binary and source RPMs. It exists separately from the
 # source-tree fixture to check release and dev compression through real RPM headers.
 rpm.package(
