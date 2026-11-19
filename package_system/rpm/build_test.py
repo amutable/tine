@@ -5,6 +5,7 @@
 
 import contextlib
 import errno
+import hashlib
 import io
 import shutil
 import subprocess
@@ -16,6 +17,21 @@ from typing import cast, override
 from unittest import mock
 
 import build
+
+SHOWRC = b"%_topdir /build\n"
+
+
+def answering_showrc[T](run: Callable[..., T]) -> Callable[..., T | subprocess.CompletedProcess[bytes]]:
+    """Wrap the fake `run` so that it answers `rpmbuild --showrc` with SHOWRC."""
+
+    def dispatch(
+        command: list[str], *args: object, **kwargs: object
+    ) -> T | subprocess.CompletedProcess[bytes]:
+        if "--showrc" in command:
+            return subprocess.CompletedProcess(command, 0, stdout=SHOWRC)
+        return run(command, *args, **kwargs)
+
+    return dispatch
 
 
 class BuildRpm(unittest.TestCase):
@@ -87,7 +103,7 @@ class BuildRpm(unittest.TestCase):
             mock.patch.object(
                 build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()
             ) as mounted,
-            mock.patch.object(build.subprocess, "run", side_effect=run) as process,
+            mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)) as process,
             # Patch the module wrapper first so TemporaryDirectory still uses the real rmtree.
             mock.patch.object(build.builder, "shutil", mock.Mock(wraps=shutil)),
             mock.patch.object(build.builder.shutil, "rmtree") as remove,
@@ -289,6 +305,7 @@ class BuildRpm(unittest.TestCase):
         build_dir = self.project / "incremental"
         build_dir.mkdir()
         (build_dir / "cached-object").write_text("keep\n")
+        (build_dir / build.MACROS_STAMP).write_text(hashlib.sha256(SHOWRC).hexdigest())
         out = self.project / "out"
         out.mkdir()
         (out / "stale.rpm").write_text("old\n")
@@ -331,6 +348,31 @@ class BuildRpm(unittest.TestCase):
         self.assertIsNone(cwd)
         self.assertEqual(binds, [(topdir, Path("/build"))])
 
+    def test_changed_macros_empty_the_build_directory(self) -> None:
+        # A build system can keep the compiler flags of its first configure run in the build
+        # directory. When the digest of `rpmbuild --showrc` differs from the stamp in the build
+        # directory, or there is no stamp, the driver must empty the build directory before rpmbuild
+        # runs and record the new digest.
+        digest = hashlib.sha256(SHOWRC).hexdigest()
+        for stamp in ("stale digest", None):
+            with self.subTest(stamp=stamp):
+                build_dir = Path(tempfile.mkdtemp(dir=self.project))
+                (build_dir / "meson-private").mkdir()
+                (build_dir / "meson-private" / "coredata.dat").write_text("old flags\n")
+                if stamp is not None:
+                    (build_dir / build.MACROS_STAMP).write_text(stamp)
+
+                def inspect(topdir: Path) -> None:
+                    self.assertEqual(
+                        sorted(path.name for path in (topdir / "BUILD").iterdir()), [build.MACROS_STAMP]
+                    )
+
+                self.invoke(self.specification(build_dir=build_dir), inspect)
+                shutil.rmtree(self.scratch / "topdir", ignore_errors=True)
+
+                self.assertEqual([path.name for path in build_dir.iterdir()], [build.MACROS_STAMP])
+                self.assertEqual((build_dir / build.MACROS_STAMP).read_text(), digest)
+
     def test_source_writes_are_discarded_and_build_state_survives_failure(self) -> None:
         source = self.scratch / "checkout"
         source.mkdir()
@@ -364,7 +406,7 @@ class BuildRpm(unittest.TestCase):
                 with (
                     contextlib.chdir(self.project),
                     mock.patch.object(build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()),
-                    mock.patch.object(build.subprocess, "run", side_effect=run),
+                    mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)),
                     mock.patch.object(tempfile, "tempdir", str(case)),
                 ):
                     if isinstance(outcome, RuntimeError):
@@ -435,8 +477,13 @@ class BuildRpm(unittest.TestCase):
 
                     with (
                         contextlib.chdir(self.project),
-                        mock.patch.object(build.builder.rootfs, "rootfs", return_value=mounted()),
-                        mock.patch.object(build.subprocess, "run", side_effect=run),
+                        # A persistent build enters the buildroot before rpmbuild to read the macros.
+                        mock.patch.object(
+                            build.builder.rootfs,
+                            "rootfs",
+                            side_effect=[contextlib.nullcontext(), mounted()] if persistent else [mounted()],
+                        ),
+                        mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)),
                         mock.patch.object(build.builder.shutil, "rmtree") as remove,
                         mock.patch.object(tempfile, "tempdir", str(case)),
                     ):
