@@ -9,6 +9,9 @@
 tine = .
 # A project replaces tine's catalog with its own by declaring a cell of this name.
 catalog = catalog
+# A project replaces tine's settings, such as the extra packages of the tools box, by declaring a cell of
+# this name.
+settings = settings
 prelude = prelude
 none = none
 

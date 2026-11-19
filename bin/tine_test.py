@@ -2229,6 +2229,7 @@ CELL_BUCKCONFIG = """# Standalone root cell. Consuming projects supply their own
 # Named `tine`, not `root`, so same-cell labels read `tine//...` as in a consuming project.
 tine = .
 catalog = catalog
+settings = settings
 prelude = prelude
 none = none
 
@@ -2298,6 +2299,23 @@ class TestRenderProjectBuckconfig(unittest.TestCase):
         )
         (root / ".buckconfig").write_text(self.written(root))
         self.assertEqual(tine.read_project_buckconfig(root)["cells"]["catalog"], "os/catalog")
+
+    def test_a_project_without_settings_gets_tine_s(self) -> None:
+        # A project that declares no settings cell must get the settings cell of the tine checkout, at
+        # its path in the project.
+        self.assertEqual(self.config("vendor/tine")["cells"]["settings"], "vendor/tine/settings")
+
+    def test_project_settings_replace_tine_s_and_keep_tine_s_catalog(self) -> None:
+        # A project that declares only a settings cell must get its own settings cell and still build
+        # against the catalog of the tine checkout.
+        root = scratch(self, "tine-test-project.")
+        configure_cells(root, "vendor/tine").write_text(
+            '[buckconfig.cells]\nroot = "."\ntine = "vendor/tine"\nsettings = "tine-settings"\n'
+        )
+        (root / ".buckconfig").write_text(self.written(root))
+        cells = tine.read_project_buckconfig(root)["cells"]
+        self.assertEqual(cells["settings"], "tine-settings")
+        self.assertEqual(cells["catalog"], "vendor/tine/catalog")
 
     def test_the_project_runs_actions_on_the_cell_s_platform(self) -> None:
         # Copied rather than rewritten, and it is what gives the project the shared cache.

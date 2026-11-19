@@ -60,6 +60,7 @@ tine//cargo/              vendored crate trees and offline Rust source builds
 tine//go/                 go.sum-verified module fetches and offline Go source builds
 tine//http/               prebuilt tools that Buck downloads and verifies
 catalog//                 default repositories, locks, releases, package managers, and buildroots
+settings//                default settings for tine's own targets, such as the tools box's extra packages
 tine//tools/              pinned development and catalog-refresh commands, and the boxes they run in
 tine//bin/                the command a checkout builds through, which fetches and configures Buck2
 ```
@@ -73,10 +74,17 @@ therefore writes the fallback cell into the project's generated `.buckconfig`, u
 the cell. The project's `//buildroots` package maps importer-generated `//buildroots/<family>:<release>`
 names to catalog targets.
 
-tine loads two files from every catalog: `releases.bzl` lists the releases that images build for, and
-`tools.bzl` lists the packages and local repositories that the tools box installs in addition to its own.
-Starlark has no optional `load()`, and Buck fails on a missing file or symbol. A catalog that adds nothing
-to the tools box therefore still provides `tools.bzl` with empty lists.
+tine loads `releases.bzl` from every catalog. It lists the releases that images build for.
+
+The `settings` cell configures tine's own targets. Its `settings.bzl` defines one `SETTINGS` struct. The
+`tools_box` field of `SETTINGS` lists the packages and local repositories that the tools box installs in
+addition to its own. tine's `settings` cell is the `settings/` directory of the tine checkout. A project
+replaces it like the catalog, by declaring its own `settings` cell, and `bin/tine` writes the fallback cell
+in the same way. A project can therefore change the tools box without replacing tine's catalog.
+
+Starlark has no optional `load()`, and Buck fails on a missing file, symbol or struct field. tine therefore
+loads only `SETTINGS` from the cell and reads every field with `getattr()` and a default. A project's
+`settings.bzl` therefore only sets the fields it changes. It keeps loading when tine reads a new field.
 
 Catalog targets use `<family>.<release>[.<component>].<role>` names. A rolling channel occupies the release
 segment like any other release. Singular `.repository` targets own remotes, plural `.repositories` targets
@@ -489,8 +497,8 @@ the distribution of the target that depends on it, and selects the release of th
 distribution, such as an `exec_dep`, gets the tools box of the catalog's default release. An image runs in
 the tools box, so it builds with the tools of its own release. A package manager names no box, and an image
 runs the plan and install of its package manager in the tools box as well. The tools box resolves during the
-build, so a new tool leaves the root box and its lock alone. The catalog's `tools.bzl` adds packages and
-local repositories to the tools box. The base release identifies where this userspace came from, not the only
+build, so a new tool leaves the root box and its lock alone. `SETTINGS.tools_box` adds packages and local
+repositories to the tools box. The base release identifies where this userspace came from, not the only
 release it may operate on.
 
 A buildroot runs in the root box of its release. rpmbuild and the package manager run chrooted in the
@@ -1582,8 +1590,8 @@ source and charmap inside the image's root. The layer runs in the tools box of t
 which resolves its packages from the release's repositories, its additional repositories included. An image
 whose kmod and glibc come from those repositories gets an index and a locale archive in the formats it reads.
 The `additional_repositories` and `local_packages` of a package manager do not reach the tools box, so an
-image that installs kmod or glibc from them is finalized with the release's versions, unless the catalog's
-`tools.bzl` adds the same local repositories to the tools box.
+image that installs kmod or glibc from them is finalized with the release's versions, unless
+`SETTINGS.tools_box` adds the same local repositories to the tools box.
 
 ### Reproducibility and caching
 

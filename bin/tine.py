@@ -41,6 +41,9 @@ HOME = ".buck"
 CELL = "tine"
 # A project that declares a cell of this name builds against its own catalog instead of tine's.
 CATALOG = "catalog"
+# A project that declares a cell of this name configures tine's own targets, such as the tools box, with
+# its own files instead of tine's.
+SETTINGS_CELL = "settings"
 COMMAND = "bin/tine"
 COMMANDS = "commands"
 COMMAND_PATH = Path(__file__).with_suffix("")
@@ -1506,9 +1509,9 @@ def buckconfig_overrides(settings: dict[str, dict[str, object]], source: Path) -
     return config
 
 
-def default_catalog(cell: str) -> str:
-    """Return the path of tine's catalog in a project that has the tine cell at `cell`."""
-    return (PurePosixPath(cell) / CATALOG).as_posix()
+def default_cell(cell: str, name: str) -> str:
+    """Return the path of tine's cell `name` in a project that has the tine cell at `cell`."""
+    return (PurePosixPath(cell) / name).as_posix()
 
 
 def render_project_buckconfig(source: Path, overrides: dict[str, dict[str, str]]) -> str:
@@ -1521,10 +1524,10 @@ def render_project_buckconfig(source: Path, overrides: dict[str, dict[str, str]]
         "",
         source.parent,
     )
-    # tine's .buckconfig gives the paths of the tine and catalog cells relative to the tine checkout.
-    # Relative to the project, those paths are wrong.
-    cells_of(config).pop(CELL, None)
-    cells_of(config).pop(CATALOG, None)
+    # tine's .buckconfig gives the paths of the tine, catalog and settings cells relative to the tine
+    # checkout. Relative to the project, those paths are wrong.
+    for name in (CELL, CATALOG, SETTINGS_CELL):
+        cells_of(config).pop(name, None)
     config.setdefault("cells", {}).setdefault("root", ".")
     config.setdefault("parser", {})[DETECTOR] = " ".join(
         f"target:{cell}//...->{DEFAULT_PLATFORM}" for cell in ("root", CELL, CATALOG)
@@ -1532,8 +1535,9 @@ def render_project_buckconfig(source: Path, overrides: dict[str, dict[str, str]]
     for section, values in overrides.items():
         config.setdefault(section, {}).update(values)
     cells = cells_of(config)
-    if CATALOG not in cells and CELL in cells:
-        cells[CATALOG] = default_catalog(cells[CELL])
+    if CELL in cells:
+        for name in (CATALOG, SETTINGS_CELL):
+            cells.setdefault(name, default_cell(cells[CELL], name))
     lines = [CONFIG_HEADER]
     for section, values in config.items():
         if values:

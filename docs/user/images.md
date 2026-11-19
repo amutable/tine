@@ -98,18 +98,31 @@ of the release. `tine//distribution:tools.box` adds the image assembly tools and
 root box of the release that the build chooses, and images build in it. The tools stay in the box and out of
 the built images. How a box bootstraps itself is described in [architecture.md](../design/architecture.md).
 
-The catalog adds packages and local repositories to the tools box in `tools.bzl`, beside its `BUCK` file.
-Every catalog has to have one. To build images with a locally built systemd, list its repository there:
+The `settings.bzl` file of the `settings` cell defines a `SETTINGS` struct. Its `tools_box` field lists the
+packages and local repositories that the tools box installs in addition to its own. tine's own `settings`
+cell lists none. To add some, declare a `settings` cell of your own in `tine.toml`. Your project keeps
+tine's catalog:
+
+```toml
+[buckconfig.cells]
+root = "."
+tine = "tine"
+settings = "tine-settings"
+```
+
+Your `settings.bzl` only needs the fields that you change. To build images with a locally built systemd,
+list its repository in `tine-settings/settings.bzl`:
 
 ```Starlark
 load("@tine//distribution:defs.bzl", "distribution")
 
-TOOLS_BOX = struct(
-    additional_repositories = distribution.select({
-        "DEFAULT": [],
-        "fedora": ["root//packages:systemd.repository"],
-    }),
-    packages = [],
+SETTINGS = struct(
+    tools_box = struct(
+        additional_repositories = distribution.select({
+            "DEFAULT": [],
+            "fedora": ["root//packages:systemd.repository"],
+        }),
+    ),
 )
 ```
 
@@ -281,7 +294,7 @@ image that installs no kmod or systemd of its own still gets its indexes and dat
 box of the image's release. It installs its packages from the release's repositories, so its tools match an
 image that installs kmod, systemd and glibc from those repositories. The `additional_repositories` and
 `local_packages` of a package manager do not reach the box: an image that installs kmod, systemd or glibc
-from them still gets the release's `depmod`, `systemd-hwdb` and `localedef`, unless the catalog's `tools.bzl`
+from them still gets the release's `depmod`, `systemd-hwdb` and `localedef`, unless `SETTINGS.tools_box`
 adds the same local repositories to the tools box. The layer that runs a generator captures what it writes,
 so it is built once and cached rather than repeated by every terminal output.
 
