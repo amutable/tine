@@ -434,7 +434,8 @@ The `[manifest]` of a logical image is a [UAPI.16 File
 Manifest](https://uapi-group.org/specifications/specs/file_manifest/): an RFC7464 JSON-SEQ listing of every
 path the assembled tree holds, with the type, mode, ownership, clamped mtime and user extended attributes of
 each, a SHA256 over every regular file's contents, symlink targets carried inline, and one `inodeToken` per
-inode two names share. It answers what an image ships rather than what it was built from, so a consumer can
+inode two names share. Its first object describes the root directory and lists the `features` that the
+manifest records. It answers what an image ships rather than what it was built from, so a consumer can
 compare the paths of two images against each other (a path in both a system extension and the /usr it merges
 onto shadows an OS file) or account for size per file. The artifact is named `Uapi16Manifest`, which is the
 name the format reserves, so it can be dropped beside a tree of the image it describes.

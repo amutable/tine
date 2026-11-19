@@ -68,10 +68,12 @@ class TreeTest(unittest.TestCase):
 
 
 class TestSequence(TreeTest):
-    def test_the_first_object_is_the_root_and_names_the_media_type(self) -> None:
+    def test_the_first_object_is_the_root_and_names_the_media_type_and_features(self) -> None:
         (self.tree / "a").write_text("a")
         root = self.manifest()[0]
-        self.assertEqual(root, {"mediaType": "application/vnd.uapi.16.manifest"})
+        self.assertEqual(
+            root, {"mediaType": "application/vnd.uapi.16.manifest", "features": uapi16.FEATURES}
+        )
 
     def test_an_empty_tree_has_no_named_objects(self) -> None:
         # An empty filesystem still has its root and trailer, with no named file objects.
@@ -347,6 +349,13 @@ class TestWrite(TreeTest):
         self.assertEqual(uapi16.write_objects(objects, out), 3)
         self.assertEqual([obj.get("name") for obj in parse(out.read_bytes())], [None, "file"])
 
+    def test_the_root_lists_the_features(self) -> None:
+        # Without `features`, the manifest would only record the default features of UAPI.16, which
+        # forbid mTimeNSec and extended attributes. Writing a root without the field must list them.
+        out = self.tree / "m"
+        uapi16.write_objects([{"mediaType": uapi16.MEDIA_TYPE}], out)
+        self.assertEqual(parse(out.read_bytes())[0]["features"], uapi16.FEATURES)
+
 
 class TestScope(unittest.TestCase):
     def test_a_leading_and_trailing_slash_is_not_part_of_the_name(self) -> None:
@@ -386,7 +395,9 @@ class TestMerge(TreeTest):
 
     def test_the_whole_is_every_part_under_one_root_object(self) -> None:
         objects = self.merged(self.part("a", ["usr"]), self.part("b", ["boot"]))
-        self.assertEqual(objects[0], {"mediaType": "application/vnd.uapi.16.manifest"})
+        self.assertEqual(
+            objects[0], {"mediaType": "application/vnd.uapi.16.manifest", "features": uapi16.FEATURES}
+        )
         self.assertEqual(
             [obj["name"] for obj in objects[1:]],
             ["boot", "boot/EFI", "boot/EFI/file", "usr", "usr/bin", "usr/bin/file"],
@@ -430,21 +441,63 @@ class TestReader(TreeTest):
         # A write that stops early leaves a manifest without its trailer, which must fail instead of
         # becoming a snapshot. A cut after the root object or inside the trailer must both fail.
         out = self.tree / "manifest"
-        root = b'\x1e{"mediaType":"application/vnd.uapi.16.manifest"}\n'
+        uapi16.write_objects([{"mediaType": uapi16.MEDIA_TYPE}], out)
+        complete = out.read_bytes()
         trailer = b'\x1e{"mediaType":"application/vnd.uapi.16.trailer"}\n'
-        for data in (root, root + trailer[:-1]):
+        for data in (complete[: -len(trailer)], complete[:-1]):
             out.write_bytes(data)
             with self.subTest(data=data), self.assertRaises(SystemExit):
                 uapi16.read(out)
-        out.write_bytes(root + trailer)
-        self.assertEqual(uapi16.read(out), [{"mediaType": uapi16.MEDIA_TYPE}])
+        out.write_bytes(complete)
+        self.assertEqual(uapi16.read(out), [{"mediaType": uapi16.MEDIA_TYPE, "features": uapi16.FEATURES}])
+
+    def test_requires_the_features(self) -> None:
+        # storage.restore() relies on the features that write_objects() lists. A manifest without
+        # `features` or with other features must fail.
+        out = self.tree / "manifest"
+        trailer = b'\x1e{"mediaType":"application/vnd.uapi.16.trailer"}\n'
+        for root in (
+            {"mediaType": uapi16.MEDIA_TYPE},
+            {"mediaType": uapi16.MEDIA_TYPE, "features": ["mode"]},
+        ):
+            out.write_bytes(b"\x1e" + json.dumps(root).encode() + b"\n" + trailer)
+            with self.subTest(root=root), self.assertRaises(SystemExit):
+                uapi16.read(out)
+
+    def test_accepts_the_features_in_any_order_and_unknown_ones(self) -> None:
+        # UAPI.16 gives the order of the features no meaning, and a reader must ignore features it
+        # does not know. A manifest that lists the features reversed plus an unknown one must read.
+        out = self.tree / "manifest"
+        trailer = b'\x1e{"mediaType":"application/vnd.uapi.16.trailer"}\n'
+        root = {"mediaType": uapi16.MEDIA_TYPE, "features": [*reversed(uapi16.FEATURES), "unknown"]}
+        out.write_bytes(b"\x1e" + json.dumps(root).encode() + b"\n" + trailer)
+        self.assertEqual(uapi16.read(out), [root])
+
+    def test_rejects_objects_without_required_fields(self) -> None:
+        # storage.restore() reads the name, type, mTimeNSec and the fields of each type. Write a
+        # manifest with a regular file that lacks each of them in turn, and a record that is not an
+        # object. read() must fail on each.
+        out = self.tree / "manifest"
+        root = {"mediaType": uapi16.MEDIA_TYPE, "features": uapi16.FEATURES}
+        trailer = b'\x1e{"mediaType":"application/vnd.uapi.16.trailer"}\n'
+        file = {"name": "a", "type": "reg", "mode": 0o644, "mTimeNSec": 0, "sha256": "0" * 64, "size": 0}
+        broken: list[object] = [["a"], *({k: v for k, v in file.items() if k != key} for key in file)]
+        for obj in [*broken, file]:
+            out.write_bytes(
+                b"".join(b"\x1e" + json.dumps(record).encode() + b"\n" for record in (root, obj)) + trailer
+            )
+            if obj is file:
+                self.assertEqual(uapi16.read(out)[1], file)
+                continue
+            with self.subTest(obj=obj), self.assertRaises(SystemExit):
+                uapi16.read(out)
 
     def test_accepts_root_metadata(self) -> None:
         # A storage manifest includes root metadata, which must survive parsing unchanged.
         out = self.tree / "manifest"
         objects: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE, "mode": 0o750}]
         uapi16.write_objects(objects, out)
-        self.assertEqual(uapi16.read(out), objects)
+        self.assertEqual(uapi16.read(out), [{**objects[0], "features": uapi16.FEATURES}])
 
     def test_rejects_non_relative_names(self) -> None:
         # UAPI.16 forbids path traversal, unnormalized names and control characters.
