@@ -3481,7 +3481,8 @@ class TestProjectIgnores(unittest.TestCase):
         for ignore in ("/.buckconfig.d/tine-box\n", "/.buckconfig.d/\n"):
             with self.subTest(ignore=ignore):
                 checkout = self.checkout()
-                (checkout / ".gitignore").write_text(f"/.buckconfig.local\n{ignore}/output\n")
+                (checkout / ".gitignore").write_text(f"/.buckconfig\n/.buckconfig.local\n{ignore}/output\n")
+                (checkout / ".buckconfig").write_text("")
                 (checkout / ".buckconfig.local").write_text("")
                 (checkout / ".buckconfig.d" / "nested").mkdir(parents=True)
                 (checkout / ".buckconfig.d" / "tine-box").write_text("")

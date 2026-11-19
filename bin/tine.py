@@ -509,6 +509,7 @@ def git_ignored_paths(
         "--exclude-standard",
         # Buck refuses to list an ignored config directory and reads an ignored config file as absent,
         # so a checkout's local configuration must stay visible even though Git does not track it.
+        "--exclude=!/.buckconfig",
         f"--exclude=!/{LOCAL}",
         "--exclude=!/.buckconfig.d",
         "--exclude=!/.buckconfig.d/**",
