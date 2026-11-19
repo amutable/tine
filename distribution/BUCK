@@ -3,11 +3,15 @@
 
 """The axis an image's distribution is selected on."""
 
-load("@catalog//:tools.bzl", "TOOLS_BOX")
 load("@prelude//:rules.bzl", "constraint_setting", "constraint_value")
+load("@settings//:settings.bzl", "SETTINGS")
 load("//box:defs.bzl", "box")
 load("//platform:architecture.bzl", "architecture")
 load(":defs.bzl", "distribution")
+
+# Buck fails to load this package when it reads a field that `SETTINGS` doesn't have. A project's
+# settings.bzl can predate a field, so read every field with a default.
+_TOOLS_BOX = getattr(SETTINGS, "tools_box", struct())
 
 constraint_setting(
     name = "distribution",
@@ -75,7 +79,7 @@ distribution.box_host(name = "release.host")
 # the root box of the default release.
 box.new(
     name = "tools.box",
-    additional_repositories = TOOLS_BOX.additional_repositories,
+    additional_repositories = getattr(_TOOLS_BOX, "additional_repositories", []),
     packages = (
         [
             "ca-certificates",
@@ -175,7 +179,7 @@ box.new(
                 "x86_64": ["edk2-ovmf", "qemu-system-x86-core"],
             }),
         })
-        + TOOLS_BOX.packages
+        + getattr(_TOOLS_BOX, "packages", [])
     ),
     release = distribution.release_target("release"),
     parent = distribution.release_target("box"),
