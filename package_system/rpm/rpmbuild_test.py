@@ -29,6 +29,7 @@ class Stage(unittest.TestCase):
     def stage(self, *, spec_file: Path | None = None, sources: list[Path] | None = None) -> rpmbuild.Staged:
         parse = rpmbuild.Parse(
             spec_file=str(spec_file or self.spec_file),
+            in_place_spec=None,
             sources=[str(source) for source in (sources if sources is not None else [self.source])],
             dist=".test",
             source_date_epoch=1754006400,
