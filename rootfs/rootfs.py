@@ -229,9 +229,21 @@ def source_overlay(source: Path, target: Path) -> Generator[Path]:
     # A `tine mount` covers a directory of the project, so directory submounts need overlays of their own.
     # statmount() returns mount points with their symlinks resolved, so `source` needs them resolved too.
     resolved = source.resolve()
+
+    # Buck creates the scratch directory of an action in its output directory in the project, and the
+    # sandbox mounts the scratch directory at /var/tmp. When `source` contains Buck's output directory, the
+    # upper and work directories below are in the lower directory as well. A lookup of them through the
+    # overlay then fails with ELOOP. The overlay shows an empty directory in place of Buck's output directory
+    # instead.
+    output = None
+    if scratch_path := os.environ.get("BUCK_SCRATCH_PATH"):
+        output = Path(Path(scratch_path).parts[0]).resolve()
+        if output == resolved or not output.is_relative_to(resolved):
+            output = None
     layers = [(source, target)]
     # overlayfs only takes directories as layers, so `target` shows the file that a file mount covers.
     points = [Path(point) for point in submounts(str(resolved)) if Path(point).is_dir()]
+    points = [point for point in points if output is None or not point.is_relative_to(output)]
     layers += [(point, target / point.relative_to(resolved)) for point in points]
     with ExitStack() as stack:
         scratch = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="source.")))
@@ -255,6 +267,8 @@ def source_overlay(source: Path, target: Path) -> Generator[Path]:
                         "has mounts declared with `tine mount`."
                     )
                 raise
+        if output is not None:
+            stack.enter_context(Tmpfs(target / output.relative_to(resolved))).mount()
         yield target
 
 
