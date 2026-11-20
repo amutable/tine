@@ -37,6 +37,7 @@ class Profile(TypedDict):
     title: str
     cmdline: list[str]
     sign_expected_pcr: bool
+    fields: dict[str, str]
 
 
 class RootHash(TypedDict):
@@ -204,6 +205,12 @@ def _microcode(tree: Path, scratch: Path, epoch: int, efi_arch: str) -> Path | N
     return archive
 
 
+def _profile_section(profile: Profile) -> str:
+    """Return the .profile section of a profile, in os-release format."""
+    fields = {"ID": profile["id"], "TITLE": profile["title"], **profile["fields"]}
+    return "".join(f"{key}={value}\n" for key, value in fields.items())
+
+
 def _signing_arguments(
     secure_boot: Key | None,
     pcr: Key | None,
@@ -302,7 +309,7 @@ def main(argv: list[str] | None = None) -> None:
             fail("uki: the image ships no addon stub — install systemd-boot-unsigned")
         for profile in profiles:
             section = scratch / f"{profile['id']}.profile"
-            section.write_text(f"ID={profile['id']}\nTITLE={profile['title']}\n")
+            section.write_text(_profile_section(profile))
             profile_cmdline = scratch / f"{profile['id']}.cmdline"
             profile_cmdline.write_text(" ".join(([base] if base else []) + profile["cmdline"]) + "\x00")
             pe = scratch / f"{profile['id']}.efi"
