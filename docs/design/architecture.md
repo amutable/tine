@@ -662,9 +662,10 @@ Native package installation has three phases shared by buildroots and images:
    the explicit, cycle-checked self-hosting locks.
 3. **Install.** Run `PackageSystemInfo.install` over the exact package directory, whose file names carry
    the package system's suffix. `install_packages()` owns a fresh base root, and `install_closure()` the
-   buildroot delta of a package. An image layer instead invokes the same installer through
+   buildroot delta of a package for a dev build. An image layer instead invokes the same installer through
    `installer.install_into()` against its already-mounted root so package and filesystem operations have
-   one output owner.
+   one output owner. A package build and its BuildRequires query do the same in their scratch space, so
+   that their cache key is the packages rather than the bytes that installing them wrote.
 
 What a request looks like, rather than how one package system answers it, belongs to the neutral layer:
 `package/transaction.py` owns the transaction schema both planners write and Starlark reads back, and
@@ -687,8 +688,8 @@ dependency. Transaction selection maps its local locations directly back to the 
 
 Fresh buildroot installs are anonymous targets keyed by package manager, sorted install specs, and local
 package inputs. Buck therefore shares the base buildroot analysis/action graph across packages that use the
-same build profile. Package-specific BuildRequires layers remain inline and are installed over the shared
-base.
+same build profile. A package build installs its BuildRequires over the shared base itself. Only a dev
+build and the `[buildroot]` sub-target install them as an inline delta.
 
 After installation, the installer parks the package database and scrubs the package-manager and ldconfig
 bookkeeping that would otherwise make identical roots differ; what parking takes is each package system's
@@ -761,16 +762,21 @@ An `rpm_package` action:
 1. obtains the shared base root from its `BuildrootInfo`;
 2. resolves its BuildRequires over the base root, preferring RPMs from `buildroot_packages` over upstream. A
    hand-written `rpm.package()` also resolves the BuildRequires of the spec that it builds. Analysis cannot
-   read the contents of a spec, so an action stages the spec as the build does and runs `rpmbuild -bd` with
-   the build's options in the base root with the declared BuildRequires installed. It writes the
-   BuildRequires that are missing, and a second solve takes the declared and the missing ones together;
-3. overlays their delta on the base, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
+   read the contents of a spec, so an action installs the declared BuildRequires over the base root, stages
+   the spec as the build does, and runs `rpmbuild -bd` with the build's options. A dev build's query runs
+   over their installed delta instead, like the dev build. The query writes the BuildRequires that are
+   missing, and a second solve takes the declared and the missing ones together;
+3. installs them over the base root, stages its spec/sources in Buck action scratch, and runs `rpmbuild -ba`,
    or `rpmbuild -bb --build-in-place` on a volatile overlay of a populated source tree. overlayfs shows the
    directory under a mount rather than the mounted tree, so each directory mount below the source tree,
    such as a `tine mount`, gets a volatile overlay of its own. The driver discovers directory mounts with
    `listmount()` and `statmount()` using unique mount IDs. With `in_place_packaging`, a separate action
    first fetches the dist-git commit that the tree pins, and the build takes its spec and Source/Patch files
-   from that commit. The project is read-only until the driver exits;
+   from that commit. The project is read-only until the driver exits. With the action doing both the
+   installation and the build, its cache key is only the base root and the package list, rather than
+   the bytes that installing them wrote. So an rpm cache hit does not install a build root and
+   doesn't depend on a reproducible install. A dev build, whose results stay local, overlays a delta
+   that a separate action installs instead, and Buck reruns that action only when the packages change;
 4. freezes `%autorelease`, `_buildhost`, the dist tag, and the per-package source date epoch;
 5. collects binary RPMs and the source RPM into one output directory, carrying its package-system identity
    in `LocalPackageInfo`;
@@ -790,7 +796,8 @@ names none, and gets no per-release aliases either.
 
 - The imported self-host dependency graph is inferred from stored BuildRequires/Provides/file metadata; it
   does not run RPM's dynamic BuildRequires protocol. The BuildRequires query runs `%generate_buildrequires`
-  only when the base root and the declared delta contain every static BuildRequires, and runs it once.
+  only when the base root and the declared BuildRequires contain every static BuildRequires, and runs it
+  once.
 - An imported package installs only its recorded BuildRequires, also for a spec from a checkout or a pin.
   `rpm.branch()` derives `buildroot_packages` from them, and Buck cannot add a target dependency that an
   action output discovers. A queried BuildRequires on a package of the branch would install it from
@@ -799,6 +806,14 @@ names none, and gets no per-release aliases either.
   solve of the declared and the queried ones together. That solve can choose another provider or version for
   a declared requirement, and the build root is then not a superset of the root that
   `%generate_buildrequires` ran in. Nothing detects that.
+- A release build installs its BuildRequires in the build action on every cache miss, and the declared ones
+  twice: in the query and in the build. A dev build installs them as deltas that Buck reinstalls only when
+  the packages change, but the declared ones twice as well: in the query's delta and in the build's. The
+  choice follows `configured_dev` rather than whether a shared cache is configured, so that this setting
+  changes no action key.
+- `[buildroot]` installs the delta in an action of its own, which a release build doesn't use. It shows the
+  packages that the build installed, but scriptlets can make its bytes differ from the root that the build
+  ran in.
 - Build cycles fall back to upstream RPMs for ordinary intra-SCC edges, so the package set is not a fully
   self-hosted fixed point.
 - Builds use `--nocheck`; package test policy is not implemented.

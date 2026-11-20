@@ -4,7 +4,7 @@
 """Shared native package buildroots."""
 
 load("//box:runtime.bzl", "BoxInfo")
-load(":install.bzl", "install_closure", "install_packages", "resolve_packages")
+load(":install.bzl", "install_closure", "install_packages", "resolve_packages", "root_install")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
 
@@ -111,6 +111,8 @@ def _delta(
         identifier = identifier,
         install_files = install_files,
     )
+
+    # Only a dev build and the `buildroot` sub-target need the delta installed on its own.
     delta = install_closure(ctx, base.package_manager, base.box, closure, stack, identifier)
     return PackageBuildroot(layers = stack + [delta], closure = closure)
 
@@ -149,6 +151,17 @@ def recipe_buildroot(
     one. `owner` starts a failure message.
     """
     return _delta(ctx, owner, base, build_requires, buildroot_packages, install_files = [requires], identifier = "recipe")
+
+def buildroot_spec(base: BuildrootInfo, buildroot: PackageBuildroot, installed: bool) -> dict[str, typing.Any]:
+    """Return the spec fields `lower` and `install` of a driver that runs in `buildroot`.
+
+    With `installed`, the driver runs on the installed layers of `buildroot`. Otherwise it installs the
+    closure over the base root itself, in its scratch space. Its action then depends on the packages rather
+    than on the bytes that installing them wrote, and a cache hit installs nothing.
+    """
+    if installed or buildroot.closure == None:
+        return {"install": None, "lower": buildroot.layers}
+    return {"install": root_install(base.package_manager, buildroot.closure), "lower": [base.root]}
 
 def buildroot(name: str, **kwargs) -> None:
     if not name.endswith(".buildroot"):

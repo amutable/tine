@@ -110,6 +110,7 @@ class Query(unittest.TestCase):
     ) -> buildrequires.Spec:
         return buildrequires.Spec(
             lower=["buildroot"],
+            install=None,
             spec_file=str(spec_file or self.spec_file),
             sources=[str(source) for source in (sources if sources is not None else [self.extra])],
             source_tree=str(source_tree) if source_tree is not None else None,
@@ -137,7 +138,7 @@ class Query(unittest.TestCase):
                 "source-devel",
             ],
         )
-        self.mounted.assert_called_once_with(["buildroot"], self.scratch / "topdir")
+        self.mounted.assert_called_once_with(["buildroot"], None, self.scratch / "topdir")
 
     def test_dev_mode_options_apply(self) -> None:
         self.assertNotIn("lto-tool", buildrequires.query(self.specification(incremental=True)))

@@ -46,7 +46,7 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
     staged = rpmbuild.stage(topdir, spec, source_tree)
     env = os.environ | rpmbuild.environment(spec["source_date_epoch"])
     arguments = rpmbuild.arguments(staged, spec)
-    with builder.buildroot(spec["lower"], topdir) as root:
+    with builder.buildroot(spec["lower"], spec["install"], topdir) as root:
         if spec["build_dir"] is not None:
             _reset_stale_build_dir(
                 root / builder.CHROOT_TOPDIR.relative_to("/") / builder.BUILD, arguments, env

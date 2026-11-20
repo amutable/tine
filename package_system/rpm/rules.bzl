@@ -7,7 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:build.bzl", "PACKAGE_BUILD_ATTRS", "package_build", "package_build_source")
-load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot", "recipe_buildroot")
+load("//package:buildroot.bzl", "BuildrootInfo", "buildroot_spec", "package_buildroot", "recipe_buildroot")
 load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
@@ -47,9 +47,12 @@ def _query_buildrequires(
     query: RunInfo,
     parse: dict[str, typing.Any],
     source_tree: Artifact | None,
-    lower: list[Artifact],
+    buildroot: dict[str, typing.Any],
 ) -> Artifact:
-    """Return a JSON list of the BuildRequires of the spec that `parse` describes and the layers `lower` lack."""
+    """Return a JSON list of the BuildRequires of the spec that `parse` describes and `buildroot` lacks.
+
+    `buildroot` holds the spec fields of `buildroot_spec()`.
+    """
     buildrequires = actions.declare_output("__tine/buildrequires.json")
     actions.run(
         cmd_args(
@@ -57,7 +60,7 @@ def _query_buildrequires(
             specs.args(
                 actions,
                 "buildrequires.spec.json",
-                parse | {"lower": lower, "out": buildrequires.as_output(), "source_tree": source_tree},
+                parse | buildroot | {"out": buildrequires.as_output(), "source_tree": source_tree},
             ),
         ),
         # A dev build queries a source tree that changes with every edit, so no other build reuses the result.
@@ -116,7 +119,8 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
             box.run(box = base_buildroot.box[box.Info], exe = ctx.attrs._buildrequires),
             parse,
             source_tree,
-            buildroot.layers,
+            # Like the build, a dev query runs on the installed delta, and any other query installs it.
+            buildroot_spec(base_buildroot, buildroot, installed = ctx.attrs.configured_dev),
         )
         buildroot = recipe_buildroot(ctx, "rpm_package", base_buildroot, ctx.attrs.build_requires, ctx.attrs.buildroot_packages, buildrequires)
 

@@ -71,6 +71,7 @@ class BuildRpm(unittest.TestCase):
         return build.Spec(
             build_dir=str(build_dir) if build_dir is not None else None,
             lower=["buildroot"],
+            install=None,
             spec_file=str(spec_file or self.spec_file),
             sources=[str(source) for source in sources] if sources is not None else [str(self.auxiliary)],
             dist=".test",
@@ -355,6 +356,18 @@ class BuildRpm(unittest.TestCase):
         self.assertNotIn("local_option yes", command)
         self.assertIsNone(cwd)
         self.assertEqual(binds, [(topdir, Path("/build"))])
+
+    def test_a_build_installs_its_closure_before_rpmbuild(self) -> None:
+        closure = self.scratch / "closure"
+        closure.mkdir()
+        (closure / "jq.rpm").write_text("")
+        spec = self.specification()
+        spec["install"] = build.builder.installer.RootInstall(
+            installer="install", arch="x86_64", packages_dir=str(closure), langs=[], docs=True
+        )
+        with mock.patch.object(build.builder.installer, "install_into") as install_into:
+            self.invoke(spec, lambda _topdir: install_into.assert_called_once())
+        install_into.assert_called_once_with(spec["install"], mock.ANY, self.scratch)
 
     def test_changed_macros_empty_the_build_directory(self) -> None:
         # A build system can keep the compiler flags of its first configure run in the build

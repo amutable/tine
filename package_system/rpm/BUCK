@@ -58,7 +58,7 @@ python.test(
 python.binary(
     name = "buildrequires",
     main = "buildrequires.py",
-    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//rootfs:rootfs"],
+    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//package:installer", "//rootfs:rootfs"],
     visibility = ["PUBLIC"],
 )
 
@@ -67,7 +67,7 @@ python.test(
     name = "buildrequires-test",
     box = _BOX,
     srcs = ["buildrequires.py", "buildrequires_test.py"],
-    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//rootfs:rootfs"],
+    deps = [":rpmbuild", "//:specs", "//:util", "//package:builder", "//package:installer", "//rootfs:rootfs"],
 )
 
 python.binary(
