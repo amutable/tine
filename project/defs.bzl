@@ -3,6 +3,8 @@
 
 """Source directories, dev mode and build outputs of a project, exported as the `project` namespace."""
 
+load(":source.bzl", "all_files", "source_listing", "source_tree_rule")
+
 _SECTION = "tine"
 _DEV = "dev"
 
@@ -41,17 +43,22 @@ def is_dev(
 
     # An unset `[tine] dev` splits into one empty entry, and an empty entry would match an empty project path.
     configured = [entry.strip() for entry in read_root_config(_SECTION, _DEV, "").split(",") if entry.strip()]
-    project_path = _project_path(package_name(), name, cell = get_cell_name())
+    project_path = _project_path(package_name(), name, cell = get_cell_name()) or "."
     if source == None:
         return project_path in configured
     return _source_path(source) in configured
 
 def has_files(directory: str) -> bool:
     """Whether `directory` in this package contains a file that Buck does not ignore."""
+    return bool(all_files(directory))
 
-    # A glob() pattern matches a file that starts with a dot, or a file in a directory that starts with
-    # a dot, only if the pattern itself contains that dot.
-    return bool(glob([directory + "/**", directory + "/**/.*", directory + "/**/.*/**"]))
+def source_tree(name: str, **kwargs) -> None:
+    """Declare `name` as the source tree of this package and of its subpackages, which a build reads in place.
+
+    The default output of `name` lists the files that the tree tracks as inputs.
+    """
+    directory = _project_path(package_name(), "", cell = get_cell_name()) or "."
+    source_tree_rule(name = name, dev = is_dev(""), directory = directory, listing = source_listing(), **kwargs)
 
 def populated(directory: str) -> bool:
     """Whether `directory` in this package contains a file, or is mounted for dev mode."""
@@ -112,4 +119,6 @@ project = struct(
     is_label = is_label,
     kept_dir = kept_dir,
     populated = populated,
+    source_listing = source_listing,
+    source_tree = source_tree,
 )
