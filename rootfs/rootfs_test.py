@@ -83,6 +83,29 @@ class TestSourceOverlay(unittest.TestCase):
             self.assertEqual(list(upper.iterdir()), [])
         self.assertEqual(list(self.scratch.glob("source.*")), [])
 
+    def test_hides_the_buck_output_directory_that_contains_the_scratch_directory(self) -> None:
+        # When the source is the project root, it contains Buck's output directory, and the overlay's
+        # upper and work directories are in the scratch directory below it. Put the scratch directory
+        # in the project's buck-out, overlay the project, and check that the overlay shows an empty
+        # buck-out and that a walk of the whole overlay succeeds.
+        scratch_path = Path("buck-out/v2/tmp/action")
+        temporary = self.project / scratch_path / "var-tmp"
+        temporary.mkdir(parents=True)
+        (self.project / "buck-out/v2/output").write_text("output", encoding="utf-8")
+        with (
+            mock.patch.dict(os.environ, {"BUCK_SCRATCH_PATH": str(scratch_path), "TMPDIR": str(temporary)}),
+            chdir(self.project),
+            rootfs.source_overlay(Path("."), self.scratch / "target") as tree,
+        ):
+            self.assertEqual(list((tree / "buck-out").iterdir()), [])
+            self.assertEqual((tree / "input/data/file").read_text(encoding="utf-8"), "original")
+
+            # Path.walk() raises errors that rglob() would drop, such as ELOOP.
+            def fail(error: OSError) -> None:
+                raise error
+
+            self.assertTrue(list(tree.walk(on_error=fail)))
+
     def test_shows_the_mounts_below_the_source_and_discards_writes_into_them(self) -> None:
         # `tine mount` binds a checkout over a directory of the project, and rpmbuild builds the project
         # in place.
