@@ -92,7 +92,13 @@ instead](git.md#building-from-a-local-checkout-instead) for which files are inpu
 trees](../design/architecture.md#project-source-trees) describes the few files that the list leaves out.
 
 A dev build keeps its build directory between builds, and an edit recompiles only what it changes. Pass
-`dev = True` to `rpm.package()` for a dev build.
+`dev = True` to `rpm.package()` for a dev build, or list the directory of the `BUCK` file that declares the
+tree under `[tine] dev`, with `.` for the project root:
+
+```toml
+[buckconfig.tine]
+dev = "."
+```
 
 ## Build dependencies
 

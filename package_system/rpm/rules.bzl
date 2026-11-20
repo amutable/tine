@@ -73,7 +73,14 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     if isinstance(tree, Dependency):
         tree = tree[SourceTreeInfo]
     elif tree != None:
-        tree = SourceTreeInfo(path = tree, sources = None)
+        tree = SourceTreeInfo(dev = False, path = tree, sources = None)
+
+    # The macro checks `[tine] dev` for the checkout path that the label of the tree names. A build of a
+    # `project.source_tree()` reads the directory of the package of the tree instead. The tree checks
+    # `[tine] dev` for that directory.
+    configured_dev = ctx.attrs.configured_dev
+    if configured_dev == None:
+        configured_dev = tree != None and tree.dev
     source_tree = specs.argument(tree.path) if tree != None else None
     in_place_spec = ctx.attrs.in_place_spec if tree != None else None
     spec_file = ctx.attrs.spec
@@ -108,7 +115,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
         "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if tree != None else [],
         "in_place_spec": in_place_spec,
         # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
-        "incremental": ctx.attrs.configured_dev,
+        "incremental": configured_dev,
         "release": ctx.attrs.release,
         "rpmbuild_options": ctx.attrs.rpmbuild_options,
         "source_date_epoch": ctx.attrs.source_date_epoch,
@@ -137,7 +144,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
         package_system = ctx.attrs._package_system,
         base = base_buildroot,
         stack = stack,
-        configured_dev = ctx.attrs.configured_dev,
+        configured_dev = configured_dev,
         keep_build_dir = True,
         packages = "rpms",
         subpackages = ctx.attrs.subpackages,

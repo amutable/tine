@@ -30,8 +30,10 @@ PACKAGE_BUILD_ATTRS = {
         default = [],
         doc = "our packages that the solves of the BuildRequires prefer over upstream ones",
     ),
-    "configured_dev": attrs.bool(
-        doc = "whether project configuration selects this package for dev mode",
+    "configured_dev": attrs.option(
+        attrs.bool(),
+        default = None,
+        doc = "whether `dev` or `[tine] dev` selects dev mode for this package, or None when neither does",
     ),
     "in_place_packaging": attrs.option(
         attrs.string(),
@@ -149,12 +151,13 @@ def package_build_source(
     in_place_recipe_value: str | None,
     in_place_packaging: str | None,
     in_place_packaging_distro: str | Select | None,
-) -> (str | None, bool):
+) -> (str | None, bool | None):
     """Check the in-place arguments of a package-build macro, and return its source tree and dev mode.
 
-    `in_place_recipe` names the macro's argument for a recipe in the source tree, and
-    `in_place_recipe_value` is its value. Without `source_tree`, the macro builds the checkout slot
-    `<name>.source` once the slot contains files. `owner` starts a failure message.
+    The dev mode is None when neither `dev` nor `[tine] dev` selects it. `in_place_recipe` names the macro's
+    argument for a recipe in the source tree, and `in_place_recipe_value` is its value. Without `source_tree`,
+    the macro builds the checkout slot `<name>.source` once the slot contains files. `owner` starts a failure
+    message.
     """
     if in_place_packaging != None and in_place_recipe_value != None:
         fail("{}: {} sets both in_place_packaging and {}".format(owner, name, in_place_recipe))
@@ -164,4 +167,6 @@ def package_build_source(
         source = name + ".source"
         populated = git.checkout(name = source)
         source_tree = ":" + source if populated else None
-    return source_tree, project.is_dev(name, source = source_tree, override = dev)
+    if dev == None and project.is_dev(name, source = source_tree):
+        dev = True
+    return source_tree, dev

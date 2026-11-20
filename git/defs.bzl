@@ -22,7 +22,7 @@ def _checkout_impl(ctx: AnalysisContext) -> list[Provider]:
             default_output = tree,
             sub_targets = {path: [DefaultInfo(default_output = tree.project(path))] for path in ctx.attrs.sub_targets},
         ),
-        SourceTreeInfo(path = tree, sources = None),
+        SourceTreeInfo(dev = False, path = tree, sources = None),
     ]
 
 _checkout = rule(
