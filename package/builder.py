@@ -9,8 +9,8 @@ sets up their scratch tree and mounts, and removes the tree after a successful b
 
 import shutil
 import tempfile
-from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TypedDict
 
@@ -76,8 +76,11 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
     return rc
 
 
-def buildroot(lower: list[str], topdir: Path) -> AbstractContextManager[Path]:
+@contextmanager
+def buildroot(lower: list[str], topdir: Path) -> Generator[Path]:
     """Chroot into the buildroot with the layers `lower`, with topdir at `CHROOT_TOPDIR`."""
-    return rootfs.rootfs(
-        "/buildroot", lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
-    )
+    with (
+        rootfs.rootfs("/buildroot", lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True) as root,
+        rootfs.chroot(root) as chrooted,
+    ):
+        yield chrooted

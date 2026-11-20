@@ -348,9 +348,8 @@ def rootfs(
     workdir: str | Path | None = None,
     apivfs: bool = False,
     binds: Sequence[tuple[str | Path, str | Path]] | None = None,
-    chroot: bool = False,
 ) -> Generator[Path]:
-    """Mount a bind or overlay root, optionally chrooting and persisting its output.
+    """Mount a bind or overlay root, optionally persisting its output.
 
     Persistent overlay uppers and bind sources with `capture_bind=True` are captured after all
     mounts have been torn down.
@@ -402,7 +401,4 @@ def rootfs(
             _apivfs(stack, mounted.fd)
         for src, dst in binds or []:
             stack.enter_context(Bind(Path(src), dst)).mount(mounted.fd)
-        if chroot:
-            # Enter last so callbacks resolve paths after the chroot unwinds.
-            stack.enter_context(_chroot(target))
-        yield Path("/") if chroot else target
+        yield target
