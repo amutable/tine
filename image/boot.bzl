@@ -34,22 +34,30 @@ UkiInfo = provider(
 
 UkiProfile = dict
 
-def uki_profile(id: str, title: str, cmdline: list[str], sign_expected_pcr: bool = True) -> UkiProfile:
+def uki_profile(id: str, title: str, cmdline: list[str], sign_expected_pcr: bool = True, fields: dict[str, str] = {}) -> UkiProfile:
     """Describe one alternative boot profile embedded in a UKI.
 
     Profiles whose boot state is not sealed against (e.g. installers or factory reset) can opt
-    out of the expected-PCR policy with sign_expected_pcr = False.
+    out of the expected-PCR policy with sign_expected_pcr = False. fields adds further KEY=VALUE
+    lines to the .profile section, such as PCRLOCK=yes for systemd-pcrlock.
     """
 
     # sd-boot derives entry identifiers from the id, so keep it filename- and env-file-safe.
-    check_name("uki_profile id", id, "^[a-z0-9._-]+$")
+    check_name("uki_profile id", id, "^[A-Za-z0-9._-]+$")
     if not title or "\n" in title:
         fail("uki_profile: title must be a single non-empty line")
     for argument in cmdline:
         if not argument:
             fail("uki_profile: cmdline arguments cannot be empty")
+    for key, value in fields.items():
+        check_name("uki_profile field", key, "^[A-Z][A-Z0-9_]*$")
+        if key in ("ID", "TITLE"):
+            fail("uki_profile: pass {} as the {} argument, not as a field".format(key, key.lower()))
+        if "\n" in value:
+            fail("uki_profile: the value of field {} must be a single line".format(key))
     return {
         "cmdline": cmdline,
+        "fields": fields,
         "id": id,
         "sign_expected_pcr": sign_expected_pcr,
         "title": title,
@@ -59,9 +67,10 @@ def encode_profiles(profiles: list[UkiProfile]) -> list[str]:
     """Reject duplicate profile ids and serialize the profiles for an attribute."""
     ids = {}
     for profile in profiles:
-        if profile["id"] in ids:
+        # sd-boot lowercases profile ids in its entry identifiers. "Debug" and "debug" would name the same entry.
+        if profile["id"].lower() in ids:
             fail("uki: duplicate profile id {!r}".format(profile["id"]))
-        ids[profile["id"]] = True
+        ids[profile["id"].lower()] = True
     return [json.encode(profile) for profile in profiles]
 
 def declare_uki(

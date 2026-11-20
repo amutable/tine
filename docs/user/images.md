@@ -447,11 +447,11 @@ when needed:
   own, holding the kernel modules `initrd_modules` selects, so that none of the initrds handed to it has
   to carry modules for the kernel in question (see "Kernel modules in the UKI"). Alternative kernel
   command lines are `image.uki_profile()` descriptors, which add boot profiles as separate sd-boot menu
-  entries, each appending its arguments to the base kernel command line. `splash` names the BMP image to
-  embed for the EFI stub to display while booting. With a `secure_boot_key`, the UKI and its embedded
-  kernel are signed
-  for Secure Boot. With a `sign_expected_pcr_key`, a signed expected-PCR 11 policy covers each profile;
-  set its `sign_expected_pcr` to false to opt out;
+  entries, each appending its arguments to the base kernel command line. A profile's `fields` add further
+  `KEY=VALUE` lines to its `.profile` section, such as `PCRLOCK=yes` or `TOFU=`. `splash` names the BMP
+  image to embed for the EFI stub to display while booting. With a `secure_boot_key`, the UKI and its
+  embedded kernel are signed for Secure Boot. With a `sign_expected_pcr_key`, a signed expected-PCR 11
+  policy covers each profile; set its `sign_expected_pcr` to false to opt out;
 - `image.bootable` selects a kernel and matching initrd from a logical image, exposed as `[uki]`, `[kernel]`,
   and `[initrd]` subtargets, and `[cmdline]`, the base command line of the UKI, for a direct kernel boot;
 - `image.vm` runs the image's qcow2 (or raw) ephemerally, from its ESP or by a direct kernel boot, with the

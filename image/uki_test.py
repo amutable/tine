@@ -61,7 +61,26 @@ def _token(key: uki.Key, source: str = "provider:pkcs11", certificate: bool = Tr
 
 def _profiles(*ids: str, unsealed: str = "") -> list[uki.Profile]:
     """Profiles by id, `unsealed` naming the one that opts out of the expected-PCR policy."""
-    return [{"id": id, "title": id, "cmdline": [], "sign_expected_pcr": id != unsealed} for id in ids]
+    return [
+        {"id": id, "title": id, "cmdline": [], "sign_expected_pcr": id != unsealed, "fields": {}}
+        for id in ids
+    ]
+
+
+class TestProfileSection(unittest.TestCase):
+    def test_fields_follow_id_and_title(self) -> None:
+        # A profile with extra fields must write ID and TITLE first and then each field as
+        # its own KEY=VALUE line, in the order the profile declares them.
+        profile: uki.Profile = {
+            "id": "Profile2",
+            "title": "Profile Two",
+            "cmdline": [],
+            "sign_expected_pcr": True,
+            "fields": {"PCRLOCK": "yes", "TOFU": "test.tofu"},
+        }
+        self.assertEqual(
+            uki._profile_section(profile), "ID=Profile2\nTITLE=Profile Two\nPCRLOCK=yes\nTOFU=test.tofu\n"
+        )
 
 
 class TestSigningArguments(unittest.TestCase):
