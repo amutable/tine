@@ -220,6 +220,20 @@ def hwdb(tree: Path, *, usr: bool, strict: bool) -> None:
         (tree / "etc/udev/hwdb.bin").unlink(missing_ok=True)
 
 
+def preset_commands(tool: str, tree: Path, *, vendor: bool) -> list[list[str]]:
+    """The systemctl invocations that apply the image's preset policy to system and user units."""
+    common = [tool, f"--root={tree}", *(["--vendor"] if vendor else [])]
+    return [[*common, "preset-all"], [*common, "--global", "preset-all"]]
+
+
+def preset(tree: Path, *, vendor: bool) -> None:
+    """Enable and disable the image's units the way its preset policy says."""
+    if not (tree / "usr/lib/systemd").is_dir():
+        return
+    for cmd in preset_commands(_box_tool("systemctl", "preset"), tree, vendor=vendor):
+        _run("preset", cmd)
+
+
 # The directories locale-gen searches for locale sources, in its order.
 _I18N = ("usr/local/share/i18n", "usr/share/i18n")
 

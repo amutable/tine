@@ -240,8 +240,8 @@ and persists exactly one delta:
   `image.ops.symlink` mutate the same root. `image.ops.remove` treats its absolute path as a glob pattern,
   including recursive `**`, and removes every matching file, symlink, or directory tree. A pattern that
   matches nothing does nothing.
-- `image.ops.depmod()`, `image.ops.hwdb()` and `image.ops.locale_gen()` build the state installed packages
-  only describe (below).
+- `image.ops.depmod()`, `image.ops.hwdb()`, `image.ops.locale_gen()` and `image.ops.preset()` build the state
+  installed packages only describe (below).
 - `image.ops.install_from` installs what another target needs and applies the operations it attaches (see
   below).
 
@@ -288,6 +288,14 @@ image.layer(
   `locale-gen` would skip the entry. A non-empty `/etc/locale.gen` replaces the archive, even when every
   line in it is a comment. A distribution that installs locales as packages has no such file, and the
   operation does nothing.
+- `image.ops.preset(vendor = False)` runs `systemctl preset-all` for the system units and again with
+  `--global` for the user units. The image then boots with its units enabled and disabled the way its preset
+  policy says. Without `vendor`, `systemctl` writes the symlinks into `/etc`. With `vendor = True`, it writes
+  them below `/usr/lib/systemd`, which is what the default `/usr`-only disk needs, because it boots with an
+  empty `/etc`. `vendor = True` needs `systemctl` from systemd 263 or newer in the box. It leaves the `/etc`
+  symlinks that package scriptlets write during the install in place, so use it only for an image that
+  does not include `/etc`. Units that a later layer installs are not preset, so place it in the last layer.
+  An image without `/usr/lib/systemd` is left alone. No composition adds it, so name it in `ops` to use it.
 
 The generators run box tools against the mounted image, exactly as `image.ops.run()` does by default, so an
 image that installs no kmod or systemd of its own still gets its indexes and database. The box is the tools

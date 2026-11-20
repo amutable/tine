@@ -114,6 +114,30 @@ class TestHwdb(unittest.TestCase):
         )
 
 
+class TestPreset(unittest.TestCase):
+    def test_presets_system_and_user_units_below_usr(self) -> None:
+        # With `vendor`, systemctl writes the symlinks below /usr of the image. The system and the
+        # `--global` invocation must each pass --root and --vendor.
+        self.assertEqual(
+            finalize.preset_commands("/usr/bin/systemctl", Path("/buildroot"), vendor=True),
+            [
+                ["/usr/bin/systemctl", "--root=/buildroot", "--vendor", "preset-all"],
+                ["/usr/bin/systemctl", "--root=/buildroot", "--vendor", "--global", "preset-all"],
+            ],
+        )
+
+    def test_presets_into_etc_without_vendor(self) -> None:
+        # Without `vendor`, systemctl writes the symlinks into /etc of the image. The commands leave
+        # out --vendor, so a box with a systemd older than 263 can run them.
+        self.assertEqual(
+            finalize.preset_commands("/usr/bin/systemctl", Path("/buildroot"), vendor=False),
+            [
+                ["/usr/bin/systemctl", "--root=/buildroot", "preset-all"],
+                ["/usr/bin/systemctl", "--root=/buildroot", "--global", "preset-all"],
+            ],
+        )
+
+
 class TestLocales(unittest.TestCase):
     @override
     def setUp(self) -> None:
