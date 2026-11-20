@@ -96,6 +96,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     parse = {
         "dist": ctx.attrs.dist,
         "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if source_tree != None else [],
+        "in_place_spec": in_place_spec,
         # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
         "incremental": ctx.attrs.configured_dev,
         "release": ctx.attrs.release,

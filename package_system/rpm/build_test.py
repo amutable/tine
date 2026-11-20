@@ -56,6 +56,7 @@ class BuildRpm(unittest.TestCase):
         *,
         build_dir: Path | None = None,
         spec_file: Path | None = None,
+        in_place_spec: str | None = None,
         subpackages: list[str] | None = None,
         sources: list[Path] | None = None,
         strict_subpackages: bool = True,
@@ -65,6 +66,7 @@ class BuildRpm(unittest.TestCase):
             build_dir=str(build_dir) if build_dir is not None else None,
             lower=["buildroot"],
             spec_file=str(spec_file or self.spec_file),
+            in_place_spec=in_place_spec,
             sources=[str(source) for source in sources] if sources is not None else [str(self.auxiliary)],
             dist=".test",
             # rpm_package keeps the build directory of every dev build, and only of a dev build.
@@ -175,7 +177,7 @@ class BuildRpm(unittest.TestCase):
         local_spec.write_text("Name: from-checkout\nSource1: helper\n")
         (packaging / "helper").write_text("checkout helper\n")
 
-        specification = self.specification(source, spec_file=local_spec)
+        specification = self.specification(source, in_place_spec="packaging/fedora/local.spec")
 
         def inspect(topdir: Path) -> None:
             frozen = (topdir / "SPECS" / "local.spec").read_text()
@@ -200,6 +202,24 @@ class BuildRpm(unittest.TestCase):
         self.assertEqual(list((topdir / "CHECKOUT").iterdir()), [])
         self.assertFalse((topdir / "SOURCES" / "auxiliary").exists())
         self.assertEqual(local_spec.read_text(), "Name: from-checkout\nSource1: helper\n")
+
+    def test_a_declared_spec_in_the_source_tree_is_not_in_place(self) -> None:
+        # A source tree can be the project root, which also contains the declared spec. Without
+        # `in_place_spec`, the build must stage the declared spec and sources as for an archive build.
+        # Pass a source tree that contains the spec and check that rpmbuild takes the sources from
+        # SOURCES.
+        source = self.scratch / "checkout"
+        source.mkdir()
+        (source / "declared.spec").write_text("Name: declared\n")
+
+        command, cwd, _environment, topdir, _binds = self.invoke(
+            self.specification(source, spec_file=source / "declared.spec")
+        )
+
+        self.assertEqual(command[-1], "/build/SPECS/declared.spec")
+        self.assertFalse([argument for argument in command if argument.startswith("_sourcedir")])
+        self.assertEqual(cwd, Path("/build/CHECKOUT"))
+        self.assertEqual(sorted(path.name for path in (topdir / "SOURCES").iterdir()), ["auxiliary"])
 
     def pinned_packaging(self) -> tuple[Path, Path]:
         """Return a checkout and a dist-git tree with a spec, a patch and a directory of tests."""
@@ -264,7 +284,7 @@ class BuildRpm(unittest.TestCase):
     def test_spec_path_cannot_escape_the_source_tree(self) -> None:
         source = self.scratch / "checkout"
         source.mkdir()
-        spec = self.specification(source, spec_file=source / ".." / self.spec_file.name)
+        spec = self.specification(source, in_place_spec="../" + self.spec_file.name)
         with (
             contextlib.chdir(self.project),
             mock.patch.object(tempfile, "tempdir", str(self.scratch)),
@@ -276,9 +296,9 @@ class BuildRpm(unittest.TestCase):
     def test_missing_spec_has_a_useful_error(self) -> None:
         source = self.scratch / "checkout"
         source.mkdir()
-        for spec_file in (source / "missing.spec", self.scratch / "missing.spec"):
-            with self.subTest(spec_file=spec_file):
-                spec = self.specification(source, spec_file=spec_file)
+        for in_place_spec, spec_file in (("missing.spec", None), (None, self.scratch / "missing.spec")):
+            with self.subTest(in_place_spec=in_place_spec, spec_file=spec_file):
+                spec = self.specification(source, spec_file=spec_file, in_place_spec=in_place_spec)
                 case = tempfile.mkdtemp(dir=self.scratch)
                 with (
                     contextlib.chdir(self.project),
@@ -425,7 +445,7 @@ class BuildRpm(unittest.TestCase):
         source = self.scratch / "checkout"
         source.mkdir()
         (source / "escape.spec").symlink_to(self.spec_file)
-        spec = self.specification(source, spec_file=source / "escape.spec")
+        spec = self.specification(source, in_place_spec="escape.spec")
         topdir = self.scratch / "topdir"
         with (
             contextlib.chdir(self.project),

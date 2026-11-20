@@ -26,6 +26,9 @@ class Parse(TypedDict):
     """The fields of a driver spec that select how rpm parses the RPM spec."""
 
     spec_file: str
+    # `in_place_spec` is the path of the spec relative to the source tree, or None for a spec that the build
+    # doesn't read from the source tree.
+    in_place_spec: str | None
     # `sources` lists the Source and Patch files, and directories whose top-level files are Source and Patch
     # files.
     sources: list[str]
@@ -85,12 +88,13 @@ def stage(topdir: Path, parse: Parse, source_tree: str | None) -> Staged:
     # readonly_project() already created BUILD if it mounted the persistent build directory there.
     (topdir / builder.BUILD).mkdir(exist_ok=True)
     checkout = topdir / builder.CHECKOUT
-    spec_file = Path(parse["spec_file"])
+    in_place_spec = parse["in_place_spec"] if source_tree is not None else None
+    spec_file = Path(in_place_spec if in_place_spec is not None else parse["spec_file"])
     staged_spec = topdir / "SPECS" / spec_file.name
     chroot_spec = builder.CHROOT_TOPDIR / "SPECS" / spec_file.name
-    if source_tree is not None and spec_file.is_relative_to(source_tree):
-        relative_spec = spec_file.relative_to(source_tree)
-        if ".." in relative_spec.parts:
+    if in_place_spec is not None:
+        relative_spec = spec_file
+        if relative_spec.is_absolute() or ".." in relative_spec.parts:
             util.fail(f"rpmbuild: RPM spec must stay within the source tree: {relative_spec}")
         source_spec = checkout / relative_spec
         # stage() reads the spec outside the chroot. Without the check, a spec symlink that points out of

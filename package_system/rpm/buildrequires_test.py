@@ -102,6 +102,7 @@ class Query(unittest.TestCase):
         self,
         *,
         spec_file: Path | None = None,
+        in_place_spec: str | None = None,
         sources: list[Path] | None = None,
         source_tree: Path | None = None,
         rpmbuild_options: list[str] | None = None,
@@ -111,6 +112,7 @@ class Query(unittest.TestCase):
         return buildrequires.Spec(
             lower=["buildroot"],
             spec_file=str(spec_file or self.spec_file),
+            in_place_spec=in_place_spec,
             sources=[str(source) for source in (sources if sources is not None else [self.extra])],
             source_tree=str(source_tree) if source_tree is not None else None,
             dist=".test",
@@ -168,7 +170,7 @@ class Query(unittest.TestCase):
             )
         )
         found = buildrequires.query(
-            self.specification(spec_file=checkout / "example.spec", sources=[], source_tree=checkout)
+            self.specification(in_place_spec="example.spec", sources=[], source_tree=checkout)
         )
         self.assertIn("flags-devel", found)
 
@@ -207,7 +209,7 @@ class Query(unittest.TestCase):
         self.assertIn(
             "in-place-devel",
             buildrequires.query(
-                self.specification(spec_file=checkout / "example.spec", sources=[], source_tree=checkout)
+                self.specification(in_place_spec="example.spec", sources=[], source_tree=checkout)
             ),
         )
 
@@ -239,7 +241,7 @@ class Query(unittest.TestCase):
         (checkout / "rpm" / "example.spec").write_text(spec)
 
         found = buildrequires.query(
-            self.specification(spec_file=checkout / "rpm" / "example.spec", sources=[], source_tree=checkout)
+            self.specification(in_place_spec="rpm/example.spec", sources=[], source_tree=checkout)
         )
 
         self.assertIn("include-devel", found)
@@ -258,7 +260,7 @@ class Query(unittest.TestCase):
         (checkout / "example.spec").write_text(spec)
 
         found = buildrequires.query(
-            self.specification(spec_file=checkout / "example.spec", sources=[], source_tree=checkout)
+            self.specification(in_place_spec="example.spec", sources=[], source_tree=checkout)
         )
         self.assertIn("generated-devel", found)
 
@@ -325,7 +327,7 @@ class Query(unittest.TestCase):
             )
         )
         found = buildrequires.query(
-            self.specification(spec_file=checkout / "example.spec", sources=[], source_tree=checkout)
+            self.specification(in_place_spec="example.spec", sources=[], source_tree=checkout)
         )
         self.assertIn("example-compiler", found)
 
