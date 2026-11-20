@@ -46,9 +46,11 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
     staged = rpmbuild.stage(topdir, spec, source_tree)
     env = os.environ | rpmbuild.environment(spec["source_date_epoch"])
     arguments = rpmbuild.arguments(staged, spec)
-    if spec["build_dir"] is not None:
-        _reset_stale_build_dir(spec["lower"], topdir, arguments, env)
-    with builder.buildroot(spec["lower"], topdir):
+    with builder.buildroot(spec["lower"], topdir) as root:
+        if spec["build_dir"] is not None:
+            _reset_stale_build_dir(
+                root / builder.CHROOT_TOPDIR.relative_to("/") / builder.BUILD, arguments, env
+            )
         mode = ["-ba"]
         cwd = staged.cwd
         if source_tree is not None:
@@ -91,21 +93,20 @@ def _build_rpm(spec: Spec, topdir: Path, out: Path, subpackages: Path) -> int:
     return 0
 
 
-def _reset_stale_build_dir(
-    lower: list[str], topdir: Path, arguments: list[str], env: dict[str, str]
-) -> None:
-    """Empty the persistent build directory unless its last build used the same rpm macros as `arguments`."""
+def _reset_stale_build_dir(build_dir: Path, arguments: list[str], env: dict[str, str]) -> None:
+    """Empty `build_dir` unless its last build used the same rpm macros as `arguments`.
+
+    It runs in the chroot of the build, so that it reads the macros of the root that the build runs in.
+    """
     # meson reads CFLAGS and LDFLAGS from the environment on the first configure only. It ignores changed
     # values even with --reconfigure. %meson runs again in every build, but a changed flag never reaches
     # the compiler. The flags expand from rpm macros. A change to a macro of the buildroot or to the
     # rpmbuild options therefore empties the build directory. A spec that redefines a flag macro itself
     # does not change the digest.
-    with builder.buildroot(lower, topdir):
-        showrc = subprocess.run(
-            ["/usr/bin/rpmbuild", *arguments, "--showrc"], env=env, stdout=subprocess.PIPE, check=True
-        ).stdout
+    showrc = subprocess.run(
+        ["/usr/bin/rpmbuild", *arguments, "--showrc"], env=env, stdout=subprocess.PIPE, check=True
+    ).stdout
     digest = hashlib.sha256(showrc).hexdigest()
-    build_dir = topdir / builder.BUILD
     stamp = build_dir / MACROS_STAMP
     if stamp.exists() and stamp.read_text() == digest:
         return

@@ -34,6 +34,13 @@ def answering_showrc[T](run: Callable[..., T]) -> Callable[..., T | subprocess.C
     return dispatch
 
 
+def chroot(scratch: Path) -> contextlib.nullcontext[Path]:
+    """Stand in for `rootfs.chroot()`: a root whose `/build` is the topdir of a driver in `scratch`."""
+    root = Path(tempfile.mkdtemp(prefix="root.", dir=scratch))
+    (root / build.builder.CHROOT_TOPDIR.relative_to("/")).symlink_to(scratch / "topdir")
+    return contextlib.nullcontext(root)
+
+
 class BuildRpm(unittest.TestCase):
     """Exercise the archive and prepared-source-tree build modes."""
 
@@ -103,7 +110,7 @@ class BuildRpm(unittest.TestCase):
             mock.patch.object(
                 build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()
             ) as mounted,
-            mock.patch.object(build.builder.rootfs, "chroot", return_value=contextlib.nullcontext()),
+            mock.patch.object(build.builder.rootfs, "chroot", return_value=chroot(self.scratch)),
             mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)) as process,
             # Patch the module wrapper first so TemporaryDirectory still uses the real rmtree.
             mock.patch.object(build.builder, "shutil", mock.Mock(wraps=shutil)),
@@ -407,7 +414,7 @@ class BuildRpm(unittest.TestCase):
                 with (
                     contextlib.chdir(self.project),
                     mock.patch.object(build.builder.rootfs, "rootfs", return_value=contextlib.nullcontext()),
-                    mock.patch.object(build.builder.rootfs, "chroot", return_value=contextlib.nullcontext()),
+                    mock.patch.object(build.builder.rootfs, "chroot", return_value=chroot(case)),
                     mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)),
                     mock.patch.object(tempfile, "tempdir", str(case)),
                 ):
@@ -479,15 +486,8 @@ class BuildRpm(unittest.TestCase):
 
                     with (
                         contextlib.chdir(self.project),
-                        # A persistent build enters the buildroot before rpmbuild to read the macros.
-                        mock.patch.object(
-                            build.builder.rootfs,
-                            "rootfs",
-                            side_effect=[contextlib.nullcontext(), mounted()] if persistent else [mounted()],
-                        ),
-                        mock.patch.object(
-                            build.builder.rootfs, "chroot", return_value=contextlib.nullcontext()
-                        ),
+                        mock.patch.object(build.builder.rootfs, "rootfs", return_value=mounted()),
+                        mock.patch.object(build.builder.rootfs, "chroot", return_value=chroot(case)),
                         mock.patch.object(build.subprocess, "run", side_effect=answering_showrc(run)),
                         mock.patch.object(build.builder.shutil, "rmtree") as remove,
                         mock.patch.object(tempfile, "tempdir", str(case)),
