@@ -363,6 +363,14 @@ def _hwdb(usr: bool = True, strict: bool = True) -> LayerOperation:
     """
     return ("hwdb", usr, strict)
 
+def _preset(vendor: bool = False) -> LayerOperation:
+    """Enable and disable the image's system and global user units as its preset policy says.
+
+    `vendor = True` writes the enablement symlinks below /usr instead of /etc, for an image that boots
+    with an empty /etc. It needs systemctl from systemd 263 or newer in the tools box.
+    """
+    return ("preset", vendor)
+
 def _locale_gen() -> LayerOperation:
     """Generate the locales the image's /etc/locale.gen lists into the image's locale archive."""
     return ("locale_gen",)
@@ -461,6 +469,7 @@ ops = struct(
     depmod = _depmod,
     hwdb = _hwdb,
     locale_gen = _locale_gen,
+    preset = _preset,
 )
 
 def _encode_operation(operation: LayerOperation, python: Dependency) -> LayerOperation:
@@ -765,6 +774,10 @@ IMAGE_OPERATION_ATTR = attrs.one_of(
         attrs.bool(),
     ),
     attrs.tuple(attrs.enum(["locale_gen"])),
+    attrs.tuple(
+        attrs.enum(["preset"]),
+        attrs.bool(),
+    ),
 )
 
 # The layer attributes every rule that builds a logical image from operations shares.

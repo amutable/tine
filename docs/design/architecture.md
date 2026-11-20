@@ -1833,9 +1833,10 @@ belong to one package system are listed in its own section instead:
   image boots with therefore depends on the distribution: Fedora's and Arch's systemd ship upstream's
   `etc.conf`, whose `L` lines recreate `/etc/os-release` and its neighbours, while Debian drops it and
   populates `/etc` from packages instead.
-- The generators cover the databases under `/usr`. System users, volatile files and directories, and unit
-  presets are left to the boot-time units systemd ships for them, so an image whose `/etc` is created at
-  first boot gets them then and one that ships a populated `/etc` does not get them at all.
+- The generators cover the databases under `/usr`. System users and volatile files and directories are left
+  to the boot-time units systemd ships for them, so an image whose `/etc` is created at first boot gets them
+  then and one that ships a populated `/etc` does not get them at all. Unit presets are also left to first
+  boot, unless the image runs `image.ops.preset()`.
 - Bootable images currently disable SELinux.
 - Remote execution, Barrage integration, release publishing, and systematic reproducibility audits are not
   wired into CI.
@@ -1890,8 +1891,10 @@ outside the build, addressed by URI over a PKCS#11 socket, see
 Near-term image gaps are:
 
 - offline SELinux labeling instead of `selinux=0`, as one more generator;
-- build-time `systemd-sysusers`, `systemd-tmpfiles` and `systemctl preset-all`, once their single-UID/GID
-  and volatile-`/etc` behavior is settled;
+- build-time `systemd-sysusers` and `systemd-tmpfiles`, once their single-UID/GID and volatile-`/etc`
+  behavior is settled;
+- `image.ops.preset(vendor = True)` as a default generator of the compositions, once every release's tools
+  box contains systemd 263;
 - deterministic ext4/FAT byte-level validation and any required normalization;
 - OCI, ESP, and other terminal formats as real consumers require them;
 - richer ordered operations for setting file metadata directly;

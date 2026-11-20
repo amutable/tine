@@ -295,6 +295,8 @@ def _apply(value: object, target: Path) -> None:
             finalize.hwdb(target, usr=usr, strict=strict)
         case ["locale_gen"]:
             finalize.locale_gen(target)
+        case ["preset", bool(vendor)]:
+            finalize.preset(target, vendor=vendor)
         case ["mkdir", _] | ["symlink", _, _] | ["write_file", _, _] | ["remove", _]:
             with rootfs.chroot(target):
                 _apply_filesystem(operation)
