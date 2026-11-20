@@ -3,6 +3,7 @@
 
 """Tests for shared package installation root handling."""
 
+import json
 import os
 import subprocess
 import tempfile
@@ -38,6 +39,34 @@ class TestConfigureBox(unittest.TestCase):
             installer._configure_box(root)
 
             self.assertEqual(nsswitch.readlink(), Path("/etc/authselect/nsswitch.conf"))
+
+
+class TestInstallInto(unittest.TestCase):
+    def test_hands_the_install_driver_a_mounted_root_and_the_filters(self) -> None:
+        install = installer.RootInstall(
+            installer="/box/install", arch="x86_64", packages_dir="closure", langs=["de"], docs=False
+        )
+        with (
+            tempfile.TemporaryDirectory() as scratch,
+            mock.patch.object(installer.subprocess, "run") as process,
+        ):
+            installer.install_into(install, Path("/buildroot"), Path(scratch))
+            spec = Path(scratch) / "install.spec.json"
+            process.assert_called_once_with(["/box/install", "--spec", str(spec)], check=True)
+            self.assertEqual(
+                json.loads(spec.read_text()),
+                {
+                    "arch": "x86_64",
+                    "packages_dir": "closure",
+                    "target": None,
+                    "installroot": "/buildroot",
+                    "lower": [],
+                    "work": None,
+                    "box_config": False,
+                    "langs": ["de"],
+                    "docs": False,
+                },
+            )
 
 
 class TestRun(unittest.TestCase):

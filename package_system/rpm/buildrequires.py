@@ -23,13 +23,16 @@ import specs
 import util
 
 import builder
+import installer
 import rootfs
 import rpmbuild
 
 
 class Spec(rpmbuild.Parse):
-    # `lower` lists the layers of the buildroot with declared BuildRequires installed, bottom first.
+    # `lower` lists the installed layers of the buildroot, bottom first, and `install` the closure of the
+    # declared BuildRequires that the query installs over them, or None when `lower` is the whole buildroot.
     lower: list[str]
+    install: installer.RootInstall | None
     # `source_tree` is the source tree of an in-place build, or None.
     source_tree: str | None
     out: str
@@ -63,7 +66,7 @@ def query(spec: Spec) -> list[str]:
         # doesn't parse the spec again for its BuildArch, which build.py's rpmbuild -bb does.
         if source_tree is not None:
             mode.append("--build-in-place")
-        stack.enter_context(builder.buildroot(spec["lower"], topdir))
+        stack.enter_context(builder.buildroot(spec["lower"], spec["install"], topdir))
         result = subprocess.run(
             ["/usr/bin/rpmbuild", *arguments, *mode, str(staged.spec)],
             cwd=staged.cwd,

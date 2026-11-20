@@ -12,6 +12,7 @@ transaction itself.
 
 import os
 import shutil
+import subprocess
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -69,6 +70,37 @@ class InstallSpec(TypedDict):
     box_config: bool
     langs: list[str]
     docs: bool
+
+
+class RootInstall(TypedDict):
+    """A package closure that a driver installs into a root that it mounted itself.
+
+    `root_install()` in `package/install.bzl` writes it.
+    """
+
+    # The install driver of the package system.
+    installer: str
+    arch: str
+    packages_dir: str
+    langs: list[str]
+    docs: bool
+
+
+def install_into(install: RootInstall, root: Path, scratch: Path) -> None:
+    """Install the closure of `install` into the mounted `root`, with the request written into `scratch`."""
+    request = InstallSpec(
+        arch=install["arch"],
+        packages_dir=install["packages_dir"],
+        target=None,
+        installroot=str(root),
+        lower=[],
+        work=None,
+        box_config=False,
+        langs=install["langs"],
+        docs=install["docs"],
+    )
+    spec = specs.write(scratch / "install.spec.json", dict(request))
+    subprocess.run([install["installer"], "--spec", str(spec)], check=True)
 
 
 @contextmanager

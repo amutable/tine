@@ -4,7 +4,7 @@
 """Shared native package buildroots."""
 
 load("//box:runtime.bzl", "BoxInfo")
-load(":install.bzl", "install_packages")
+load(":install.bzl", "install_closure", "install_packages", "resolve_packages", "root_install")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
 
@@ -15,6 +15,14 @@ BuildrootInfo = provider(
         "package_manager": provider_field(Dependency),
         "root": provider_field(Artifact),
     },
+)
+
+# The buildroot of one package: the packages it adds to the base root, and the same installed as a delta.
+PackageBuildroot = record(
+    # The installed layers, lowest first: the base root, and the delta when there is one.
+    layers = list[Artifact],
+    # The package directory that the delta installs, or None when the package needs no delta.
+    closure = Artifact | None,
 )
 
 def _buildroot_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -79,61 +87,81 @@ def _extra_packages(owner: str, base: BuildrootInfo, buildroot_packages: list[De
         extra_packages.append(info.packages)
     return extra_packages
 
+def _delta(
+    ctx: AnalysisContext,
+    owner: str,
+    base: BuildrootInfo,
+    install: list[str],
+    buildroot_packages: list[Dependency],
+    install_files: list[Artifact] = [],
+    identifier: str | None = None,
+) -> PackageBuildroot:
+    """Return the buildroot of the base root and `install` and `install_files`, solved over the base root.
+
+    The solve prefers the packages of `buildroot_packages`.
+    """
+    stack = [base.root]
+    closure = resolve_packages(
+        ctx,
+        base.package_manager,
+        base.box,
+        install,
+        stack,
+        _extra_packages(owner, base, buildroot_packages),
+        identifier = identifier,
+        install_files = install_files,
+    )
+
+    # Only a dev build and the `buildroot` sub-target need the delta installed on its own.
+    delta = install_closure(ctx, base.package_manager, base.box, closure, stack, identifier)
+    return PackageBuildroot(layers = stack + [delta], closure = closure)
+
 def package_buildroot(
     ctx: AnalysisContext,
     owner: str,
     base: BuildrootInfo,
     build_requires: list[str],
     buildroot_packages: list[Dependency],
-) -> list[Artifact]:
-    """Return the layer stack, bottom to top, that one package builds on.
+) -> PackageBuildroot:
+    """Return the buildroot that one package builds on: the shared base root, plus `build_requires`.
 
-    The stack is the shared base root, plus a delta that installs `build_requires`. The solve of the
-    delta prefers the packages of `buildroot_packages` over the repositories of the package manager.
+    The solve prefers the packages of `buildroot_packages` over the repositories of the package manager.
     `owner` starts a failure message.
     """
-    extra_packages = _extra_packages(owner, base, buildroot_packages)
-    stack = [base.root]
 
     # The packages of buildroot_packages are only candidates for the solve, so they install nothing on
     # their own. rpm.branch() derives them from the BuildRequires of every architecture, so a package can
     # have them without any BuildRequires on this architecture.
     if not build_requires:
-        return stack
-    return stack + [
-        install_packages(
-            ctx,
-            base.package_manager,
-            base.box,
-            build_requires,
-            stack = stack,
-            extra_packages = extra_packages,
-        ),
-    ]
+        return PackageBuildroot(layers = [base.root], closure = None)
+    return _delta(ctx, owner, base, build_requires, buildroot_packages)
 
-def recipe_delta(
+def recipe_buildroot(
     ctx: AnalysisContext,
     owner: str,
     base: BuildrootInfo,
-    stack: list[Artifact],
+    build_requires: list[str],
     buildroot_packages: list[Dependency],
     requires: Artifact,
-) -> Artifact:
-    """Return a delta over `stack` that installs the JSON list `requires` of build dependencies.
+) -> PackageBuildroot:
+    """Return the buildroot of `build_requires` and the JSON list `requires` of build dependencies.
 
-    The solve of the delta prefers the packages of `buildroot_packages` over the repositories of the
-    package manager. `owner` starts a failure message.
+    Both lists are solved together in the base root. That solve can choose another provider or version for a
+    package of `build_requires` than `package_buildroot()` does, so its root isn't always a superset of that
+    one. `owner` starts a failure message.
     """
-    return install_packages(
-        ctx,
-        base.package_manager,
-        base.box,
-        [],
-        stack = stack,
-        extra_packages = _extra_packages(owner, base, buildroot_packages),
-        install_files = [requires],
-        identifier = "recipe",
-    )
+    return _delta(ctx, owner, base, build_requires, buildroot_packages, install_files = [requires], identifier = "recipe")
+
+def buildroot_spec(base: BuildrootInfo, buildroot: PackageBuildroot, installed: bool) -> dict[str, typing.Any]:
+    """Return the spec fields `lower` and `install` of a driver that runs in `buildroot`.
+
+    With `installed`, the driver runs on the installed layers of `buildroot`. Otherwise it installs the
+    closure over the base root itself, in its scratch space. Its action then depends on the packages rather
+    than on the bytes that installing them wrote, and a cache hit installs nothing.
+    """
+    if installed or buildroot.closure == None:
+        return {"install": None, "lower": buildroot.layers}
+    return {"install": root_install(base.package_manager, buildroot.closure), "lower": [base.root]}
 
 def buildroot(name: str, **kwargs) -> None:
     if not name.endswith(".buildroot"):

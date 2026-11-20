@@ -43,8 +43,14 @@ SERVED = {
     "tine//examples/image-rust-project:hello": ("cargo_build",),
     "tine//examples/package/rpm:hello-tree": ("rpmbuild",),
 }
-# `<target> (<configuration>) (<category>)`, as `what-ran` names an action.
-ACTION = re.compile(r"(?P<target>\S+) \(\S+\) \((?P<category>\w+)\)")
+# What a warm build must not run at all for a target that it takes from the cache. A package build installs
+# its BuildRequires itself, so a hit on it installs none of them. The base root is still installed locally,
+# by an anonymous target that this doesn't check.
+SKIPPED = {
+    "tine//examples/package/rpm:hello-tree": ("install",),
+}
+# `<target> (<configuration>) (<category>[ <identifier>])`, as `what-ran` names an action.
+ACTION = re.compile(r"(?P<target>\S+) \(\S+\) \((?P<category>\w+)(?: (?P<identifier>.+))?\)")
 ISOLATION = "cache-roundtrip"
 # The platform whose executor decides whether Buck offers the shim an upload at all.
 PLATFORM = "tine//platform:default"
@@ -150,16 +156,41 @@ class RoundTrip:
         if wanted not in self.tine("audit", "providers", PLATFORM, echo=False):
             fail(f"the execution platform does not say {wanted!r}")
 
-    def executors(self) -> dict[tuple[str, str], str]:
-        """Where each action of the last build came from, by target and category."""
-        found: dict[tuple[str, str], str] = {}
+    def ran(self) -> list[tuple[re.Match[str], str]]:
+        """Each action of the last build, as a match of ACTION, and its executor.
+
+        An action of a target that SERVED or SKIPPED names must match, so that a change of the format of
+        `what-ran` can't make the checks pass without looking.
+        """
+        found = []
         for line in self.tine("log", "what-ran", "--format", "json").splitlines():
             if not line.startswith("{"):
                 continue  # the launcher's own notes
             record = json.loads(line)
-            if action := ACTION.fullmatch(cast(str, record["identity"])):
-                found[(action["target"], action["category"])] = cast(str, record["reproducer"]["executor"])
+            identity = cast(str, record["identity"])
+            if action := ACTION.fullmatch(identity):
+                found.append((action, cast(str, record["reproducer"]["executor"])))
+            elif identity.split(" ", 1)[0] in SERVED.keys() | SKIPPED.keys():
+                fail(f"what-ran names an action in a format this doesn't know: {identity}")
         return found
+
+    def executors(self) -> dict[tuple[str, str], str]:
+        """Where each action without an identifier of the last build came from, by target and category."""
+        return {
+            (action["target"], action["category"]): executor
+            for action, executor in self.ran()
+            if action["identifier"] is None
+        }
+
+    def check_skipped(self) -> None:
+        """Fail if the last build ran an action that SKIPPED names."""
+        wrong = [
+            action.string
+            for action, _ in self.ran()
+            if action["category"] in SKIPPED.get(action["target"], ())
+        ]
+        if wrong:
+            fail(f"a warm build ran what a cache hit doesn't need: {', '.join(wrong)}")
 
     def check_served(self, expected: str) -> None:
         """Fail unless every action of SERVED came from `expected` in the last build."""
@@ -237,6 +268,7 @@ def main() -> None:
         run.settle(run.reader)
         run.build()
         run.check_served("Cache")
+        run.check_skipped()
         run.check_uploads(False)
         run.report()
         print("=== every result named in SERVED came back out of the bucket", file=sys.stderr)

@@ -9,13 +9,14 @@ sets up their scratch tree and mounts, and removes the tree after a successful b
 
 import shutil
 import tempfile
-from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TypedDict
 
 import util
 
+import installer
 import rootfs
 
 # The source tree is mounted at topdir/CHECKOUT, and the persistent build directory at topdir/BUILD.
@@ -27,8 +28,10 @@ CHROOT_TOPDIR = Path("/build")
 class Spec(TypedDict):
     # `build_dir` is a build directory that Buck keeps between runs, or None for a clean build.
     build_dir: str | None
-    # `lower` lists the layers of the buildroot, lowest first.
+    # `lower` lists the installed layers of the buildroot, lowest first, and `install` the packages that the
+    # driver installs over them, or None when `lower` is the whole buildroot.
     lower: list[str]
+    install: installer.RootInstall | None
     out: str
     # `source_tree` is a prepared source tree to build in place, or None to build from the declared sources.
     source_tree: str | None
@@ -76,8 +79,18 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
     return rc
 
 
-def buildroot(lower: list[str], topdir: Path) -> AbstractContextManager[Path]:
-    """Chroot into the buildroot with the layers `lower`, with topdir at `CHROOT_TOPDIR`."""
-    return rootfs.rootfs(
-        "/buildroot", lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
-    )
+@contextmanager
+def buildroot(lower: list[str], install: installer.RootInstall | None, topdir: Path) -> Generator[Path]:
+    """Chroot into the buildroot with the layers `lower`, with topdir at `CHROOT_TOPDIR`.
+
+    The packages of `install` are installed over the layers first, and an empty closure installs nothing.
+    The overlay's upper layer lives in the action's scratch space, so they are gone with it after the
+    action.
+    """
+    with rootfs.rootfs(
+        installer.BUILDROOT, lowers=lower, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True
+    ) as root:
+        if install is not None and any(Path(install["packages_dir"]).iterdir()):
+            installer.install_into(install, root, Path(tempfile.gettempdir()))
+        with rootfs.chroot(root) as chrooted:
+            yield chrooted

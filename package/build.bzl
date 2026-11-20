@@ -7,7 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//git:defs.bzl", "git")
 load("//project:defs.bzl", "project")
-load(":buildroot.bzl", "BuildrootInfo")
+load(":buildroot.bzl", "BuildrootInfo", "PackageBuildroot", "buildroot_spec")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
 load(":system.bzl", "PackageSystemInfo")
@@ -18,7 +18,7 @@ PACKAGE_BUILD_ATTRS = {
     "build_requires": attrs.list(
         attrs.string(),
         default = [],
-        doc = "the packages that the build needs beyond the shared base buildroot, installed as a delta over it",
+        doc = "the packages that the build needs beyond the shared base buildroot",
     ),
     "buildroot": attrs.dep(
         providers = [BuildrootInfo],
@@ -66,7 +66,7 @@ def package_build(
     owner: str,
     package_system: Dependency,
     base: BuildrootInfo,
-    stack: list[Artifact],
+    buildroot: PackageBuildroot,
     configured_dev: bool,
     keep_build_dir: bool,
     packages: str,
@@ -74,7 +74,7 @@ def package_build(
     category: str,
     spec: dict[str, typing.Any],
 ) -> list[Provider]:
-    """Run the `build` driver of `package_system` on the layer stack `stack` that `base` starts.
+    """Run the `build` driver of `package_system` in `buildroot`, which `base` starts.
 
     `spec` contains the fields of the driver spec that the calling rule owns. `packages` names the output
     directory of the packages. A dev build keeps its build directory between runs if `keep_build_dir` is
@@ -114,9 +114,12 @@ def package_build(
                 ctx.actions,
                 "build.spec.json",
                 spec
+                # A dev build reruns on every edit, and an install in the action would add to every rerun.
+                # Buck reinstalls its separate delta only when the packages change, and its results stay
+                # local, so its key doesn't matter.
+                | buildroot_spec(base, buildroot, installed = configured_dev)
                 | {
                     "build_dir": build_dir.as_output() if build_dir != None else None,
-                    "lower": stack,
                     "out": out.as_output(),
                     "subpackages": subpackages,
                     "subpackages_out": subpackages_dir.as_output(),
@@ -130,7 +133,9 @@ def package_build(
     )
 
     sub_targets = {name: [DefaultInfo(default_output = files[name + system.package_suffix])] for name in subpackages}
-    sub_targets["buildroot"] = [DefaultInfo(default_outputs = stack)]
+    # The buildroot as installed layers, for debugging. A release build installs the same packages in its own
+    # action instead, so this runs an install that the build skipped, and scriptlets can make its bytes differ.
+    sub_targets["buildroot"] = [DefaultInfo(default_outputs = buildroot.layers)]
     if build_dir != None:
         sub_targets["build"] = [DefaultInfo(default_output = build_dir)]
     return [
