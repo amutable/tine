@@ -27,7 +27,7 @@ def _source_path(source: str) -> str:
         elif path:
             package = path
     target = target.split("[", 1)[0].removesuffix(".git")
-    return _project_path(package, target, cell = cell)
+    return _project_path(package, target, cell = cell) or "."
 
 def is_dev(
     name: str,
@@ -39,7 +39,8 @@ def is_dev(
     if override != None:
         return override
 
-    configured = [entry.strip() for entry in read_root_config(_SECTION, _DEV, "").split(",")]
+    # An unset `[tine] dev` splits into one empty entry, and an empty entry would match an empty project path.
+    configured = [entry.strip() for entry in read_root_config(_SECTION, _DEV, "").split(",") if entry.strip()]
     project_path = _project_path(package_name(), name, cell = get_cell_name())
     if source == None:
         return project_path in configured
