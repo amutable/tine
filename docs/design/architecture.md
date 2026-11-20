@@ -661,9 +661,9 @@ Native package installation has three phases shared by buildroots and images:
    packages in it. Buildroots reject managers with local packages, because buildroot contents must come from
    the explicit, cycle-checked self-hosting locks.
 3. **Install.** Run `PackageSystemInfo.install` over the exact package directory, whose file names carry
-   the package system's suffix. `install_packages()` owns a fresh root or incremental buildroot delta. An
-   image layer instead invokes the same installer against its already-mounted root so package and
-   filesystem operations have one output owner.
+   the package system's suffix. `install_packages()` owns a fresh base root, and `install_closure()` the
+   buildroot delta of a package. An image layer instead invokes the same installer against its
+   already-mounted root so package and filesystem operations have one output owner.
 
 What a request looks like, rather than how one package system answers it, belongs to the neutral layer:
 `package/transaction.py` owns the transaction schema both planners write and Starlark reads back, and

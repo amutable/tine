@@ -103,19 +103,17 @@ def resolve_packages(
         name = prefix + "install.closure",
     )
 
-def _install_actions(
+def install_closure(
     ctx: AnalysisContext,
     package_manager_dep: Dependency,
     box_dep: Dependency,
-    install: list[str],
+    closure: Artifact,
     stack: list[Artifact],
-    extra_packages: list[Artifact],
-    install_files: list[Artifact] = [],
     identifier: str | None = None,
 ) -> Artifact:
+    """Install the package directory `closure` in `box_dep`, into a new root or a delta over `stack`."""
     package_manager = package_manager_dep[PackageManagerInfo]
     system = package_manager.package_system[PackageSystemInfo]
-    closure = resolve_packages(ctx, package_manager_dep, box_dep, install, stack, extra_packages, identifier = identifier, install_files = install_files)
     prefix = identifier + "/" if identifier != None else ""
     out = ctx.actions.declare_output(prefix + ("install.delta" if stack else "root"), dir = True)
     work = ctx.actions.declare_output(prefix + "install.work", dir = True) if stack else None
@@ -141,14 +139,14 @@ def _install_actions(
     return out
 
 def _install_packages_impl(ctx: AnalysisContext) -> list[Provider]:
-    root = _install_actions(ctx, ctx.attrs.package_manager, ctx.attrs.box, ctx.attrs.install, [], ctx.attrs.extra_packages)
+    closure = resolve_packages(ctx, ctx.attrs.package_manager, ctx.attrs.box, ctx.attrs.install, [])
+    root = install_closure(ctx, ctx.attrs.package_manager, ctx.attrs.box, closure, [])
     return [DefaultInfo(default_output = root), _RootInfo(root = root)]
 
 _install_packages = anon_rule(
     impl = _install_packages_impl,
     attrs = {
         "box": attrs.dep(providers = [box.Info]),
-        "extra_packages": attrs.list(attrs.source(), default = []),
         "install": attrs.list(attrs.string()),
         "package_manager": attrs.dep(providers = [PackageManagerInfo]),
     },
@@ -162,22 +160,16 @@ def install_packages(
     package_manager: Dependency,
     box_dep: Dependency,
     install: list[str],
-    stack: list[Artifact] = [],
-    extra_packages: list[Artifact] = [],
-    install_files: list[Artifact] = [],
-    identifier: str | None = None,
 ) -> Artifact:
-    if not stack:
-        root = ctx.actions.anon_target(
-            _install_packages,
-            {
-                "box": box_dep,
-                "extra_packages": extra_packages,
-                "install": sorted(install),
-                "name": "//install-packages:{}".format(package_manager.label.name),
-                "package_manager": package_manager,
-            },
-        ).artifact("root")
-        # A promise is resolved before the anon target is analysed, so its path kind is asserted here.
-        return ctx.actions.assert_short_path(ctx.actions.assert_has_content_based_path(root), short_path = "root")
-    return _install_actions(ctx, package_manager, box_dep, install, stack, extra_packages, install_files, identifier)
+    """Install `install` with `box_dep` into a new root, which every caller with the same arguments shares."""
+    root = ctx.actions.anon_target(
+        _install_packages,
+        {
+            "box": box_dep,
+            "install": sorted(install),
+            "name": "//install-packages:{}".format(package_manager.label.name),
+            "package_manager": package_manager,
+        },
+    ).artifact("root")
+    # A promise is resolved before the anon target is analysed, so its path kind is asserted here.
+    return ctx.actions.assert_short_path(ctx.actions.assert_has_content_based_path(root), short_path = "root")
