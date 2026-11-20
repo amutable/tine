@@ -6,7 +6,7 @@
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
-load("//package:install.bzl", "resolve_packages")
+load("//package:install.bzl", "resolve_packages", "root_install")
 load("//package:manager.bzl", "PackageManagerInfo")
 load("//package:system.bzl", "PackageSystemInfo")
 load("//platform:architecture.bzl", "architecture")
@@ -639,7 +639,6 @@ def declare_image(
 
     if operations or install_specs:
         closure = None
-        package_manager_info = None
         if install_specs:
             if package_manager == None:
                 fail("image: installing packages requires an image with a package manager")
@@ -652,26 +651,16 @@ def declare_image(
                 identifier = identifier,
                 local_seed = parent_install_specs + install_specs,
             )
-            package_manager_info = package_manager[PackageManagerInfo]
 
         delta = declare_out(ctx, identifier, "delta", dir = True)
         work = declare_out(ctx, identifier, "overlay.work", dir = True) if layers else None
         spec = {
-            "install": None,
+            "install": root_install(package_manager, closure, install_docs, install_langs) if closure != None else None,
             "lower": layers,
             "operations": [_encode_operation(operation, tools.python) for operation in operations],
             "out": delta.as_output(),
             "work": work.as_output() if work != None else None,
         }
-        if package_manager_info != None:
-            system = package_manager_info.package_system[PackageSystemInfo]
-            spec["install"] = {
-                "arch": architecture.spelling(package_manager_info.arch, system.arch_schema),
-                "docs": install_docs,
-                "installer": specs.executable(system.install),
-                "langs": install_langs,
-                "packages_dir": closure,
-            }
         signing_access = merge_signing_access(keys)
         cmd = cmd_args(
             box.run(

@@ -28,21 +28,11 @@ import rootfs
 from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
-class LayerInstall(TypedDict):
-    """What a layer adds to the install request it writes: which installer, and what to hide."""
-
-    arch: str
-    installer: str
-    packages_dir: str
-    langs: list[str]
-    docs: bool
-
-
 class Spec(TypedDict):
     lower: list[str]
     out: str
     work: str | None
-    install: LayerInstall | None
+    install: installer.RootInstall | None
     operations: list[object]
 
 
@@ -252,25 +242,6 @@ def _apply_filesystem(operation: list[object]) -> None:
             util.fail(f"invalid image filesystem op: {operation!r}")
 
 
-def _install(install: LayerInstall, target: Path, scratch: Path) -> None:
-    """Install the layer's package closure into the mounted root."""
-    request = installer.InstallSpec(
-        arch=install["arch"],
-        packages_dir=str(Path(install["packages_dir"]).absolute()),
-        target=None,
-        installroot=str(target),
-        lower=[],
-        work=None,
-        box_config=False,
-        langs=install["langs"],
-        docs=install["docs"],
-    )
-    spec = specs.write(scratch / "install.spec.json", dict(request))
-    rc = subprocess.run([install["installer"], "--spec", str(spec)]).returncode
-    if rc != 0:
-        util.fail(f"image package installation failed (rc={rc})")
-
-
 def _apply(value: object, target: Path) -> None:
     operation = _operation(value)
     match operation:
@@ -336,7 +307,7 @@ def main(argv: list[str] | None = None) -> None:
     with mounted as target, tempfile.TemporaryDirectory(prefix="layer.") as scratch:
         # Packages land before the operations so every one of them sees what this layer installs.
         if install is not None:
-            _install(install, target, Path(scratch))
+            installer.install_into(install, target, Path(scratch))
         for operation in operations:
             _apply(operation, target)
     _normalize_modes(out)

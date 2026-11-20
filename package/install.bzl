@@ -103,6 +103,34 @@ def resolve_packages(
         name = prefix + "install.closure",
     )
 
+# A buildroot keeps the documentation and every translation of its packages, whichever action installs it.
+_BUILDROOT_DOCS = True
+_BUILDROOT_LANGS = []
+
+def _closure_fields(package_manager_dep: Dependency, closure: Artifact, docs: bool, langs: list[str]) -> dict[str, typing.Any]:
+    """Return the fields of an install request for `closure` that every way of installing it shares."""
+    package_manager = package_manager_dep[PackageManagerInfo]
+    system = package_manager.package_system[PackageSystemInfo]
+    return {
+        "arch": architecture.spelling(package_manager.arch, system.arch_schema),
+        "docs": docs,
+        "langs": langs,
+        "packages_dir": closure,
+    }
+
+def root_install(
+    package_manager_dep: Dependency,
+    closure: Artifact,
+    docs: bool = _BUILDROOT_DOCS,
+    langs: list[str] = _BUILDROOT_LANGS,
+) -> dict[str, typing.Any]:
+    """Return the request of a driver that installs `closure` into a root it mounted, `installer.RootInstall`.
+
+    The defaults are those of a buildroot.
+    """
+    system = package_manager_dep[PackageManagerInfo].package_system[PackageSystemInfo]
+    return _closure_fields(package_manager_dep, closure, docs, langs) | {"installer": specs.executable(system.install)}
+
 def install_closure(
     ctx: AnalysisContext,
     package_manager_dep: Dependency,
@@ -111,9 +139,8 @@ def install_closure(
     stack: list[Artifact],
     identifier: str | None = None,
 ) -> Artifact:
-    """Install the package directory `closure` in `box_dep`, into a new root or a delta over `stack`."""
-    package_manager = package_manager_dep[PackageManagerInfo]
-    system = package_manager.package_system[PackageSystemInfo]
+    """Install the package directory `closure` of a buildroot in `box_dep`, into a new root or a delta over `stack`."""
+    system = package_manager_dep[PackageManagerInfo].package_system[PackageSystemInfo]
     prefix = identifier + "/" if identifier != None else ""
     out = ctx.actions.declare_output(prefix + ("install.delta" if stack else "root"), dir = True)
     work = ctx.actions.declare_output(prefix + "install.work", dir = True) if stack else None
@@ -122,14 +149,11 @@ def install_closure(
         specs.args(
             ctx.actions,
             prefix + "install.spec.json",
-            {
-                "arch": architecture.spelling(package_manager.arch, system.arch_schema),
+            _closure_fields(package_manager_dep, closure, _BUILDROOT_DOCS, _BUILDROOT_LANGS)
+            | {
                 "box_config": False,
-                "docs": True,
                 "installroot": None,
-                "langs": [],
                 "lower": stack,
-                "packages_dir": closure,
                 "target": out.as_output(),
                 "work": work.as_output() if work != None else None,
             },
