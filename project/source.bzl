@@ -70,6 +70,8 @@ def source_listing() -> str:
 SourceTreeInfo = provider(
     doc = "A source tree that a build reads in place.",
     fields = {
+        # `dev` is True when `[tine] dev` lists the directory that a build of the tree reads.
+        "dev": provider_field(bool),
         # `path` is the directory of a checkout, or the project path of a package directory with its listed files
         # as hidden inputs.
         "path": provider_field(Artifact | cmd_args),
@@ -85,11 +87,12 @@ def _source_tree_impl(ctx: AnalysisContext) -> list[Provider]:
     # A build reads the package directory in place. The listed files are hidden inputs, so that an edit to
     # one of them reruns the build.
     path = cmd_args(ctx.attrs.directory, hidden = sources.values())
-    return [DefaultInfo(default_output = listing), SourceTreeInfo(path = path, sources = sources)]
+    return [DefaultInfo(default_output = listing), SourceTreeInfo(dev = ctx.attrs.dev, path = path, sources = sources)]
 
 source_tree_rule = rule(
     impl = _source_tree_impl,
     attrs = {
+        "dev": attrs.bool(doc = "whether `[tine] dev` lists the project path of the package"),
         "directory": attrs.string(doc = "the project path of the package"),
         "listing": attrs.dep(providers = [SourceListingInfo]),
     },

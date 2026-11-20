@@ -43,7 +43,7 @@ def is_dev(
 
     # An unset `[tine] dev` splits into one empty entry, and an empty entry would match an empty project path.
     configured = [entry.strip() for entry in read_root_config(_SECTION, _DEV, "").split(",") if entry.strip()]
-    project_path = _project_path(package_name(), name, cell = get_cell_name())
+    project_path = _project_path(package_name(), name, cell = get_cell_name()) or "."
     if source == None:
         return project_path in configured
     return _source_path(source) in configured
@@ -58,7 +58,7 @@ def source_tree(name: str, **kwargs) -> None:
     The default output of `name` lists the files that the tree tracks as inputs.
     """
     directory = _project_path(package_name(), "", cell = get_cell_name()) or "."
-    source_tree_rule(name = name, directory = directory, listing = source_listing(), **kwargs)
+    source_tree_rule(name = name, dev = is_dev(""), directory = directory, listing = source_listing(), **kwargs)
 
 def populated(directory: str) -> bool:
     """Whether `directory` in this package contains a file, or is mounted for dev mode."""
