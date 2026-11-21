@@ -7,6 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//git:defs.bzl", "git")
 load("//project:defs.bzl", "project")
+load("//project:source.bzl", "SourceTreeInfo")
 load(":buildroot.bzl", "BuildrootInfo")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
@@ -29,8 +30,10 @@ PACKAGE_BUILD_ATTRS = {
         default = [],
         doc = "our packages that the solves of the BuildRequires prefer over upstream ones",
     ),
-    "configured_dev": attrs.bool(
-        doc = "whether project configuration selects this package for dev mode",
+    "configured_dev": attrs.option(
+        attrs.bool(),
+        default = None,
+        doc = "whether `dev` or `[tine] dev` selects dev mode for this package, or None when neither does",
     ),
     "in_place_packaging": attrs.option(
         attrs.string(),
@@ -48,7 +51,8 @@ PACKAGE_BUILD_ATTRS = {
         doc = "the SOURCE_DATE_EPOCH of the build, or None to take it from the package's changelog where the recipe has one",
     ),
     "source_tree": attrs.option(
-        attrs.source(allow_directory = True),
+        # A label names a `project.source_tree()` or a checkout, and a directory of the package coerces as a source.
+        attrs.one_of(attrs.dep(providers = [SourceTreeInfo]), attrs.source(allow_directory = True)),
         default = None,
         doc = "a prepared tree built in place of the declared sources",
     ),
@@ -147,12 +151,13 @@ def package_build_source(
     in_place_recipe_value: str | None,
     in_place_packaging: str | None,
     in_place_packaging_distro: str | Select | None,
-) -> (str | None, bool):
+) -> (str | None, bool | None):
     """Check the in-place arguments of a package-build macro, and return its source tree and dev mode.
 
-    `in_place_recipe` names the macro's argument for a recipe in the source tree, and
-    `in_place_recipe_value` is its value. Without `source_tree`, the macro builds the checkout slot
-    `<name>.source` once the slot contains files. `owner` starts a failure message.
+    The dev mode is None when neither `dev` nor `[tine] dev` selects it. `in_place_recipe` names the macro's
+    argument for a recipe in the source tree, and `in_place_recipe_value` is its value. Without `source_tree`,
+    the macro builds the checkout slot `<name>.source` once the slot contains files. `owner` starts a failure
+    message.
     """
     if in_place_packaging != None and in_place_recipe_value != None:
         fail("{}: {} sets both in_place_packaging and {}".format(owner, name, in_place_recipe))
@@ -162,4 +167,6 @@ def package_build_source(
         source = name + ".source"
         populated = git.checkout(name = source)
         source_tree = ":" + source if populated else None
-    return source_tree, project.is_dev(name, source = source_tree, override = dev)
+    if dev == None and project.is_dev(name, source = source_tree):
+        dev = True
+    return source_tree, dev
