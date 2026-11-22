@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "ee1fe55ee24d4f02465a6b78ec9f79c86f51f0c35c334afcf999b27dff4d0624",
+        "sha256": "7e605aa1321da1949c9ae246a1872286ed5a0b5cbdca3811e23a314b3821d420",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261122T143046Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-arm64/Packages.xz",
-        "sha256": "495546d75dc1dfc6c265d46559cd6468aa476211595521c3e62c23b27a9eca3c",
-        "size": 47340,
-        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/contrib/binary-arm64/by-hash/SHA256/495546d75dc1dfc6c265d46559cd6468aa476211595521c3e62c23b27a9eca3c"
+        "sha256": "a8af4715db203a5559b00d3dd8520b1359d96fa0d951a5c08b86b32d8f837b86",
+        "size": 47332,
+        "url": "https://snapshot.debian.org/archive/debian/20261122T143046Z/dists/testing/contrib/binary-arm64/by-hash/SHA256/a8af4715db203a5559b00d3dd8520b1359d96fa0d951a5c08b86b32d8f837b86"
       }
     ],
     "inline": {}
@@ -42,7 +42,6 @@
     "1bbc86a4cfc448c3d68b084e3c52ec4af185ab096a198f2713fb85c2637c286a": {"location":"pool/contrib/y/yquake2/yamagi-quake2-core_8.70+dfsg-1_arm64.deb","size":847344},
     "2186b1c1bcb609a6e3b291abaf139d8c3d55a552e47b55ce171da724494b8980": {"location":"pool/contrib/g/gnuboy/gnuboy-x_1.0.3-7.2_arm64.deb","size":77412},
     "2186e8c5b5ed34ca07d16977b5c1be9e5d390ffd24c550507edce41de55b4afd": {"location":"pool/contrib/a/alien-arena/alien-arena_7.71.7+dfsg-1_arm64.deb","size":817128},
-    "2201faee8c1801fda736ca57ec921b2dff5f101f7190a0e712d7d668c90cc819": {"location":"pool/contrib/f/fheroes2/fheroes2_1.1.17+dfsg-1_arm64.deb","size":3469768},
     "23ab45f645123a5897b391b3d9f7fde306ac6c9afdb2dc86f1fe0cdf09bc94aa": {"location":"pool/contrib/c/clear-sans/fonts-clear-sans_1.00-3_all.deb","size":375896},
     "23e0e3a39881af1b3d92ef633faa5e4a281b4ec5d4a6bc286ea77448f20645c0": {"location":"pool/contrib/i/indi-inovaplx/indi-inovaplx_1.4+20221221105828-3_arm64.deb","size":10804},
     "24db3f518becd8857673beda27ffe6f5ab5ca98674e36f802b8246fe5076fcbc": {"location":"pool/contrib/g/game-data-packager/quake2-server_89_all.deb","size":35444},
@@ -174,6 +173,7 @@
     "8f3eafcc1e121e082355d6317e06654945d4b019be3357d68f0ca0bace90de59": {"location":"pool/contrib/k/kinect-audio-setup/kinect-audio-setup_0.5-3_arm64.deb","size":15628},
     "90aac87d44e7b9fc821730fafc1544cc52556db2b7bd3c99dd1bd2c4909555c0": {"location":"pool/contrib/g/glx-alternatives/glx-alternative-nvidia_1.2.2_arm64.deb","size":5776},
     "90e81d77bcb497bf4b7f65f83e9859ac85b7c12ff0891ed505cc8ffc5ba595d9": {"location":"pool/contrib/j/jazz2-native/jazz2-native-data_3.9.0+ds-2_all.deb","size":775552},
+    "91c77efb5455917fbc0091f681617773302252c48d3d4d40c10cc06c22e0fffc": {"location":"pool/contrib/f/fheroes2/fheroes2_1.1.18+dfsg-1_arm64.deb","size":3786248},
     "9368d55026035ca9ba67bf3e764537c1bcbec75d5db307cb5b171cffe880bfc2": {"location":"pool/contrib/libg/libgdf/matlab-gdf_0.1.3-17_all.deb","size":21292},
     "95ce14cb81386678dfbbe3205cb16fea414534cd3aa94cfc55cdfa39f0af5c61": {"location":"pool/contrib/i/indi-sbig/indi-sbig_2.1+20221220234924-5_arm64.deb","size":30928},
     "9674e53f11a6bd1d2355bda50d88f6c8f1da5e7c1ff9d3846429d88cc0967c38": {"location":"pool/contrib/f/festvox-mbrola/festvox-us3_1.95-5_all.deb","size":11932},
@@ -206,6 +206,7 @@
     "ade0ed912a3785d419b61a584f19aa58fd186a4545d4291454bb03235c44ff99": {"location":"pool/contrib/p/python-cx-oracle/python-cx-oracle-doc_8.3.0-4_all.deb","size":298236},
     "b021b0747e8e039350800e0de2bf5d582752054de8e13036a54f0a757afaf524": {"location":"pool/contrib/g/gcc-doc-defaults/gccgo-doc_15.2.0-1_arm64.deb","size":3688},
     "b0b988828fed66227cb17227f14f63adb74129b4e4aee54a908e4e0b0e826ea3": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate_0.9.4+dfsg-1+b1_arm64.deb","size":11360},
+    "b1614ed7a7f8a5df78192019ef5b424e557fb9dc4e8b35646e31daa972224570": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_2_all.deb","size":5268},
     "b1879b54707907ca075493a00e79934429cfe5a618f2b8b3ba4488652bf45141": {"location":"pool/contrib/z/zfs-linux/zfs-zed_2.4.4-1_arm64.deb","size":75304},
     "b1a20d5f24563577fe1e1bcd42b6ad1aab9971aef9a7f792ffb623a15b3317ce": {"location":"pool/contrib/c/corsix-th/corsix-th_0.70.0-1+b1_arm64.deb","size":291196},
     "b1b91959607e5d7cba5f6e189e169d68373a63e7f24e676e8e730db35f5abaf2": {"location":"pool/contrib/d/dhewm3/dhewm3-d3xp_1.5.5+dfsg-2_arm64.deb","size":1095612},
@@ -281,7 +282,6 @@
     "fba3da6959366d88ed0f87b03d2540d120c0bf55bbf42649c1ca9367298fcf5e": {"location":"pool/contrib/p/play.it/play.it_2.36.0-1_all.deb","size":130508},
     "fc61a20a405e0747594da63f0d315adbab15b5887c97d8d2cff4f917d41958c9": {"location":"pool/contrib/a/alex4/alex4_1.1-10+b1_arm64.deb","size":56784},
     "fc77d7f5272df6a7b4e5a77453f99f058c09882c5bb2c43063f2c3aff81c7753": {"location":"pool/contrib/u/uqm-russian/uqm-russian_1.0.2-9_all.deb","size":725528},
-    "fca007540288cc341fedeff34af20f6ce0610c706648afd50d8e6f5128f4665e": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_1_all.deb","size":3152},
     "fcd3a3188b9c9523fec37c86a959ef1d12a15384b4f9effbe78a2d23602016a8": {"location":"pool/contrib/g/gemrb/gemrb-icewind-dale-data_0.9.4+dfsg-1_all.deb","size":116256},
     "fe27522a596aa6860a2b7d887bd2bc521ed7975ec59b8c9db3267e7def5abbb6": {"location":"pool/contrib/n/nvidia-egl-gbm/libnvidia-egl-gbm1_1.1.2.1-1_arm64.deb","size":11956},
     "fe8306aad738d651da8dd87e138692b9ce7b74c9d1473c2f5d69f04332320045": {"location":"pool/contrib/z/zfs-linux/libuutil3linux_2.4.4-1_arm64.deb","size":48780},
