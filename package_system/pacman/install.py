@@ -24,6 +24,15 @@ from util import fail
 import alpm
 import installer
 
+# libalpm commits a transaction even when an install scriptlet or a hook fails, so pacman exits with
+# status 0. It prints each failure on stderr, on a line that starts with an entry of `SCRIPT_ERRORS`.
+# The sandbox sets LC_ALL=C.UTF-8, so pacman prints these lines untranslated.
+SCRIPT_ERRORS = (
+    "error: command failed to execute correctly",
+    "error: command terminated by signal",
+    "error: unable to run hook",
+)
+
 
 def _source_date_epoch() -> int:
     """The assembly epoch every install stamps its database with."""
@@ -69,6 +78,21 @@ def scratch_options(scratch: Path) -> list[str]:
 def _assume_installed() -> list[str]:
     """Tell pacman what the plan was already resolved against."""
     return [argument for name in alpm.ASSUME_INSTALLED for argument in ("--assume-installed", name)]
+
+
+def run_transaction(command: list[str]) -> None:
+    """Run a pacman transaction, and fail when pacman fails or reports a failed scriptlet or hook."""
+    failures: list[str] = []
+    with subprocess.Popen(command, stderr=subprocess.PIPE, text=True, errors="replace") as pacman:
+        assert pacman.stderr is not None
+        for line in pacman.stderr:
+            sys.stderr.write(line)
+            if line.startswith(SCRIPT_ERRORS):
+                failures.append(line.rstrip("\n"))
+    if pacman.returncode != 0:
+        fail("pacman transaction failed")
+    if failures:
+        fail("a scriptlet or hook failed in the pacman transaction: " + "; ".join(failures))
 
 
 def install(
@@ -118,8 +142,7 @@ def install(
         "--upgrade",
         *packages,
     ]  # fmt: skip
-    if subprocess.run(command).returncode != 0:
-        fail("pacman transaction failed")
+    run_transaction(command)
 
 
 def parkdb(installroot: Path, epoch: int) -> None:
