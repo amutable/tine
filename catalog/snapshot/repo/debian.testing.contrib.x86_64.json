@@ -3,15 +3,15 @@
     "files": [
       {
         "out": "dists/testing/InRelease",
-        "sha256": "ee1fe55ee24d4f02465a6b78ec9f79c86f51f0c35c334afcf999b27dff4d0624",
+        "sha256": "7e605aa1321da1949c9ae246a1872286ed5a0b5cbdca3811e23a314b3821d420",
         "size": 150773,
-        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/InRelease"
+        "url": "https://snapshot.debian.org/archive/debian/20261122T143046Z/dists/testing/InRelease"
       },
       {
         "out": "dists/testing/contrib/binary-amd64/Packages.xz",
-        "sha256": "ce60a80d491dacf5ceb68d91ea66ee8fc6856156c188a4ed98c1d811c4d0f995",
-        "size": 48488,
-        "url": "https://snapshot.debian.org/archive/debian/20261114T202348Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/ce60a80d491dacf5ceb68d91ea66ee8fc6856156c188a4ed98c1d811c4d0f995"
+        "sha256": "dcaef92dbaea6a89d54d6aa64f5e5d46d981deb180e7045176064efe3329502c",
+        "size": 48480,
+        "url": "https://snapshot.debian.org/archive/debian/20261122T143046Z/dists/testing/contrib/binary-amd64/by-hash/SHA256/dcaef92dbaea6a89d54d6aa64f5e5d46d981deb180e7045176064efe3329502c"
       }
     ],
     "inline": {}
@@ -100,6 +100,7 @@
     "5601d49eed470660c8bc794d6ee1e134d2e69012ee2e562b28a5b626a90f2e41": {"location":"pool/contrib/n/nvidia-egl-gbm/libnvidia-egl-gbm1_1.1.2.1-1_amd64.deb","size":12012},
     "563ba775b7d3978b4336b84d6c7b34079a1139ce45c23dcbd14703f1b1e36d21": {"location":"pool/contrib/e/eos-downloader/eos-downloader_0.16.0-2_all.deb","size":46868},
     "5738c04f7b670d4e0df28f43a11a14dd4361dae013eab87b4d46d7e7369e1e75": {"location":"pool/contrib/g/game-data-packager/quake2_89_all.deb","size":105736},
+    "579c02e448871a809379f655caaebf52db470d6be9df7e6f284c9b28fbe578a7": {"location":"pool/contrib/f/fheroes2/fheroes2_1.1.18+dfsg-1_amd64.deb","size":4223420},
     "5992bd9abe1799ddbcfbc2a76283e6cb1a122b8d523364aa9610bea4479e51e2": {"location":"pool/contrib/o/openrct2-objects/openrct2-objects_1.8.0+dfsg-1_all.deb","size":10053780},
     "5ab7eba7e9526fa946f84e3ce70e627c9e1710e61b2e9840820abab1a63184bc": {"location":"pool/contrib/libd/libdvd-pkg/libdvd-pkg_1.6.0-1-1_all.deb","size":18312},
     "5ad419cb75a4d7a66830ba3e67f48a1fd78906ffe56d3cd0f130f466db835177": {"location":"pool/contrib/u/uqm/uqm_0.8.0+dfsg-4_amd64.deb","size":643504},
@@ -172,7 +173,6 @@
     "92e3044b8ea712caf6b353cebf38e439185ae0c9427d4f75817b52a29f6d40ec": {"location":"pool/contrib/o/opentyrian/opentyrian_2.1.20260912-1_amd64.deb","size":249148},
     "9368d55026035ca9ba67bf3e764537c1bcbec75d5db307cb5b171cffe880bfc2": {"location":"pool/contrib/libg/libgdf/matlab-gdf_0.1.3-17_all.deb","size":21292},
     "93caa9e32b65eafe3b66aaede811529564e6a8cb957ce4511ac308ba6c4e350d": {"location":"pool/contrib/g/gemrb/gemrb-icewind-dale-2_0.9.4+dfsg-1+b1_amd64.deb","size":11152},
-    "93e0feb0534942b360963ed9a8d6dff2a1966efa49c952f4c6a6475370a69e48": {"location":"pool/contrib/n/nbdkit/nbdkit-plugin-vddk_1.48.1-1_amd64.deb","size":39936},
     "9674e53f11a6bd1d2355bda50d88f6c8f1da5e7c1ff9d3846429d88cc0967c38": {"location":"pool/contrib/f/festvox-mbrola/festvox-us3_1.95-5_all.deb","size":11932},
     "9803ce7e35738b8416b223d5c142c2d45545041b22729ae984e0e2cbe6e14db1": {"location":"pool/contrib/g/glx-alternatives/update-glx_1.2.2_amd64.deb","size":5432},
     "9818f9e12c2f2c6be3c8961df5ab1ed399a955d9a798d29f1a859414cab92fac": {"location":"pool/contrib/h/hyperspec/hyperspec_1.35_all.deb","size":8120},
@@ -210,6 +210,7 @@
     "ae9c52524acebce76c0c4d24054041b453f492dd6ae727415343c86110d9a8f5": {"location":"pool/contrib/e/exult/exult-studio_1.12.1-3_amd64.deb","size":1626356},
     "b095e1b688f0a648b1b3403b3e20264000b3ccf09e30fad97b45abdc4e2c4347": {"location":"pool/contrib/n/nvidia-support/nvidia-installer-cleanup_20240109+1_amd64.deb","size":13924},
     "b0f6e9b035a70d52e1488a73d2b5889624592429cdf1b41b6751de00c1055889": {"location":"pool/contrib/h/hannah-foo2zjs/hannah-foo2zjs_6+b1_amd64.deb","size":16684},
+    "b1614ed7a7f8a5df78192019ef5b424e557fb9dc4e8b35646e31daa972224570": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_2_all.deb","size":5268},
     "b18aece8524268f52444579cb52b7e302756c984440689f44ebddc84d6a7a2cb": {"location":"pool/contrib/e/exult/exult_1.12.1-3_amd64.deb","size":8869380},
     "b2a4c1d493976e9e7c8654511f1d78a800b806950ae25c073207247c3917fd8d": {"location":"pool/contrib/t/taradino/taradino_20251222-2_amd64.deb","size":452216},
     "b35743447d7f00793fd05e4cbef57fc0aaf2930e0494bd0921d9938a2e849a00": {"location":"pool/contrib/z/zfs-linux/libnvpair3linux_2.4.4-1_amd64.deb","size":58016},
@@ -226,7 +227,6 @@
     "c1a17e23610186a343a2e15d15b60cee0fee85a32533e3270c1763c6a421ce97": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate-data_0.9.4+dfsg-1_all.deb","size":98248},
     "c1b2a439c6ae4300447f258d08166264e427118cfe4aee2dedc220779e3322bb": {"location":"pool/contrib/s/speech-dispatcher-contrib/speech-dispatcher-voxin_0.12.1-3_amd64.deb","size":35884},
     "c1da785822162d3a7be4954d7c6e05926253ab3b3d39d27e0001fc616297cf9b": {"location":"pool/contrib/f/festvox-mbrola/festvox-us2_1.95-5_all.deb","size":11808},
-    "c3c9bfaf0765843c54d60c33b0aa327bad01ef2b3b9b96faf33e1f5e720f4ce4": {"location":"pool/contrib/f/fheroes2/fheroes2_1.1.17+dfsg-1_amd64.deb","size":3838524},
     "c4d5053511f99a8cb902e9d66378662d6ad390048bd5dbe8148483d00c1a2552": {"location":"pool/contrib/k/kinect-audio-setup/kinect-audio-setup_0.5-3_amd64.deb","size":15532},
     "c641eda1af89734e0d36222c8cb4ccd2cf025551f0675fb76e316e5fbf4cb8c9": {"location":"pool/contrib/g/geoipupdate/geoipupdate_7.1.1-1_amd64.deb","size":2213444},
     "c6bc1224326593a4359534a81096febe0a1ebfac9330937ca90517d9bb123ffa": {"location":"pool/contrib/t/thunar-dropbox-plugin/thunar-dropbox-plugin_0.3.2-1_amd64.deb","size":9396},
@@ -276,6 +276,7 @@
     "f0aaa3e6c84e296e77b0af8cd8d69b87b4d231479f4811aff2c670a45dfdbcb0": {"location":"pool/contrib/i/indi-playerone/indi-playerone_0.9+20230105184731-4_amd64.deb","size":32324},
     "f3938faaaf7ff1b59fa8eed72571534a6d15fcd0c722853829c3ec04801c0fce": {"location":"pool/contrib/o/openmohaa/openmohaa_0.82.1+dfsg-4_amd64.deb","size":839260},
     "f3ccc488ea42aa90bc5623a5211a639e1326d29f919ac7c7748ad9cb3f29ba78": {"location":"pool/contrib/o/openvr/libopenvr-dev_2.12.1~ds1-1_amd64.deb","size":92688},
+    "f3f2aebedbdd987409a5a68c66c21f630af39860e68dac4190718a9b8a10e8f8": {"location":"pool/contrib/n/nbdkit/nbdkit-plugin-vddk_1.48.1-1+b1_amd64.deb","size":40208},
     "f45125ed36e15727ceba026d087294b4ffe9038e02cea3871ff2edb93bb75480": {"location":"pool/contrib/s/spectemu/spectemu-common_0.94a-23_amd64.deb","size":54460},
     "f4667eb6d43512f9a86bdbaea73731d79460584a581f4d1b7b69c97f45168fd2": {"location":"pool/contrib/g/gemrb/gemrb-baldurs-gate-2-data_0.9.4+dfsg-1_all.deb","size":64208},
     "f747ea0e2db86d3cea8b4ba821eaaf779302f34f619a2f9e72d4005bfca9ecf3": {"location":"pool/contrib/o/openrct2/openrct2-data_0.5.7+ds-1_all.deb","size":3462764},
@@ -286,7 +287,6 @@
     "fa1bdd6f54ca2ca917a4e99b2f17f6cf7b562aea24382921a875afa55b325b39": {"location":"pool/contrib/c/cytadela/cytadela-data_1.1.0-5_all.deb","size":34719284},
     "fba3da6959366d88ed0f87b03d2540d120c0bf55bbf42649c1ca9367298fcf5e": {"location":"pool/contrib/p/play.it/play.it_2.36.0-1_all.deb","size":130508},
     "fc77d7f5272df6a7b4e5a77453f99f058c09882c5bb2c43063f2c3aff81c7753": {"location":"pool/contrib/u/uqm-russian/uqm-russian_1.0.2-9_all.deb","size":725528},
-    "fca007540288cc341fedeff34af20f6ce0610c706648afd50d8e6f5128f4665e": {"location":"pool/contrib/s/stremio-server-installer/stremio-server-installer_1_all.deb","size":3152},
     "fcd3a3188b9c9523fec37c86a959ef1d12a15384b4f9effbe78a2d23602016a8": {"location":"pool/contrib/g/gemrb/gemrb-icewind-dale-data_0.9.4+dfsg-1_all.deb","size":116256},
     "fcdd52937a4693cc30442aec93ebeaacc12f52b57bac81ee1d339feb4143ff03": {"location":"pool/contrib/a/alsa-tools/alsa-firmware-loaders_1.2.15-3_amd64.deb","size":24872},
     "fea93a0d5d315ac994916a0b723066d2e7e8353adb87edc29b78de56fe99b1f0": {"location":"pool/contrib/d/diaspora-installer/diaspora-installer-mysql_0.9.0.0+debian3_all.deb","size":4732},
