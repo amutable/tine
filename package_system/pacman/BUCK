@@ -106,12 +106,14 @@ python.test(
 python.test(
     name = "test",
     box = "//tools:dev.box",
-    deps = ["//:specs", "//:util", "//package:snapshotter"],
+    deps = ["//:specs", "//:util", "//package:installer", "//package:snapshotter"],
     srcs = [
         "alpm.py",
         "alpm_test.py",
         "gnupg.py",
         "gnupg_test.py",
+        "install.py",
+        "install_test.py",
         "keyring.py",
         "verify.py",
         "verify_test.py",
