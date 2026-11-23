@@ -42,12 +42,10 @@ class TestSplitName(unittest.TestCase):
     def test_split_names_by_type_and_uuid(self) -> None:
         # systemd-sysupdate reads the UUID back out of the name as @u, so the artifact repart
         # writes is already named the way it is published.
-        self.assertIn(
-            "SplitName=%t.%U", ddi.Definition.parse(DEFINITION).render(split=True, exclude=[]).splitlines()
-        )
+        self.assertIn("SplitName=%t.%U", ddi.Definition.parse(DEFINITION).render(split=True).splitlines())
 
     def test_no_split_name_without_split(self) -> None:
-        rendered = ddi.Definition.parse(DEFINITION).render(split=False, exclude=[])
+        rendered = ddi.Definition.parse(DEFINITION).render(split=False)
         self.assertNotIn("SplitName", rendered)
 
 
@@ -142,16 +140,6 @@ class TestWriteRootHash(unittest.TestCase):
             self._write([{"roothash": HASH}, {"roothash": HASH.replace("d", "0")}])
 
 
-class TestExcludeFiles(unittest.TestCase):
-    def test_leaves_out_the_contents_of_excluded_directories(self) -> None:
-        # The ESP of a bootable disk copies /boot in another repart run. The root partition must
-        # leave out the contents of /boot and keep the directory, which a trailing slash tells
-        # repart.
-        rendered = ddi.Definition.parse(DEFINITION).render(split=False, exclude=["/boot", "efi"])
-        self.assertIn("ExcludeFiles=/boot/", rendered.splitlines())
-        self.assertIn("ExcludeFiles=/efi/", rendered.splitlines())
-
-
 class TestListing(unittest.TestCase):
     OBJECTS: list[uapi16.Object] = [
         {"mediaType": uapi16.MEDIA_TYPE, "type": "dir", "mode": 0o755},
@@ -164,10 +152,15 @@ class TestListing(unittest.TestCase):
     ]
 
     def test_lists_the_roots_without_excluded_contents(self) -> None:
-        # A partition that copies / and excludes /boot lists the image without the contents of
-        # /boot. Its root object contains only the media type, because the partition doesn't
-        # contain the image root. usr/a loses its token, because its other name is excluded.
-        listed = ddi._listing(self.OBJECTS, ("/",), ["/boot"])
+        # The ESP of a bootable disk copies /boot in another repart run, so the root partition
+        # leaves out the contents of /boot and keeps the directory. A partition that copies / then
+        # lists the image without the contents of /boot. Its root object contains only the media
+        # type, because the partition doesn't contain the image root. usr/a loses its token,
+        # because its other name is excluded.
+        snapshot = uapi16.Snapshot([])
+        snapshot.objects = list(self.OBJECTS)
+        ddi._exclude(snapshot, ["/boot"])
+        listed = ddi._listing(snapshot.objects, ("/",))
         self.assertEqual(listed[0], {"mediaType": uapi16.MEDIA_TYPE})
         self.assertEqual([obj["name"] for obj in listed[1:]], ["boot", "usr", "usr/a", "usr/b", "usr/c"])
         self.assertNotIn("inodeToken", listed[3])
@@ -176,18 +169,18 @@ class TestListing(unittest.TestCase):
     def test_lists_only_the_partition_sources(self) -> None:
         # OBJECTS contains /boot and /usr. The listing of a partition that copies /usr must contain /usr
         # and its contents and nothing of /boot.
-        listed = ddi._listing(self.OBJECTS, ("/usr",), [])
+        listed = ddi._listing(self.OBJECTS, ("/usr",))
         self.assertEqual([obj["name"] for obj in listed[1:]], ["usr", "usr/a", "usr/b", "usr/c"])
 
     def test_a_source_the_image_does_not_have_lists_nothing(self) -> None:
         # The ESP definition names both /boot and /efi for images that have one or the other.
         # A source the image doesn't have adds nothing to the listing.
-        listed = ddi._listing(self.OBJECTS, ("/boot", "/efi"), [])
+        listed = ddi._listing(self.OBJECTS, ("/boot", "/efi"))
         self.assertEqual([obj["name"] for obj in listed[1:]], ["boot", "boot/uki.efi"])
 
     def test_a_source_naming_a_file_lists_that_file_alone(self) -> None:
         # A partition can copy a single file. Its listing must contain that file and nothing else.
-        listed = ddi._listing(self.OBJECTS, ("/usr/a",), [])
+        listed = ddi._listing(self.OBJECTS, ("/usr/a",))
         self.assertEqual([obj["name"] for obj in listed[1:]], ["usr/a"])
 
 
