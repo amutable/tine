@@ -3,12 +3,11 @@
 
 """Deterministic tar archives.
 
-Entries are written in sorted order with ownership normalized to uid/gid 0 and mtimes clamped to
-the build's epoch, so the same tree packs to the same bytes on any machine. pack_manifest() writes
-a snapshot in manifest order and keeps its mtimes, which capture already clamped.
+Entries are written in manifest order with ownership normalized to uid/gid 0, so the same tree packs to
+the same bytes on any machine. pack_manifest() keeps the modification times of the objects, which the
+listing of the tree or the capture of the snapshot clamped to the build's epoch.
 """
 
-import os
 import tarfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -16,45 +15,10 @@ from pathlib import Path
 import uapi16
 
 
-def _xattrs(path: Path) -> dict[str, str]:
-    """Encode Linux xattrs using the convention understood by GNU tar and star."""
-    headers = {}
-    for name in sorted(os.listxattr(path, follow_symlinks=False)):
-        if name.startswith(("user.overlay.", "trusted.overlay.")):
-            continue
-        value = os.getxattr(path, name, follow_symlinks=False)
-        headers["SCHILY.xattr." + name] = value.decode("utf-8", "surrogateescape")
-    return headers
-
-
-def _reproducible(path: Path, epoch: int) -> Callable[[tarfile.TarInfo], tarfile.TarInfo]:
-    """Return a tar filter that normalizes ownership, mtimes, and extended attributes."""
-
-    def reset(info: tarfile.TarInfo) -> tarfile.TarInfo:
-        info.uid = info.gid = 0
-        info.uname = info.gname = ""
-        info.mtime = min(int(info.mtime), epoch)
-        info.pax_headers = dict(info.pax_headers) | _xattrs(path)
-        return info
-
-    return reset
-
-
-def pack_tree(tree: Path, out: Path, epoch: int) -> int:
-    """Pack a whole tree into `out`."""
-    tree = Path(tree)
-    count = 0
-    # Explicit sorted entries keep archive order stable.
-    with tarfile.open(out, "w", format=tarfile.PAX_FORMAT) as archive:
-        for path in sorted(tree.rglob("*")):
-            archive.add(
-                path,
-                arcname="./" + str(path.relative_to(tree)),
-                recursive=False,
-                filter=_reproducible(path, epoch),
-            )
-            count += 1
-    return count
+def pack_tree(tree: Path, out: Path, epoch: int) -> None:
+    """Pack a whole tree into `out`, with modification times clamped to `epoch`."""
+    objects = uapi16.tree_objects(tree, list(uapi16.entries(tree)), epoch=epoch)[1:]
+    pack_manifest(objects, lambda obj: tree / obj["name"], out)
 
 
 def pack_manifest(

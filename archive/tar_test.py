@@ -33,9 +33,9 @@ class TestPackTree(unittest.TestCase):
             root = Path(scratch)
             source = tree(root)
             first, second = root / "first.tar", root / "second.tar"
-            self.assertEqual(tar.pack_tree(source, first, EPOCH), 3)
+            tar.pack_tree(source, first, EPOCH)
             # A second pass of the same tree, as a rebuild would do it.
-            self.assertEqual(tar.pack_tree(source, second, EPOCH), 3)
+            tar.pack_tree(source, second, EPOCH)
             self.assertEqual(first.read_bytes(), second.read_bytes())
 
     def test_normalizes_ownership_and_clamps_mtimes(self) -> None:

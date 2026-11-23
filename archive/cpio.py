@@ -10,7 +10,6 @@ different terminal format.
 import mmap
 import os
 import stat
-from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path, PurePath, PurePosixPath
 from typing import NamedTuple, Self
@@ -350,55 +349,26 @@ class Writer:
         self._fd = -1
 
 
-def _add(w: Writer, tree: Path, path: Path, link: tuple[int, int] | None = None) -> bool:
-    """Add one path under `tree`; false for a type an initramfs has no use for."""
-    st = path.lstat()
-    name = str(path.relative_to(tree))
-    mode = stat.S_IMODE(st.st_mode)
-    mtime = st.st_mtime_ns // 10**9
-    if stat.S_ISDIR(st.st_mode):
-        w.add_dir(name, mode=mode, mtime=mtime)
-    elif stat.S_ISLNK(st.st_mode):
-        w.add_symlink(name, os.readlink(path), mtime=mtime)
-    elif stat.S_ISREG(st.st_mode):
-        w.add_file(name, path, mode=mode, mtime=mtime, link=link)
-    else:
-        return False
-    return True
-
-
-def pack_tree(tree: Path, out: Path, epoch: int) -> int:
+def pack_tree(tree: Path, out: Path, epoch: int) -> None:
     """Pack a whole tree into `out` without block alignment, which the kernel's early cpio reader needs."""
-    tree = Path(tree)
-    return _pack_paths(tree, out, epoch, sorted(tree.rglob("*")), block_align=False)
+    _pack_entries(tree, out, epoch, list(uapi16.entries(tree)), block_align=False)
 
 
-def pack_paths(tree: Path, out: Path, epoch: int, paths: Iterable[str | PurePath]) -> int:
+def pack_paths(tree: Path, out: Path, epoch: int, paths: Iterable[str | PurePath]) -> None:
     """Pack exactly the given tree-relative paths into `out`.
 
     Sorting is what puts a directory before its contents, which the kernel's unpacker needs.
     """
-    tree = Path(tree)
-    return _pack_paths(
-        tree, out, epoch, [tree / rel for rel in sorted({PurePosixPath(path) for path in paths})]
-    )
+    names = sorted({PurePosixPath(path) for path in paths})
+    found = [uapi16.Entry(str(name), tree / name, (tree / name).lstat()) for name in names]
+    _pack_entries(tree, out, epoch, found)
 
 
-def _pack_paths(
-    tree: Path, out: Path, epoch: int, paths: Sequence[Path], *, block_align: bool = True
-) -> int:
-    inodes = {path: path.lstat() for path in paths}
-    counts = Counter((st.st_dev, st.st_ino) for st in inodes.values() if stat.S_ISREG(st.st_mode))
-    tokens: dict[tuple[int, int], int] = {}
-    count = 0
-    with Writer(out, epoch, block_align=block_align) as w:
-        for path, st in inodes.items():
-            inode = st.st_dev, st.st_ino
-            link = None
-            if stat.S_ISREG(st.st_mode) and counts[inode] > 1:
-                link = (tokens.setdefault(inode, len(tokens) + 1), counts[inode])
-            count += _add(w, tree, path, link)
-    return count
+def _pack_entries(
+    tree: Path, out: Path, epoch: int, found: Sequence[uapi16.Entry], *, block_align: bool = True
+) -> None:
+    objects = uapi16.tree_objects(tree, found, epoch=epoch)[1:]
+    pack_manifest(objects, lambda obj: tree / obj["name"], out, epoch, block_align=block_align)
 
 
 def pack_manifest(
@@ -406,10 +376,12 @@ def pack_manifest(
     content: Callable[[uapi16.Object], Path],
     out: Path,
     epoch: int,
+    *,
+    block_align: bool = True,
 ) -> None:
     groups = uapi16.hardlink_groups(objects)
     kinds = {"fifo": stat.S_IFIFO, "chr": stat.S_IFCHR, "blk": stat.S_IFBLK, "sock": stat.S_IFSOCK}
-    with Writer(out, epoch) as w:
+    with Writer(out, epoch, block_align=block_align) as w:
         for obj in objects:
             kind = obj["type"]
             name, mtime = obj.get("name", "."), obj["mTimeNSec"] // 10**9
