@@ -10,7 +10,8 @@ serves both, and nothing downstream of the keys knows which it got, since every 
 certificate whether it is held in the graph or by a token.
 
 The signed demo-ext system extension shows verity signing for a sysext DDI, with the image
-enforcing the signature through its sysext.conf image policy.
+enforcing the signature through its sysext.conf image policy. demo-ext signs with a key derived from
+its name, as an extension from another project would, so it uses the derived key with or without tokens.
 
 Every image here is built for each release in `catalog//:releases.bzl`, so a build names one of the
 per-distribution aliases, such as `:image.fedora`.
@@ -47,8 +48,13 @@ image.generate_signing_key(name = "signing")
 
 image.generate_signing_key(name = "pcr-signing")
 
-# The two certificates this image reads back must say which key they belong to, and neither may fall
-# back to ukify's own name for a Secure Boot key.
+# demo-ext stands in for an extension that another project builds. Every project that declares a derived
+# key with this name gets the same pair, so the image trusts the extension without a copy of the other
+# project's certificate.
+image.derived_signing_key(name = "extension-signing")
+
+# Each certificate must say which key it belongs to. A generated certificate must not fall back to
+# ukify's own name for a Secure Boot key.
 [
     box.sh_test(
         name = "generated-key-name-test." + name,
@@ -63,7 +69,7 @@ if ! echo "$subject" | grep -qF "CN=$2"; then
 fi
 """,
     )
-    for name in ["signing", "pcr-signing"]
+    for name in ["signing", "pcr-signing", "extension-signing"]
 ]
 
 _SIGNING = ":signing.token" if SIGN_WITH_TOKEN else ":signing"
@@ -92,7 +98,7 @@ image.disk(
         image.ops.copy(_PCR_SIGNING + "[cert]", "/usr/share/tine-example/expected-pcr.crt"),
         # demo-ext's signature verifies against this certificate; the sysext.conf policy next to
         # it makes that verification a requirement rather than opportunistic.
-        image.ops.copy(_SIGNING + "[cert]", "/usr/lib/verity.d/demo-ext.crt"),
+        image.ops.copy(":extension-signing[cert]", "/usr/lib/verity.d/demo-ext.crt"),
         image.ops.copy("sysext.conf", "/usr/lib/systemd/sysext.conf"),
         # Plain data for the boot smoke's negative proof: a DDI the policy must refuse.
         image.ops.copy(":demo-ext-unsigned", "/usr/share/tine-example/demo-ext-unsigned.raw"),
@@ -143,13 +149,13 @@ for name in ("PK", "KEK", "db"):
 )
 
 # System-extension DDI extending :image, signed so the strict policy in sysext.conf accepts the
-# merge. The image's own key, whose certificate it carries in /usr/lib/verity.d.
+# merge. The image carries the certificate of the derived key in /usr/lib/verity.d.
 image.sysext(
     name = "demo-ext",
     parent = ":image",
     packages = ["zsh"],
     install_docs = False,
-    verity_key = _SIGNING,
+    verity_key = ":extension-signing",
 )
 
 # The sysupdate definitions of the release, which its test compares with what the targets inline.

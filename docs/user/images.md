@@ -535,6 +535,12 @@ hash. A host validates the signature against the certificates in its `/usr/lib/v
 only where its image policy says so (see "Example targets" below). The DDI contains no os-release and no
 package database.
 
+When the host and the extension come from different projects, sign the extension with
+`image.derived_signing_key()`. It derives an ECDSA P-256 pair from the target name, so every project that
+declares a key with the same name gets the same pair, and the host installs the certificate from its own
+declaration. Anyone who knows the name can compute the private key: use it for test images only. UEFI
+firmware only enrolls RSA certificates, so the key can't sign for Secure Boot.
+
 The rule writes one extension-release file per class:
 `/usr/lib/extension-release.d/extension-release.<name>` for a sysext and
 `/etc/extension-release.d/extension-release.<name>` for a confext. Each file contains:
@@ -1301,7 +1307,7 @@ A host that merges a confext or attaches a portable image needs two things, whic
   `systemd-container`.
 
 The signed variant lives in `//examples/image-secureboot`: its `demo-ext` signs the verity root hash with a
-generated key, the image ships that key's certificate in `/usr/lib/verity.d/` and a
+derived key, the image ships that key's certificate in `/usr/lib/verity.d/` and a
 `/usr/lib/systemd/sysext.conf` whose `ImagePolicy` grants `signed` only, and its `vm-smoke` proves both
 directions — the signed extension merges, and the unsigned `demo-ext-unsigned` DDI is refused. Without such
 a policy the signature is decorative: systemd-sysext's default policy merges unsigned images, and falls back

@@ -53,6 +53,7 @@ load(":publish.bzl", "PublishedFile", "PublishedInfo", "image_artifacts")
 load(
     ":sign.bzl",
     "SigningKeyInfo",
+    "derived_signing_key",
     "generate_signing_key",
     "pem_signing_key",
     "pkcs11_signing_key",
@@ -73,6 +74,7 @@ image = struct(
     bootable = bootable,
     partition = partition,
     vm = image_vm,
+    derived_signing_key = derived_signing_key,
     generate_signing_key = generate_signing_key,
     install = image_install,
     substitute = substitute,

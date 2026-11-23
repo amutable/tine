@@ -193,6 +193,65 @@ generate_signing_key = rule(
     """,
 )
 
+def _derived_signing_key_impl(ctx: AnalysisContext) -> list[Provider]:
+    common_name = _GENERATED_CN_PREFIX + ctx.label.name
+    # x509 limits a common name to 64 characters. Without the check, a long target name fails in the
+    # action with a Python traceback.
+    if len(common_name) > 64:
+        fail(
+            "derived_signing_key: the name {!r} is too long, the certificate's common name {!r} must have at most 64 characters".format(
+                ctx.label.name, common_name
+            )
+        )
+    key = ctx.actions.declare_output("signing.key")
+    certificate = ctx.actions.declare_output("signing.crt")
+    ctx.actions.run(
+        cmd_args(
+            box.run(box = ctx.attrs._box[box.Info], exe = ctx.attrs._derive),
+            common_name,
+            key.as_output(),
+            certificate.as_output(),
+        ),
+        category = "signing_key",
+        # Anyone who knows the name can compute the pair, so a shared cache may hold it.
+        allow_cache_upload = True,
+    )
+    return [
+        DefaultInfo(
+            sub_targets = {
+                "cert": [DefaultInfo(default_output = certificate)],
+                "key": [DefaultInfo(default_output = key)],
+            }
+        ),
+        SigningKeyInfo(certificate = certificate, private_key = key),
+    ]
+
+derived_signing_key = rule(
+    impl = _derived_signing_key_impl,
+    attrs = {
+        "_box": attrs.exec_dep(providers = [box.Info], default = "tine//distribution:tools.box"),
+        "_derive": attrs.exec_dep(default = "tine//image:signing-key"),
+    },
+    doc = """Derive a development ECDSA P-256 signing key pair from the target name.
+
+    The pair is a function of the name alone, so every build, workspace and project that uses the
+    same name gets the same pair. Images from different projects can then trust each other's
+    signatures without copying a certificate between them. Anyone who knows the name can compute
+    the private key, so never enroll the certificate on real hardware. `:<name>[cert]` and
+    `:<name>[key]` are the PEM artifacts.
+
+    UEFI firmware only enrolls certificates with RSA keys, so a P-256 key can't sign for Secure
+    Boot. Use `generate_signing_key` for that role. The kernel and systemd accept P-256 for
+    dm-verity signatures.
+
+    The pair is derived in the tools box of the default release. The certificate's signature needs
+    python-cryptography 45 or newer in that box.
+
+    The certificate is named `tine.generated.<name>`, to signify that it is not an official
+    production key.
+    """,
+)
+
 def _pem_signing_key_impl(ctx: AnalysisContext) -> list[Provider]:
     return [
         DefaultInfo(sub_targets = {"cert": [DefaultInfo(default_output = ctx.attrs.certificate)]}),
