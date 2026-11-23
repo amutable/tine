@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Store complete filesystem snapshots independently of artifact filesystem metadata."""
+"""Capture snapshots of roots and restore roots from snapshots."""
 
-import hashlib
 import os
 import stat
 import tempfile
@@ -16,33 +15,6 @@ from util import clone_file, fail, reflink
 
 import uapi16
 from isolation import Bind, Overlay
-
-
-class Snapshot:
-    def __init__(self, stores: Sequence[str | Path]) -> None:
-        self.stores = [Path(store) for store in stores]
-        self.objects: list[uapi16.Object] = (
-            uapi16.read(self.stores[-1] / uapi16.MANIFEST)
-            if self.stores
-            else [
-                {
-                    "mediaType": uapi16.MEDIA_TYPE,
-                    "type": "dir",
-                    "mode": 0o755,
-                    "uid": 0,
-                    "gid": 0,
-                    "mTimeNSec": 0,
-                }
-            ]
-        )
-        self.blobs: dict[str, Path] = {}
-        for store in self.stores:
-            for blob in (store / "blobs").iterdir():
-                self.blobs.setdefault(blob.name, blob)
-
-    def content(self, obj: uapi16.Object) -> Path:
-        return self.blobs[obj["sha256"]]
-
 
 type Identity = tuple[int, int, int, int, int]
 
@@ -80,15 +52,9 @@ class Root:
             yield entry
 
 
-def add_blob(source: Path, destination: Path) -> None:
-    if not destination.exists():
-        clone_file(source, destination)
-        destination.chmod(0o444)
-
-
 def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch: int) -> None:
     """Write the snapshot of `tree` to `out`, with modification times clamped to `epoch`."""
-    parent = Snapshot(parents)
+    parent = uapi16.Snapshot(parents)
     blobs = out / "blobs"
     blobs.mkdir(parents=True, exist_ok=True)
     found = list(tree.entries())
@@ -117,7 +83,7 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
                 digest = obj["sha256"]
                 obj["contents"] = [{"file": f"blobs/{digest}"}]
                 if digest not in parent.blobs:
-                    add_blob(entry.path, blobs / digest)
+                    uapi16.add_blob(entry.path, blobs / digest)
             inodes[entry.inode] = obj
         objects.append(obj)
     for obj in objects:
@@ -127,32 +93,6 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
         if "mode" in obj:
             obj["mode"] &= ~(stat.S_ISUID | stat.S_ISGID)
     uapi16.write_objects(objects, out / uapi16.MANIFEST)
-
-
-def save(snapshot: Snapshot, out: Path) -> None:
-    blobs = out / "blobs"
-    blobs.mkdir(parents=True, exist_ok=True)
-    for obj in snapshot.objects[1:]:
-        if obj["type"] == "reg":
-            add_blob(snapshot.content(obj), blobs / obj["sha256"])
-    uapi16.write_objects(snapshot.objects, out / uapi16.MANIFEST)
-
-
-def check(snapshot: Snapshot) -> None:
-    """Fail when the blob of a file is missing or its contents do not match the file's digest."""
-    for obj in snapshot.objects[1:]:
-        if obj["type"] != "reg":
-            continue
-        blob = snapshot.blobs.get(obj["sha256"])
-        if blob is None:
-            fail(f"storage: the blob of {obj['name']!r} is missing")
-        with blob.open("rb") as stream:
-            if hashlib.file_digest(stream, "sha256").hexdigest() != obj["sha256"]:
-                fail(f"storage: the blob of {obj['name']!r} does not match its digest")
-
-
-def by_name(objects: Sequence[uapi16.Object]) -> dict[str, uapi16.Object]:
-    return {obj["name"]: obj for obj in objects if "name" in obj}
 
 
 def metadata(path: Path, obj: uapi16.Object) -> None:
@@ -166,7 +106,7 @@ def metadata(path: Path, obj: uapi16.Object) -> None:
 
 
 def restore(
-    snapshot: Snapshot,
+    snapshot: uapi16.Snapshot,
     tree: Path,
     *,
     metacopy: bool = False,
@@ -256,13 +196,13 @@ def _identities(objects: Sequence[uapi16.Object]) -> dict[str, tuple[uapi16.Obje
     return identities
 
 
-def _with_digests(root: Root, snapshot: Snapshot) -> Root:
+def _with_digests(root: Root, snapshot: uapi16.Snapshot) -> Root:
     names = {obj["name"]: obj["sha256"] for obj in snapshot.objects[1:] if obj["type"] == "reg"}
     digests = {identity(entry.st): names[entry.name] for entry in root.entries() if entry.name in names}
     return replace(root, digests=digests)
 
 
-def _reflinks(snapshot: Snapshot, scratch: Path) -> bool:
+def _reflinks(snapshot: uapi16.Snapshot, scratch: Path) -> bool:
     # clone_file() reflinks through copy_file_range() where the filesystem supports reflinks. On other
     # filesystems it copies every byte, and copying every blob is slower than an overlay mount.
     blob = next(iter(snapshot.blobs.values()), None)
@@ -274,12 +214,12 @@ def _reflinks(snapshot: Snapshot, scratch: Path) -> bool:
     return reflink(blob, scratch / "reflink")
 
 
-def delta(snapshot: Snapshot, base: int) -> list[str]:
+def delta(snapshot: uapi16.Snapshot, base: int) -> list[str]:
     """Keep the objects that differ from the first `base` stores, and their parent directories.
 
     Return the names that the first `base` stores contain and the snapshot does not.
     """
-    inherited = _identities(Snapshot(snapshot.stores[:base]).objects[1:])
+    inherited = _identities(uapi16.Snapshot(snapshot.stores[:base]).objects[1:])
     current = _identities(snapshot.objects[1:])
     changed = {name for name, obj in current.items() if inherited.get(name) != obj}
     needed = {str(parent) for name in changed for parent in Path(name).parents}
@@ -290,7 +230,7 @@ def delta(snapshot: Snapshot, base: int) -> list[str]:
 
 
 @contextmanager
-def root(snapshot: Snapshot, *, readonly: bool = False) -> Generator[Root]:
+def root(snapshot: uapi16.Snapshot, *, readonly: bool = False) -> Generator[Root]:
     with tempfile.TemporaryDirectory(prefix="snapshot-root.", dir="/var/tmp") as temporary:
         scratch = Path(temporary)
         tree = scratch / "root"

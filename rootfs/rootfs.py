@@ -19,7 +19,6 @@ from pathlib import Path
 
 from util import clone_file, fail
 
-import storage
 import uapi16
 from isolation import (
     AT_FDCWD,
@@ -58,7 +57,7 @@ def capture(tree: Path) -> None:
         p.rename(p.parent / escaped)
 
 
-def write_buck_tree(snapshot: storage.Snapshot, out: Path) -> None:
+def write_buck_tree(snapshot: uapi16.Snapshot, out: Path) -> None:
     """Write the snapshot as a directory that contains only what Buck stores."""
     out.mkdir(parents=True, exist_ok=True)
     out.chmod(0o755)

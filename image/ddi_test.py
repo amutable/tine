@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import cast
 
 import ddi
-import storage
 import uapi16
 
 UUID = "fb1bb90c-9de1-b90c-8b89-e04b87c721bd"
@@ -202,7 +201,7 @@ class TestAddDirectories(unittest.TestCase):
             {"name": "etc", "type": "dir", "mode": 0o755, "mTimeNSec": 1},
             {"name": "opt", "type": "dir", "mode": 0o700, "mTimeNSec": 2},
         ]
-        snapshot = storage.Snapshot([])
+        snapshot = uapi16.Snapshot([])
         snapshot.objects = [full[0], full[1]]
         ddi._add_directories(snapshot, full, ["opt", "usr", "etc"])
         self.assertEqual([obj.get("name") for obj in snapshot.objects], [None, "etc", "opt", "usr"])

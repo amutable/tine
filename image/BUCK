@@ -35,7 +35,7 @@ python.binary(
         "//box:isolation",
         "//package:installer",
         "//rootfs:rootfs",
-        "//uapi16:storage",
+        "//rootfs:storage",
     ],
     visibility = ["PUBLIC"],
 )
@@ -50,7 +50,7 @@ python.binary(
         "//archive:cpio",
         "//archive:tar",
         "//box:isolation",
-        "//uapi16:storage",
+        "//rootfs:storage",
         "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
@@ -63,7 +63,7 @@ python.binary(
         ":finalize",
         "//:specs",
         "//:util",
-        "//uapi16:storage",
+        "//rootfs:storage",
         "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
@@ -161,7 +161,7 @@ python.test(
         "//kmod:kmod",
         "//package:installer",
         "//rootfs:rootfs",
-        "//uapi16:storage",
+        "//rootfs:storage",
         "//uapi16:uapi16",
     ],
 )
@@ -180,9 +180,7 @@ python.binary(
     name = "manifest",
     main = "manifest.py",
     deps = [
-        ":finalize",
         "//:specs",
-        "//uapi16:storage",
         "//uapi16:uapi16",
     ],
     visibility = ["PUBLIC"],
@@ -191,7 +189,7 @@ python.binary(
 python.library(
     name = "finalize",
     srcs = ["finalize.py"],
-    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage"],
+    deps = ["//:util", "//rootfs:rootfs", "//rootfs:storage", "//uapi16:uapi16"],
     visibility = ["PUBLIC"],
 )
 

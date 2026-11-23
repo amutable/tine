@@ -12,6 +12,7 @@ from unittest import mock
 
 import installer
 import storage
+import uapi16
 
 
 class TestPathRules(unittest.TestCase):
@@ -169,7 +170,7 @@ class TestRun(unittest.TestCase):
                 installer.run("install", install, [])
             install.assert_not_called()
             self.assertEqual(
-                storage.Snapshot([lower, root / "snapshot"]).objects, storage.Snapshot([lower]).objects
+                uapi16.Snapshot([lower, root / "snapshot"]).objects, uapi16.Snapshot([lower]).objects
             )
             self.assertEqual(list((root / "snapshot/blobs").iterdir()), [])
 

@@ -24,6 +24,7 @@ from util import fail
 
 import rootfs
 import storage
+import uapi16
 
 
 class ImageSpec(TypedDict):
@@ -36,7 +37,7 @@ class ImageSpec(TypedDict):
 def image(spec: ImageSpec) -> Generator[Path]:
     """Reconstruct the root of the image the spec names and mount it read-only at /buildroot."""
     with (
-        storage.root(storage.Snapshot(spec["lower"]), readonly=True) as restored,
+        storage.root(uapi16.Snapshot(spec["lower"]), readonly=True) as restored,
         rootfs.rootfs("/buildroot", bind=restored.path) as tree,
     ):
         yield tree

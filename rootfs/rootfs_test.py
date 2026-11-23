@@ -15,6 +15,7 @@ from unittest import mock
 
 import rootfs
 import storage
+import uapi16
 from isolation import Bind
 
 
@@ -441,7 +442,7 @@ class TestWriteBuckTree(unittest.TestCase):
         (self.tree / "link").symlink_to("a")
         storage.capture(storage.Root(self.tree), self.store, epoch=0)
         out = self.scratch / "out"
-        rootfs.write_buck_tree(storage.Snapshot([self.store]), out)
+        rootfs.write_buck_tree(uapi16.Snapshot([self.store]), out)
         self.assertEqual(stat.S_IMODE((out / "a").stat().st_mode), 0o644)
         self.assertEqual(stat.S_IMODE((out / "b").stat().st_mode), 0o755)
         self.assertEqual(stat.S_IMODE((out / "private").stat().st_mode), 0o755)
@@ -456,7 +457,7 @@ class TestWriteBuckTree(unittest.TestCase):
         os.mkfifo(self.tree / "fifo")
         storage.capture(storage.Root(self.tree), self.store, epoch=0)
         with self.assertRaises(SystemExit):
-            rootfs.write_buck_tree(storage.Snapshot([self.store]), self.scratch / "out")
+            rootfs.write_buck_tree(uapi16.Snapshot([self.store]), self.scratch / "out")
 
 
 if __name__ == "__main__":

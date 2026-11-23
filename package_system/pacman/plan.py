@@ -29,6 +29,7 @@ from util import fail
 import alpm
 import storage
 import transaction
+import uapi16
 from href import relative_href
 
 
@@ -110,7 +111,7 @@ def main(argv: list[str] | None = None) -> None:
     with ExitStack() as stack:
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="plan.")))
         if spec["lower"]:
-            root = stack.enter_context(storage.root(storage.Snapshot(spec["lower"]))).path
+            root = stack.enter_context(storage.root(uapi16.Snapshot(spec["lower"]))).path
         else:
             root = scratch / "root"
             root.mkdir()

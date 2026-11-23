@@ -31,7 +31,7 @@ class Spec(finalize.ImageSpec):
     manifest: str | None
 
 
-def _pack(snapshot: storage.Snapshot, out: Path, fmt: str, epoch: int) -> None:
+def _pack(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int) -> None:
     if fmt == "tar":
         tar.pack_manifest(snapshot.objects, snapshot.content, out)
     elif fmt == "cpio":
@@ -40,11 +40,11 @@ def _pack(snapshot: storage.Snapshot, out: Path, fmt: str, epoch: int) -> None:
         util.fail(f"unknown archive format {fmt!r}")
 
 
-def _archive(snapshot: storage.Snapshot, out: Path, fmt: str, epoch: int, compression: str) -> None:
+def _archive(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int, compression: str) -> None:
     if fmt == "snapshot":
         if compression != "none":
             util.fail("archive: the snapshot format cannot be compressed")
-        storage.save(snapshot, out)
+        uapi16.save(snapshot, out)
     elif compression == "none":
         _pack(snapshot, out, fmt, epoch)
     elif compression != "zstd":
@@ -68,10 +68,10 @@ def export(argv: list[str]) -> None:
     store = args.store.absolute()
     # A user can export a store that Buck did not write, such as a copy.
     try:
-        snapshot = storage.Snapshot([store])
+        snapshot = uapi16.Snapshot([store])
     except (OSError, ValueError) as error:
         util.fail(f"image-export: cannot read the store {store}: {error}")
-    storage.check(snapshot)
+    uapi16.check_blobs(snapshot)
     with Close(open_directory(AT_FDCWD, str(args.destination.parent))) as parent:
         parent_attributes = os.fstat(parent)
         # A user namespace shows an owner that it doesn't map as the overflow uid. The caller's own uid in
@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "archive", arguments)
     epoch = int(os.environ["SOURCE_DATE_EPOCH"])
     out = Path(spec["out"])
-    snapshot = storage.Snapshot(spec["lower"])
+    snapshot = uapi16.Snapshot(spec["lower"])
     if spec["format"] == "tar":
         # tar has no socket type, so neither the archive nor its listing contains sockets.
         snapshot.objects = [obj for obj in snapshot.objects if obj["type"] != "sock"]

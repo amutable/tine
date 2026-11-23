@@ -18,6 +18,7 @@ import util
 
 import rootfs
 import storage
+import uapi16
 
 # The source tree is mounted at topdir/CHECKOUT, and the persistent build directory at topdir/BUILD.
 CHECKOUT = "CHECKOUT"
@@ -78,7 +79,7 @@ def run(spec: Spec, build: Callable[[Path, Path, Path], int]) -> int:
 def buildroot(lower: list[str], topdir: Path) -> Generator[Path]:
     """Chroot into the buildroot that the snapshot stores `lower` restore, with topdir at `CHROOT_TOPDIR`."""
     with (
-        storage.root(storage.Snapshot(lower)) as restored,
+        storage.root(uapi16.Snapshot(lower)) as restored,
         rootfs.rootfs(
             "/buildroot", bind=restored.path, binds=[(topdir, CHROOT_TOPDIR)], apivfs=True, chroot=True
         ) as root,

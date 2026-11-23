@@ -25,6 +25,7 @@ from util import fail
 import macros
 import storage
 import transaction
+import uapi16
 
 # A multilib package in a pinned-arch transaction indicates a bad solve.
 MULTILIB_ARCHES = ("i686", "i386", "i586")
@@ -249,7 +250,7 @@ def main(argv: list[str] | None = None) -> None:
     with ExitStack() as stack:
         installroot = None
         if solve_spec["lower"]:
-            installroot = stack.enter_context(storage.root(storage.Snapshot(solve_spec["lower"]))).path
+            installroot = stack.enter_context(storage.root(uapi16.Snapshot(solve_spec["lower"]))).path
         tx = plan(
             repos,
             install,

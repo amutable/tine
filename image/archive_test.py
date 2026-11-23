@@ -58,14 +58,14 @@ class TestArchive(unittest.TestCase):
         # A command creates a hardlink to an inherited independent file. Upper-aware capture
         # must preserve the group in tar and cpio without linking the equal-content file a.
         child = self.scratch / "child"
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             tree = restored.path
             os.link(tree / "b", tree / "new-link")
             storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
         spec = finalize.ImageSpec(lower=[str(self.store), str(child)])
 
         # The archive writers must group paths by the captured inodeToken rather than blob digest.
-        snapshot = storage.Snapshot(spec["lower"])
+        snapshot = uapi16.Snapshot(spec["lower"])
         archive._archive(snapshot, self.scratch / "image.tar", "tar", EPOCH, "none")
         archive._archive(snapshot, self.scratch / "image.cpio", "cpio", EPOCH, "none")
         with tarfile.open(self.scratch / "image.tar") as packed:
@@ -97,7 +97,7 @@ class TestArchive(unittest.TestCase):
         # links, independent equal files, modes, original nanoseconds and user attributes.
         out = self.scratch / "image.tar"
         with mock.patch.object(storage, "root", side_effect=AssertionError("unexpected reconstruction")):
-            archive._archive(storage.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
+            archive._archive(uapi16.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
         with tarfile.open(out) as packed:
             objects = {entry.name: entry for entry in packed.getmembers()}
             self.assertTrue(objects["./linked"].islnk())
@@ -114,7 +114,7 @@ class TestArchive(unittest.TestCase):
         # Newc needs one payload and a shared inode per declared group, including empty files.
         # Equal contents alone must not give unrelated regular files the same inode.
         out = self.scratch / "image.cpio"
-        archive._archive(storage.Snapshot(self.spec["lower"]), out, "cpio", EPOCH, "none")
+        archive._archive(uapi16.Snapshot(self.spec["lower"]), out, "cpio", EPOCH, "none")
         objects = {obj.name: obj for obj in cpio.read(out.read_bytes())}
         self.assertGreater(objects["./TRAILER!!!"].size, 0)
         self.assertEqual(objects["a"].ino, objects["linked"].ino)
@@ -160,7 +160,7 @@ class TestArchive(unittest.TestCase):
         # The snapshot store contains only safe blob names and a manifest. Copying the store before
         # export must not lose modes, times, hardlinks or logical filenames.
         out, copied = self.scratch / "snapshot", self.scratch / "copied"
-        archive._archive(storage.Snapshot(self.spec["lower"]), out, "snapshot", EPOCH, "none")
+        archive._archive(uapi16.Snapshot(self.spec["lower"]), out, "snapshot", EPOCH, "none")
         shutil.copytree(out, copied, copy_function=shutil.copyfile)
         with chdir(self.scratch):
             archive.export(["--store", "copied", "exported"])
@@ -178,7 +178,7 @@ class TestArchive(unittest.TestCase):
         destination = self.scratch / "exported"
         restore = storage.restore
 
-        def failing(snapshot: storage.Snapshot, tree: Path) -> None:
+        def failing(snapshot: uapi16.Snapshot, tree: Path) -> None:
             restore(snapshot, tree)
             raise OSError(errno.ENOSPC, "No space left on device")
 
@@ -233,7 +233,7 @@ class TestArchive(unittest.TestCase):
 
     def test_an_image_without_layers_packs_as_an_empty_root(self) -> None:
         # An image without parent stores has no layers. Its tar and cpio contain only the root.
-        empty = storage.Snapshot([])
+        empty = uapi16.Snapshot([])
         archive._archive(empty, self.scratch / "empty.tar", "tar", EPOCH, "none")
         archive._archive(empty, self.scratch / "empty.cpio", "cpio", EPOCH, "none")
         with tarfile.open(self.scratch / "empty.tar") as packed:
@@ -247,15 +247,15 @@ class TestArchive(unittest.TestCase):
         # Export must fail without following that symlink or changing the unrelated file.
         destination, victim = self.scratch / "exported", self.scratch / "victim"
         victim.write_text("unrelated")
-        read = storage.Snapshot
+        read = uapi16.Snapshot
 
-        def raced(stores: list[Path]) -> storage.Snapshot:
+        def raced(stores: list[Path]) -> uapi16.Snapshot:
             snapshot = read(stores)
             destination.mkdir()
             (destination / "a").symlink_to(victim)
             return snapshot
 
-        with mock.patch.object(storage, "Snapshot", side_effect=raced), self.assertRaises(SystemExit):
+        with mock.patch.object(uapi16, "Snapshot", side_effect=raced), self.assertRaises(SystemExit):
             archive.export(["--store", str(self.store), str(destination)])
         self.assertEqual(victim.read_text(), "unrelated")
 
@@ -268,7 +268,7 @@ class TestArchive(unittest.TestCase):
         (victim / "a").write_text("unrelated")
         restore = storage.restore
 
-        def raced(snapshot: storage.Snapshot, tree: Path) -> None:
+        def raced(snapshot: uapi16.Snapshot, tree: Path) -> None:
             destination.rename(saved)
             destination.symlink_to(victim, target_is_directory=True)
             restore(snapshot, tree)
@@ -386,7 +386,7 @@ class TestArchive(unittest.TestCase):
         uapi16.write_objects(objects, self.store / uapi16.MANIFEST)
         out = self.scratch / "image.tar"
         with mock.patch.object(storage, "root", side_effect=AssertionError("unexpected reconstruction")):
-            archive._archive(storage.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
+            archive._archive(uapi16.Snapshot(self.spec["lower"]), out, "tar", EPOCH, "none")
         with tarfile.open(out) as packed:
             self.assertTrue(packed.getmember("./device").ischr())
 

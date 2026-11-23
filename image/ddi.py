@@ -251,10 +251,10 @@ def _extension_seed(identity: str, name: str, releases: list[bytes]) -> uuid.UUI
     return uuid.uuid5(_EXTENSION_SEED_NAMESPACE, digest.hexdigest())
 
 
-def _add_directories(snapshot: storage.Snapshot, full: list[uapi16.Object], names: list[str]) -> None:
+def _add_directories(snapshot: uapi16.Snapshot, full: list[uapi16.Object], names: list[str]) -> None:
     """Add each top-level directory in `names` that `snapshot` lacks, with its metadata from `full`."""
     present = {obj.get("name") for obj in snapshot.objects}
-    known = storage.by_name(full)
+    known = uapi16.by_name(full)
     added = [
         known.get(name, {"name": name, "type": "dir", "mode": 0o755, "mTimeNSec": full[0]["mTimeNSec"]})
         for name in names
@@ -428,11 +428,11 @@ def main(argv: list[str] | None = None) -> None:
         util.fail("ddi: specify a disk output, split outputs, or both")
 
     extension = spec["extension"]
-    snapshot = storage.Snapshot(spec["lower"])
+    snapshot = uapi16.Snapshot(spec["lower"])
     releases: list[bytes] = []
     if extension:
         full = snapshot.objects
-        objects = storage.by_name(full)
+        objects = uapi16.by_name(full)
         releases = [snapshot.content(objects[path]).read_bytes() for path in extension["releases"]]
         if extension["parent"]:
             storage.delta(snapshot, extension["parent"])
