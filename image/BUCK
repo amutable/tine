@@ -180,7 +180,7 @@ python.binary(
 python.library(
     name = "finalize",
     srcs = ["finalize.py"],
-    deps = ["//:util", "//rootfs:rootfs", "//rootfs:storage", "//uapi16:uapi16"],
+    deps = ["//:util", "//rootfs:rootfs"],
     visibility = ["PUBLIC"],
 )
 

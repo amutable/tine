@@ -8,7 +8,7 @@ load("//python:defs.bzl", "python")
 python.library(
     name = "rootfs",
     srcs = ["rootfs.py"],
-    deps = ["//:util", "//box:isolation", "//uapi16:uapi16"],
+    deps = [":storage", "//:util", "//box:isolation", "//uapi16:uapi16"],
     visibility = ["tine//..."],
 )
 

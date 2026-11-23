@@ -19,6 +19,7 @@ from pathlib import Path
 
 from util import clone_file, fail
 
+import storage
 import uapi16
 from isolation import (
     AT_FDCWD,
@@ -33,6 +34,8 @@ from isolation import (
 from isolation import (
     chroot as _chroot,
 )
+
+BUILDROOT = Path("/buildroot")
 
 _ESC = ".esc."  # `.esc.<escaped>`: a name buck can't store, percent-escaped
 
@@ -237,3 +240,34 @@ def rootfs(
             # Enter last so callbacks resolve paths after the chroot unwinds.
             stack.enter_context(_chroot(target))
         yield Path("/") if chroot else target
+
+
+@contextmanager
+def snapshot_root(
+    lower: Sequence[str],
+    *,
+    out: Path | None = None,
+    readonly: bool = False,
+    apivfs: bool = False,
+    binds: Sequence[tuple[str | Path, str | Path]] | None = None,
+    chroot: bool = False,
+) -> Generator[storage.Root]:
+    """Restore the snapshot stores `lower` and mount the root at `BUILDROOT`.
+
+    With `out`, capture the root into `out` when the body returns, with modification times clamped to
+    `SOURCE_DATE_EPOCH`.
+    """
+    with storage.root(uapi16.Snapshot(lower), readonly=readonly) as restored:
+        # capture() reads the root after the unmount, so a process that still writes into it must fail
+        # the unmount.
+        with rootfs(
+            BUILDROOT,
+            bind=restored.path,
+            apivfs=apivfs,
+            binds=binds,
+            chroot=chroot,
+            strict_unmount=out is not None,
+        ):
+            yield restored
+        if out is not None:
+            storage.capture(restored, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))

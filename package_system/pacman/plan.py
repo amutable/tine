@@ -21,7 +21,6 @@ import shutil
 import sys
 from contextlib import ExitStack
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import specs
 from util import fail
@@ -109,12 +108,7 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     with ExitStack() as stack:
-        scratch = Path(stack.enter_context(TemporaryDirectory(prefix="plan.")))
-        if spec["lower"]:
-            root = stack.enter_context(storage.root(uapi16.Snapshot(spec["lower"]))).path
-        else:
-            root = scratch / "root"
-            root.mkdir()
+        root = stack.enter_context(storage.root(uapi16.Snapshot(spec["lower"]))).path
 
         dbpath = root / alpm.DBPATH
         stage(dbpath, repositories)
