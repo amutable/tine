@@ -50,9 +50,7 @@ class TreeTest(unittest.TestCase):
             for entry in uapi16.entries(tree or self.tree)
             if not roots or any(entry.name == root or entry.name.startswith(root + "/") for root in roots)
         ]
-        tokens = uapi16.hardlink_tokens(found)
-        objects: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE}]
-        objects += [uapi16.file_object(entry, epoch=EPOCH, token=tokens.get(entry.inode)) for entry in found]
+        objects = uapi16.tree_objects(tree or self.tree, found, epoch=EPOCH)
         out = (
             Path(self.enterContext(tempfile.TemporaryDirectory(dir="/var/tmp", prefix="manifest.out.")))
             / "m"
@@ -69,11 +67,15 @@ class TreeTest(unittest.TestCase):
 
 class TestSequence(TreeTest):
     def test_the_first_object_is_the_root_and_names_the_media_type_and_features(self) -> None:
+        # The root object describes the listed directory itself, so it has no name. It also names the
+        # media type and the features of the manifest.
         (self.tree / "a").write_text("a")
+        self.tree.chmod(0o750)
         root = self.manifest()[0]
-        self.assertEqual(
-            root, {"mediaType": "application/vnd.uapi.16.manifest", "features": uapi16.FEATURES}
-        )
+        self.assertNotIn("name", root)
+        self.assertEqual(root["mediaType"], "application/vnd.uapi.16.manifest")
+        self.assertEqual(root["features"], uapi16.FEATURES)
+        self.assertEqual((root["type"], root["mode"]), ("dir", 0o750))
 
     def test_an_empty_tree_has_no_named_objects(self) -> None:
         # An empty filesystem still has its root and trailer, with no named file objects.

@@ -57,35 +57,22 @@ def capture(tree: Root, out: Path, parents: Sequence[str | Path] = (), *, epoch:
     parent = uapi16.Snapshot(parents)
     blobs = out / "blobs"
     blobs.mkdir(parents=True, exist_ok=True)
-    found = list(tree.entries())
-    tokens = uapi16.hardlink_tokens(found)
-    root = uapi16.file_object(uapi16.Entry("", tree.path, tree.path.lstat()), epoch=epoch)
-    root.pop("name")
-    root["mediaType"] = uapi16.MEDIA_TYPE
-    objects = [root]
-    inodes: dict[tuple[int, int], uapi16.Object] = {}
-    for entry in found:
-        if entry.inode in inodes:
-            obj = inodes[entry.inode].copy()
-            obj["name"] = entry.name
-        else:
-            obj = uapi16.file_object(
-                entry,
-                epoch=epoch,
-                token=tokens.get(entry.inode),
-                digest=tree.digests.get(identity(entry.st)),
-            )
-            if obj["type"] == "chr" and obj["major"] == obj["minor"] == 0:
-                # Overlayfs reads a 0/0 character device in a lower layer as a whiteout, so a root
-                # restored on a host without reflinks would not contain the device.
-                fail(f"storage: {entry.name} is a 0/0 character device, which a snapshot cannot store")
-            if obj["type"] == "reg":
-                digest = obj["sha256"]
-                obj["contents"] = [{"file": f"blobs/{digest}"}]
-                if digest not in parent.blobs:
-                    uapi16.add_blob(entry.path, blobs / digest)
-            inodes[entry.inode] = obj
-        objects.append(obj)
+    objects = uapi16.tree_objects(
+        tree.path,
+        list(tree.entries()),
+        epoch=epoch,
+        digest=lambda entry: tree.digests.get(identity(entry.st)),
+    )
+    for obj in objects[1:]:
+        if obj["type"] == "chr" and obj["major"] == obj["minor"] == 0:
+            # Overlayfs reads a 0/0 character device in a lower layer as a whiteout, so a root
+            # restored on a host without reflinks would not contain the device.
+            fail(f"storage: {obj['name']} is a 0/0 character device, which a snapshot cannot store")
+        if obj["type"] == "reg":
+            digest = obj["sha256"]
+            obj["contents"] = [{"file": f"blobs/{digest}"}]
+            if digest not in parent.blobs:
+                uapi16.add_blob(tree.path / obj["name"], blobs / digest)
     for obj in objects:
         # "Filesystem layer representation" in docs/design/architecture.md says why capture clears the
         # set-id bits.
@@ -184,10 +171,7 @@ def restore(
 
 def _identities(objects: Sequence[uapi16.Object]) -> dict[str, tuple[uapi16.Object, frozenset[str]]]:
     """Map each name to its object without the inodeToken and to the names of its hardlink group."""
-    groups: dict[int, set[str]] = {}
-    for obj in objects:
-        if token := obj.get("inodeToken"):
-            groups.setdefault(token, set()).add(obj["name"])
+    groups = uapi16.hardlink_groups(objects)
     identities: dict[str, tuple[uapi16.Object, frozenset[str]]] = {}
     for obj in objects:
         rest = obj.copy()
