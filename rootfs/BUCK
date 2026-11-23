@@ -8,13 +8,20 @@ load("//python:defs.bzl", "python")
 python.library(
     name = "rootfs",
     srcs = ["rootfs.py"],
-    deps = ["//:util", "//box:isolation", "//uapi16:storage", "//uapi16:uapi16"],
+    deps = ["//:util", "//box:isolation", "//uapi16:uapi16"],
+    visibility = ["tine//..."],
+)
+
+python.library(
+    name = "storage",
+    srcs = ["storage.py"],
+    deps = ["//:util", "//box:isolation", "//uapi16:uapi16"],
     visibility = ["tine//..."],
 )
 
 python.test(
     name = "test",
     box = "tine//tools:dev.box",
-    srcs = ["rootfs_test.py"],
-    deps = [":rootfs", "//uapi16:storage"],
+    srcs = ["rootfs_test.py", "storage_test.py"],
+    deps = [":rootfs", ":storage", "//:util", "//box:isolation", "//uapi16:uapi16"],
 )

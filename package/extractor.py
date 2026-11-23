@@ -21,6 +21,7 @@ from util import fail
 
 import rootfs
 import storage
+import uapi16
 
 
 class Spec(TypedDict):
@@ -64,5 +65,5 @@ def run(prog: str, unpack: Callable[[Path, Path], int], argv: list[str] | None =
         # stage1 is a box layer, so it is written from a snapshot like every other box layer. Buck
         # stores no mtimes, so the epoch the capture clamps them to doesn't matter.
         storage.capture(storage.Root(tree), snapshot, epoch=0)
-        rootfs.write_buck_tree(storage.Snapshot([snapshot]), dest)
+        rootfs.write_buck_tree(uapi16.Snapshot([snapshot]), dest)
     print(f"extracted {total} entries from {len(packages)} package(s) into {dest}", file=sys.stderr)

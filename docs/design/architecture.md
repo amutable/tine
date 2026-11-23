@@ -50,7 +50,7 @@ tine//package/            package-system-neutral providers and installation flow
 tine//package_system/     one directory per package system: its repository, resolver, installer,
                           extractor, and optional indexer and builder
 tine//box/                box bootstrap and sandbox command construction
-tine//rootfs/             bind and overlay mounts and Buck-storable names
+tine//rootfs/             bind and overlay mounts, snapshot capture and restore, and Buck-storable names
 tine//image/              layers, compositions, archive, directory, disk and boot artifact rules and
                           drivers, and VM runners
 tine//uapi16/             UAPI.16 manifests and the snapshot stores built on them

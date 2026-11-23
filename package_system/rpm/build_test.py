@@ -50,7 +50,7 @@ class BuildRpm(unittest.TestCase):
         self.auxiliary = self.scratch / "auxiliary"
         self.auxiliary.write_text("packaging input\n")
         # The tests replace the buildroot mount, so the buildroot doesn't need a snapshot to restore.
-        self.enterContext(mock.patch.object(build.builder.storage, "Snapshot"))
+        self.enterContext(mock.patch.object(build.builder.uapi16, "Snapshot"))
         self.enterContext(
             mock.patch.object(
                 build.builder.storage,

@@ -27,6 +27,7 @@ from util import MAGIC, decompressor
 
 import storage
 import transaction
+import uapi16
 from href import relative_href
 
 # The pool names packages by their SHA256, so APT must print this checksum.
@@ -195,7 +196,7 @@ def solve(
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="deb-plan.", dir="/var/tmp")))
         root = scratch / "root"
         if lower:
-            root = stack.enter_context(storage.root(storage.Snapshot(lower))).path
+            root = stack.enter_context(storage.root(uapi16.Snapshot(lower))).path
         status = root / "var/lib/dpkg/status"
         status.parent.mkdir(parents=True, exist_ok=True)
         status.touch(exist_ok=True)

@@ -53,10 +53,10 @@ class TestStorage(unittest.TestCase):
         copied = self.scratch / "copied"
         shutil.copytree(self.store, copied, copy_function=shutil.copyfile)
         materialized = self.scratch / "restored"
-        storage.restore(storage.Snapshot([copied]), materialized)
+        storage.restore(uapi16.Snapshot([copied]), materialized)
         with (
-            storage.root(storage.Snapshot([copied]), readonly=True) as readonly,
-            storage.root(storage.Snapshot([copied])) as restored,
+            storage.root(uapi16.Snapshot([copied]), readonly=True) as readonly,
+            storage.root(uapi16.Snapshot([copied])) as restored,
         ):
             for tree in (materialized, readonly.path, restored.path):
                 with self.subTest(tree=tree):
@@ -82,7 +82,7 @@ class TestStorage(unittest.TestCase):
         # one file after the epoch, and check the times in the manifest.
         self.files()
         storage.capture(storage.Root(self.tree), self.store, epoch=1700000000)
-        objects = {obj.get("name"): obj for obj in storage.Snapshot([self.store]).objects}
+        objects = {obj.get("name"): obj for obj in uapi16.Snapshot([self.store]).objects}
         self.assertEqual(objects["a"]["mTimeNSec"], 111)
         self.assertEqual(objects["b"]["mTimeNSec"], 1700000000 * 10**9)
 
@@ -93,7 +93,7 @@ class TestStorage(unittest.TestCase):
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         blob = next((self.store / "blobs").iterdir())
         before = blob.read_bytes(), blob.stat()
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             self.assertTrue((root / "a").samefile(root / "linked"))
             self.assertFalse((root / "a").samefile(root / "b"))
@@ -131,7 +131,7 @@ class TestStorage(unittest.TestCase):
         with mock.patch.object(storage, "clone_file", wraps=storage.clone_file) as copy:
             with (
                 mock.patch.object(storage, "_reflinks", return_value=False),
-                storage.root(storage.Snapshot([self.store]), readonly=True) as restored,
+                storage.root(uapi16.Snapshot([self.store]), readonly=True) as restored,
             ):
                 root = restored.path
                 self.assertEqual(copy.call_count, 0)
@@ -157,7 +157,7 @@ class TestStorage(unittest.TestCase):
         child = self.scratch / "child"
         with (
             mock.patch.object(storage, "_reflinks", return_value=False),
-            storage.root(storage.Snapshot([self.store])) as restored,
+            storage.root(uapi16.Snapshot([self.store])) as restored,
         ):
             root = restored.path
             os.link(root / "b", root / "new-link")
@@ -169,7 +169,7 @@ class TestStorage(unittest.TestCase):
             entries = {entry.name: entry for entry in restored.entries()}
             self.assertEqual(entries["b"].inode, entries["new-link"].inode)
             storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store, child])) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child])) as restored:
             root = restored.path
             self.assertTrue((root / "b").samefile(root / "new-link"))
             self.assertEqual((root / "new-link").read_text(), "new group")
@@ -186,7 +186,7 @@ class TestStorage(unittest.TestCase):
         os.link(self.tree / "a", self.tree / "a-linked")
         child = self.scratch / "child"
         storage.capture(storage.Root(self.tree), child, [self.store], epoch=CAPTURE_EPOCH)
-        snapshot = storage.Snapshot([self.store, child])
+        snapshot = uapi16.Snapshot([self.store, child])
         storage.delta(snapshot, 1)
         with mock.patch.object(storage, "_reflinks", return_value=True), storage.root(snapshot) as restored:
             self.assertEqual({p.name for p in restored.path.iterdir()}, {"a", "a-linked"})
@@ -198,7 +198,7 @@ class TestStorage(unittest.TestCase):
         os.link(self.tree / "z", self.tree / "new-alias")
         alias = self.scratch / "alias"
         storage.capture(storage.Root(self.tree), alias, [self.store], epoch=CAPTURE_EPOCH)
-        snapshot = storage.Snapshot([self.store, alias])
+        snapshot = uapi16.Snapshot([self.store, alias])
         storage.delta(snapshot, 1)
         with mock.patch.object(storage, "_reflinks", return_value=True), storage.root(snapshot) as restored:
             self.assertEqual({p.name for p in restored.path.iterdir()}, {"z", "z-linked", "new-alias"})
@@ -213,7 +213,7 @@ class TestStorage(unittest.TestCase):
         with mock.patch.object(storage, "clone_file", wraps=storage.clone_file) as copy:
             with (
                 mock.patch.object(storage, "_reflinks", return_value=False),
-                storage.root(storage.Snapshot([self.store])) as restored,
+                storage.root(uapi16.Snapshot([self.store])) as restored,
             ):
                 root = restored.path
                 assert restored.upper is not None
@@ -239,7 +239,7 @@ class TestStorage(unittest.TestCase):
                 self.subTest(readonly=readonly),
                 mock.patch.object(storage, "reflink", return_value=True),
                 mock.patch.object(storage, "Overlay", side_effect=AssertionError("unexpected overlay")),
-                storage.root(storage.Snapshot([self.store]), readonly=readonly) as restored,
+                storage.root(uapi16.Snapshot([self.store]), readonly=readonly) as restored,
             ):
                 root = restored.path
                 self.assertIsNone(restored.upper)
@@ -271,7 +271,7 @@ class TestStorage(unittest.TestCase):
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
 
         with mock.patch.object(storage, "reflink", return_value=False) as reflink:
-            with storage.root(storage.Snapshot([self.store])) as restored:
+            with storage.root(uapi16.Snapshot([self.store])) as restored:
                 root = restored.path
                 self.assertIsNotNone(restored.upper)
                 self.assertEqual(reflink.call_count, 1)
@@ -292,7 +292,7 @@ class TestStorage(unittest.TestCase):
             mock.patch.object(storage, "Overlay", side_effect=AssertionError("unexpected overlay")),
             self.assertRaises(OSError) as error,
         ):
-            with storage.root(storage.Snapshot([self.store])):
+            with storage.root(uapi16.Snapshot([self.store])):
                 pass
         self.assertEqual(error.exception.errno, errno.EOPNOTSUPP)
 
@@ -303,7 +303,7 @@ class TestStorage(unittest.TestCase):
         os.link(self.tree / "b", self.tree / "second-link")
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         self.assertEqual(len(list((self.store / "blobs").iterdir())), 1)
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             self.assertTrue((root / "a").samefile(root / "linked"))
             self.assertTrue((root / "b").samefile(root / "second-link"))
@@ -321,7 +321,7 @@ class TestStorage(unittest.TestCase):
         self.files()
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         child = self.scratch / "child"
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             (root / "b").chmod(0o600)
             os.utime(root / "b", ns=(999, 999))
@@ -330,7 +330,7 @@ class TestStorage(unittest.TestCase):
         self.assertNotEqual(
             (child / uapi16.MANIFEST).read_bytes(), (self.store / uapi16.MANIFEST).read_bytes()
         )
-        with storage.root(storage.Snapshot([self.store, child]), readonly=True) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child]), readonly=True) as restored:
             root = restored.path
             self.assertEqual(stat.S_IMODE((root / "b").stat().st_mode), 0o600)
             self.assertEqual((root / "b").stat().st_mtime_ns, 999)
@@ -344,7 +344,7 @@ class TestStorage(unittest.TestCase):
         (self.tree / "file").write_text("file")
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         child = self.scratch / "child"
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             (root / "deleted").unlink()
             shutil.rmtree(root / "dir")
@@ -355,7 +355,7 @@ class TestStorage(unittest.TestCase):
             (root / "file").mkdir()
             (root / "file/child").write_text("child")
             storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store, child])) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child])) as restored:
             root = restored.path
             self.assertFalse((root / "deleted").exists())
             self.assertEqual([p.name for p in (root / "dir").iterdir()], ["new"])
@@ -364,7 +364,7 @@ class TestStorage(unittest.TestCase):
             (root / "file").write_text("replacement")
             grandchild = self.scratch / "grandchild"
             storage.capture(restored, grandchild, [self.store, child], epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store, child, grandchild])) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child, grandchild])) as restored:
             root = restored.path
             self.assertEqual((root / "file").read_text(), "replacement")
         self.assertEqual({p.name for p in child.iterdir()}, {"blobs", uapi16.MANIFEST})
@@ -378,7 +378,7 @@ class TestStorage(unittest.TestCase):
         (self.tree / "deleted").write_text("deleted")
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         lower, upper, work, merged = (self.scratch / name for name in ("lower", "upper", "work", "merged"))
-        storage.restore(storage.Snapshot([self.store]), lower)
+        storage.restore(uapi16.Snapshot([self.store]), lower)
         upper.mkdir()
         work.mkdir()
         child = self.scratch / "child"
@@ -390,7 +390,7 @@ class TestStorage(unittest.TestCase):
             (merged / "opaque/new").write_text("new")
             self.assertEqual(os.getxattr(upper / "opaque", "user.overlay.opaque"), b"y")
             storage.capture(storage.Root(merged, upper), child, [self.store], epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store, child])) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child])) as restored:
             root = restored.path
             self.assertFalse((root / "deleted").exists())
             self.assertEqual([path.name for path in (root / "opaque").iterdir()], ["new"])
@@ -408,7 +408,7 @@ class TestStorage(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "command failed"):
                     with (
                         mock.patch.object(storage, "_reflinks", return_value=reflinks),
-                        storage.root(storage.Snapshot([self.store])) as restored,
+                        storage.root(uapi16.Snapshot([self.store])) as restored,
                     ):
                         root = restored.path
                         (root / "a").write_text("changed")
@@ -417,7 +417,7 @@ class TestStorage(unittest.TestCase):
                 self.assertFalse(root.parent.exists())
                 with (
                     mock.patch.object(storage, "_reflinks", return_value=reflinks),
-                    storage.root(storage.Snapshot([self.store])) as restored,
+                    storage.root(uapi16.Snapshot([self.store])) as restored,
                 ):
                     self.assertEqual((restored.path / "a").read_text(), "identical")
 
@@ -427,13 +427,13 @@ class TestStorage(unittest.TestCase):
         self.files()
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
         child = self.scratch / "child"
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             (root / "new").write_text("new contents")
             (root / "new-independent").write_text("new contents")
             storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
         self.assertEqual(len(list((child / "blobs").iterdir())), 1)
-        with storage.root(storage.Snapshot([self.store, child]), readonly=True) as restored:
+        with storage.root(uapi16.Snapshot([self.store, child]), readonly=True) as restored:
             root = restored.path
             self.assertEqual((root / "a").read_text(), "identical")
             self.assertFalse((root / "new").samefile(root / "new-independent"))
@@ -452,7 +452,7 @@ class TestStorage(unittest.TestCase):
             (self.tree / name).write_text(name)
             (self.tree / name).chmod(mode)
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store]), readonly=True) as restored:
+        with storage.root(uapi16.Snapshot([self.store]), readonly=True) as restored:
             root = restored.path
             modes = {
                 name: stat.S_IMODE((root / name).lstat().st_mode)
@@ -474,7 +474,7 @@ class TestStorage(unittest.TestCase):
             with self.subTest(reflinks=reflinks):
                 with (
                     mock.patch.object(storage, "_reflinks", return_value=reflinks),
-                    storage.root(storage.Snapshot([self.store])) as restored,
+                    storage.root(uapi16.Snapshot([self.store])) as restored,
                 ):
                     with (restored.path / "c").open("r+") as stream:
                         stream.write("modified!")
@@ -482,7 +482,7 @@ class TestStorage(unittest.TestCase):
                     with mock.patch.object(uapi16, "_digest", wraps=uapi16._digest) as digest:
                         storage.capture(restored, child, [self.store], epoch=CAPTURE_EPOCH)
                 self.assertEqual(sorted(call.args[0].name for call in digest.call_args_list), ["c", "new"])
-                with storage.root(storage.Snapshot([self.store, child]), readonly=True) as restored:
+                with storage.root(uapi16.Snapshot([self.store, child]), readonly=True) as restored:
                     self.assertEqual((restored.path / "c").read_text(), "modified!")
                     self.assertEqual((restored.path / "a").read_text(), "identical")
 
@@ -510,7 +510,7 @@ class TestStorage(unittest.TestCase):
                 restored = self.scratch / "restored"
                 shutil.rmtree(restored, ignore_errors=True)
                 with self.assertRaises(SystemExit):
-                    storage.restore(storage.Snapshot([store]), restored)
+                    storage.restore(uapi16.Snapshot([store]), restored)
                 self.assertFalse((self.scratch / "escaped").exists())
                 self.assertEqual(list(outside.iterdir()), [])
 
@@ -531,13 +531,13 @@ class TestStorage(unittest.TestCase):
         renamed = [obj | {"name": "link"} if obj.get("name") == "zfile" else obj for obj in objects]
         uapi16.write_objects(renamed, store / uapi16.MANIFEST)
         with self.assertRaises(SystemExit):
-            storage.restore(storage.Snapshot([store]), self.scratch / "restored")
+            storage.restore(uapi16.Snapshot([store]), self.scratch / "restored")
         self.assertEqual(outside.read_text(), "outside")
         self.assertEqual(stat.S_IMODE(outside.stat().st_mode), 0o600)
 
     def test_readonly_empty_snapshot(self) -> None:
         # An image without parent stores still needs an empty, read-only root with its default mode.
-        with storage.root(storage.Snapshot([]), readonly=True) as restored:
+        with storage.root(uapi16.Snapshot([]), readonly=True) as restored:
             root = restored.path
             self.assertEqual(list(root.iterdir()), [])
             self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o755)
@@ -552,7 +552,7 @@ class TestStorage(unittest.TestCase):
         except PermissionError:
             self.skipTest("the sandbox does not permit device nodes")
         storage.capture(storage.Root(self.tree), self.store, epoch=CAPTURE_EPOCH)
-        with storage.root(storage.Snapshot([self.store])) as restored:
+        with storage.root(uapi16.Snapshot([self.store])) as restored:
             root = restored.path
             attributes = (root / "device").lstat()
             self.assertTrue(stat.S_ISCHR(attributes.st_mode))
@@ -578,7 +578,7 @@ class TestStorage(unittest.TestCase):
         for readonly in (False, True):
             with (
                 self.subTest(readonly=readonly),
-                storage.root(storage.Snapshot([self.store]), readonly=readonly) as restored,
+                storage.root(uapi16.Snapshot([self.store]), readonly=readonly) as restored,
             ):
                 root = restored.path
                 self.assertTrue(stat.S_ISFIFO((root / "fifo").lstat().st_mode))
@@ -598,7 +598,7 @@ class TestStorage(unittest.TestCase):
         (self.tree / "gone").unlink()
         child = self.scratch / "child"
         storage.capture(storage.Root(self.tree), child, [self.store], epoch=CAPTURE_EPOCH)
-        snapshot = storage.Snapshot([self.store, child])
+        snapshot = uapi16.Snapshot([self.store, child])
         self.assertEqual(storage.delta(snapshot, 1), ["gone"])
         self.assertEqual({obj["name"] for obj in snapshot.objects[1:]}, {"dir", "dir/changed", "dir/new"})
 

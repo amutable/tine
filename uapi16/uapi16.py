@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Read, write and combine UAPI.16 filesystem listings."""
+"""Read, write and combine UAPI.16 listings, and read and write the snapshot stores built on them."""
 
 import base64
 import hashlib
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
-from util import fail
+from util import clone_file, fail
 
 MEDIA_TYPE = "application/vnd.uapi.16.manifest"
 TRAILER_TYPE = "application/vnd.uapi.16.trailer"
@@ -351,3 +351,60 @@ def renumber(objects: Sequence[Object]) -> None:
         token = obj.pop("inodeToken", None)
         if isinstance(token, int) and counts[token] > 1:
             obj["inodeToken"] = tokens.setdefault(token, len(tokens) + 1)
+
+
+class Snapshot:
+    def __init__(self, stores: Sequence[str | Path]) -> None:
+        self.stores = [Path(store) for store in stores]
+        self.objects: list[Object] = (
+            read(self.stores[-1] / MANIFEST)
+            if self.stores
+            else [
+                {
+                    "mediaType": MEDIA_TYPE,
+                    "type": "dir",
+                    "mode": 0o755,
+                    "uid": 0,
+                    "gid": 0,
+                    "mTimeNSec": 0,
+                }
+            ]
+        )
+        self.blobs: dict[str, Path] = {}
+        for store in self.stores:
+            for blob in (store / "blobs").iterdir():
+                self.blobs.setdefault(blob.name, blob)
+
+    def content(self, obj: Object) -> Path:
+        return self.blobs[obj["sha256"]]
+
+
+def add_blob(source: Path, destination: Path) -> None:
+    if not destination.exists():
+        clone_file(source, destination)
+        destination.chmod(0o444)
+
+
+def save(snapshot: Snapshot, out: Path) -> None:
+    blobs = out / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    for obj in snapshot.objects[1:]:
+        if obj["type"] == "reg":
+            add_blob(snapshot.content(obj), blobs / obj["sha256"])
+    write_objects(snapshot.objects, out / MANIFEST)
+
+
+def check_blobs(snapshot: Snapshot) -> None:
+    """Fail when the blob of a file is missing or its contents do not match the file's digest."""
+    for obj in snapshot.objects[1:]:
+        if obj["type"] != "reg":
+            continue
+        blob = snapshot.blobs.get(obj["sha256"])
+        if blob is None:
+            fail(f"storage: the blob of {obj['name']!r} is missing")
+        if _digest(blob) != obj["sha256"]:
+            fail(f"storage: the blob of {obj['name']!r} does not match its digest")
+
+
+def by_name(objects: Sequence[Object]) -> dict[str, Object]:
+    return {obj["name"]: obj for obj in objects if "name" in obj}

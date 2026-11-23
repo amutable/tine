@@ -16,20 +16,20 @@ python.library(
     name = "builder",
     srcs = ["builder.py"],
     visibility = ["PUBLIC"],
-    deps = ["//:util", "//rootfs:rootfs", "//uapi16:storage"],
+    deps = ["//:util", "//rootfs:rootfs", "//rootfs:storage", "//uapi16:uapi16"],
 )
 
 python.library(
     name = "extractor",
     srcs = ["extractor.py"],
     visibility = ["PUBLIC"],
-    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//uapi16:storage"],
+    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//rootfs:storage", "//uapi16:uapi16"],
 )
 
 python.library(
     name = "installer",
     srcs = ["installer.py"],
-    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//uapi16:storage", "//uapi16:uapi16"],
+    deps = ["//:specs", "//:util", "//rootfs:rootfs", "//rootfs:storage", "//uapi16:uapi16"],
     visibility = ["PUBLIC"],
 )
 

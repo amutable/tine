@@ -25,6 +25,7 @@ import finalize
 import installer
 import rootfs
 import storage
+import uapi16
 from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
@@ -358,7 +359,7 @@ def main(argv: list[str] | None = None) -> None:
 
     lower = spec["lower"]
     with (
-        storage.root(storage.Snapshot(lower)) as restored,
+        storage.root(uapi16.Snapshot(lower)) as restored,
         tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
     ):
         tree = restored.path

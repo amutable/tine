@@ -201,7 +201,7 @@ def _install_snapshot(
         (out / "blobs").mkdir(parents=True)
         shutil.copyfile(Path(lowers[-1]) / uapi16.MANIFEST, out / uapi16.MANIFEST)
     else:
-        with storage.root(storage.Snapshot(lowers)) as restored:
+        with storage.root(uapi16.Snapshot(lowers)) as restored:
             with rootfs.rootfs(BUILDROOT, bind=restored.path, apivfs=True, strict_unmount=True):
                 install(packages_dir, Path(BUILDROOT), spec)
                 _normalize(Path(BUILDROOT), spec)
@@ -209,7 +209,7 @@ def _install_snapshot(
 
     if spec["target"] is None:
         return
-    snapshot = storage.Snapshot([*lowers, out])
+    snapshot = uapi16.Snapshot([*lowers, out])
     # The sandbox stacks the directories of a box's layers and decodes no whiteouts. A file that a
     # layer deletes would still show up from the layer below.
     if deleted := storage.delta(snapshot, len(lowers)):
