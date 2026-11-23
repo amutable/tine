@@ -100,6 +100,13 @@ python.binary(
     visibility = ["PUBLIC"],
 )
 
+python.binary(
+    name = "signing-key",
+    main = "signing_key.py",
+    boxes = ["tine//distribution:tools.box"],
+    visibility = ["PUBLIC"],
+)
+
 python.library(
     name = "version",
     srcs = ["version.py"],
@@ -126,6 +133,8 @@ python.test(
         "layer_test.py",
         "preload.py",
         "preload_test.py",
+        "signing_key.py",
+        "signing_key_test.py",
         "substitute.py",
         "substitute_test.py",
         "uki.py",
