@@ -157,7 +157,7 @@ class Definition:
         """The image paths this partition is populated from, whatever it is they are copied to."""
         return tuple(copy.split(":", 1)[0] for copy in self.copy_files)
 
-    def render(self, *, split: bool, exclude: list[str]) -> str:
+    def render(self, *, split: bool) -> str:
         lines = ["[Partition]", f"Type={self.type}"]
         _setting(lines, "Label", self.label)
         _setting(lines, "Format", self.filesystem)
@@ -169,10 +169,6 @@ class Definition:
         _setting(lines, "VerityMatchKey", self.verity_match_key)
         for copy in self.copy_files:
             lines.append(f"CopyFiles={copy}")
-        if self.copy_files:
-            # A trailing slash makes repart leave out the contents of the directory and keep the
-            # directory itself.
-            lines += [f"ExcludeFiles=/{directory.strip('/')}/" for directory in exclude]
         if split:
             # repart resolves this against the name of the image it writes, so a split artifact
             # leaves the run already named the way it is published: %t is the partition type and
@@ -265,19 +261,23 @@ def _add_directories(snapshot: uapi16.Snapshot, full: list[uapi16.Object], names
     )
 
 
-def _listing(
-    objects: list[uapi16.Object], roots: tuple[str, ...], exclude: list[str]
-) -> list[uapi16.Object]:
+def _exclude(snapshot: uapi16.Snapshot, directories: list[str]) -> None:
+    """Remove the contents of each directory in `directories` from `snapshot`, and keep the directory."""
+    excluded = [directory.strip("/") for directory in directories]
+    snapshot.objects = [
+        obj
+        for obj in snapshot.objects
+        if not any(obj.get("name", "").startswith(directory + "/") for directory in excluded)
+    ]
+
+
+def _listing(objects: list[uapi16.Object], roots: tuple[str, ...]) -> list[uapi16.Object]:
     """Return the manifest of the objects that a partition copying `roots` contains."""
     scope = uapi16.scope(roots)
-    excluded = [directory.strip("/") for directory in exclude]
     listed: list[uapi16.Object] = [{"mediaType": uapi16.MEDIA_TYPE}]
     for obj in objects[1:]:
         name = obj["name"]
         if scope != [""] and not any(name == root or name.startswith(root + "/") for root in scope):
-            continue
-        # The ExcludeFiles= lines of Partition.render() make repart leave out the same objects.
-        if any(name.startswith(directory + "/") for directory in excluded):
             continue
         listed.append(obj.copy())
     uapi16.renumber(listed)
@@ -290,13 +290,12 @@ def _write_definitions(
     partitions: list[ImportedPartition],
     *,
     split: bool,
-    exclude: list[str],
 ) -> dict[str, str]:
     files = {}
     index = 0
     for partition in written:
         filename = f"{index:04}-{partition.definition.name}.conf"
-        (directory / filename).write_text(partition.definition.render(split=split, exclude=exclude))
+        (directory / filename).write_text(partition.definition.render(split=split))
         files[partition.definition.name] = filename
         index += 1
     for partition in partitions:
@@ -375,7 +374,7 @@ def _repart(
         "--json=pretty",
         "--no-pager",
         # With --root, repart opens CopyBlocks= paths below the tree, which doesn't contain the
-        # imported partitions. --copy-source only applies to CopyFiles= and ExcludeFiles=.
+        # imported partitions. --copy-source only applies to CopyFiles=.
         f"--copy-source={tree}",
         "--offline=yes",
         "--seed",
@@ -440,6 +439,7 @@ def main(argv: list[str] | None = None) -> None:
         # often. repart fails on a CopyFiles= source that doesn't exist.
         sources = [source.strip("/") for partition in written for source in partition.definition.sources]
         _add_directories(snapshot, full, sources)
+    _exclude(snapshot, spec["exclude"])
 
     # What each partition ends up containing, listed from the snapshot that repart copies. A
     # definition takes the paths it names and nothing else, so a disk whose definitions are a /usr
@@ -447,7 +447,7 @@ def main(argv: list[str] | None = None) -> None:
     listings = []
     for partition in written:
         if partition.manifest is not None:
-            listed = _listing(snapshot.objects, partition.definition.sources, spec["exclude"])
+            listed = _listing(snapshot.objects, partition.definition.sources)
             uapi16.write_listing(listed, partition.manifest)
             listings.append(partition.manifest)
 
@@ -470,7 +470,6 @@ def main(argv: list[str] | None = None) -> None:
             written,
             partitions,
             split=bool(splits),
-            exclude=spec["exclude"],
         )
 
         if spec["seed"] is not None:

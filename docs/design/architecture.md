@@ -1389,10 +1389,11 @@ from the paths the image's package system declares, because a merged extension m
 terminal output that strips the database or other paths, and an extension, read a layer of their own on top
 of the image. That layer removes the paths, writes the extension-release files and removes the os-release of
 an extension. Every terminal driver receives the ordered layer stack of its image and changes nothing in it.
-The system partitions of a bootable disk leave out the contents of the directories that its ESP copies,
-through repart's `ExcludeFiles=`. Image-shipped tmpfiles configuration is not applied at build time; enabling
-it will be an explicit output option once its single-UID/GID behavior is defined. Ownership and named ACL
-entries are deliberately unsupported: all archive entries use uid/gid zero.
+The system partitions of a bootable disk leave out the contents of the directories that its ESP copies. The
+disk driver removes them from the snapshot that repart copies and that the partition listings describe.
+Image-shipped tmpfiles configuration is not applied at build time; enabling it will be an explicit output
+option once its single-UID/GID behavior is defined. Ownership and named ACL entries are deliberately
+unsupported: all archive entries use uid/gid zero.
 
 Tar uses deterministic PAX archives and stores user xattrs using `SCHILY.xattr.user.*` headers. The newc cpio
 format has no general xattr representation. Tar/cpio entries are ordered and encode explicit hardlinks
