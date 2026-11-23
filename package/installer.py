@@ -25,7 +25,6 @@ import storage
 import uapi16
 
 # A fixed install path avoids embedding Buck hashes and supports scriptlet chroots.
-BUILDROOT = "/buildroot"
 
 MINIMAL_NSSWITCH = """\
 passwd: files
@@ -201,11 +200,9 @@ def _install_snapshot(
         (out / "blobs").mkdir(parents=True)
         shutil.copyfile(Path(lowers[-1]) / uapi16.MANIFEST, out / uapi16.MANIFEST)
     else:
-        with storage.root(uapi16.Snapshot(lowers)) as restored:
-            with rootfs.rootfs(BUILDROOT, bind=restored.path, apivfs=True, strict_unmount=True):
-                install(packages_dir, Path(BUILDROOT), spec)
-                _normalize(Path(BUILDROOT), spec)
-            storage.capture(restored, out, lowers, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
+        with rootfs.snapshot_root(lowers, out=out, apivfs=True):
+            install(packages_dir, rootfs.BUILDROOT, spec)
+            _normalize(rootfs.BUILDROOT, spec)
 
     if spec["target"] is None:
         return

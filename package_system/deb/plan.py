@@ -194,9 +194,7 @@ def solve(
     """
     with ExitStack() as stack:
         scratch = Path(stack.enter_context(TemporaryDirectory(prefix="deb-plan.", dir="/var/tmp")))
-        root = scratch / "root"
-        if lower:
-            root = stack.enter_context(storage.root(uapi16.Snapshot(lower))).path
+        root = stack.enter_context(storage.root(uapi16.Snapshot(lower))).path
         status = root / "var/lib/dpkg/status"
         status.parent.mkdir(parents=True, exist_ok=True)
         status.touch(exist_ok=True)

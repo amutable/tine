@@ -23,8 +23,6 @@ from typing import TypedDict
 from util import fail
 
 import rootfs
-import storage
-import uapi16
 
 
 class ImageSpec(TypedDict):
@@ -36,11 +34,8 @@ class ImageSpec(TypedDict):
 @contextlib.contextmanager
 def image(spec: ImageSpec) -> Generator[Path]:
     """Reconstruct the root of the image the spec names and mount it read-only at /buildroot."""
-    with (
-        storage.root(uapi16.Snapshot(spec["lower"]), readonly=True) as restored,
-        rootfs.rootfs("/buildroot", bind=restored.path) as tree,
-    ):
-        yield tree
+    with rootfs.snapshot_root(spec["lower"], readonly=True):
+        yield rootfs.BUILDROOT
 
 
 def _box_tool(name: str, what: str) -> str:

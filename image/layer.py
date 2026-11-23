@@ -25,7 +25,6 @@ import finalize
 import installer
 import rootfs
 import storage
-import uapi16
 from isolation import AT_FDCWD, Bind, Close, open_directory
 
 
@@ -359,21 +358,19 @@ def main(argv: list[str] | None = None) -> None:
 
     lower = spec["lower"]
     with (
-        storage.root(uapi16.Snapshot(lower)) as restored,
+        rootfs.snapshot_root(lower, out=out, apivfs=True) as restored,
         tempfile.TemporaryDirectory(prefix="layer.", dir="/var/tmp") as scratch,
     ):
-        tree = restored.path
-        with rootfs.rootfs("/buildroot", bind=tree, apivfs=True, strict_unmount=True) as target:
-            if install is not None:
-                _install(install, target, Path(scratch))
-            for operation in operations:
-                _apply(operation, target)
+        if install is not None:
+            _install(install, rootfs.BUILDROOT, Path(scratch))
+        for operation in operations:
+            _apply(operation, rootfs.BUILDROOT)
+        # The API filesystems are mounted below BUILDROOT, not below the restored root.
         stacks = _executable_stacks(restored)
         if stacks:
             util.fail(
                 "image: executable stacks are not allowed, see docs/user/images.md:\n" + "\n".join(stacks)
             )
-        storage.capture(restored, out, lower, epoch=int(os.environ["SOURCE_DATE_EPOCH"]))
     print(
         f"image: applied {len(operations)} ops over {len(lower)} parent store(s) -> {out}", file=sys.stderr
     )
