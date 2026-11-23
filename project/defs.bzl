@@ -3,7 +3,7 @@
 
 """Source directories, dev mode and build outputs of a project, exported as the `project` namespace."""
 
-load(":source.bzl", "all_files")
+load(":source.bzl", "all_files", "source_listing", "source_tree_rule")
 
 _SECTION = "tine"
 _DEV = "dev"
@@ -51,6 +51,14 @@ def is_dev(
 def has_files(directory: str) -> bool:
     """Whether `directory` in this package contains a file that Buck does not ignore."""
     return bool(all_files(directory))
+
+def source_tree(name: str, **kwargs) -> None:
+    """Declare `name` as the source tree of this package and of its subpackages, which a build reads in place.
+
+    The default output of `name` lists the files that the tree tracks as inputs.
+    """
+    directory = _project_path(package_name(), "", cell = get_cell_name()) or "."
+    source_tree_rule(name = name, directory = directory, listing = source_listing(), **kwargs)
 
 def populated(directory: str) -> bool:
     """Whether `directory` in this package contains a file, or is mounted for dev mode."""
@@ -111,4 +119,6 @@ project = struct(
     is_label = is_label,
     kept_dir = kept_dir,
     populated = populated,
+    source_listing = source_listing,
+    source_tree = source_tree,
 )

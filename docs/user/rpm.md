@@ -31,6 +31,69 @@ rpm.package(
 `package` is the `Name:` of the spec, and `subpackages` lists the binary packages that the build produces.
 Each subpackage is a sub-target, such as `:hello[hello]`.
 
+## Building a project from its own checkout
+
+An upstream project, such as systemd, can build RPMs of itself from the checkout that contains its `BUCK`
+files. If your project has no `BUCK` file in a subdirectory, pass the directory of the root `BUCK` file as
+`source_tree`:
+
+```starlark
+load("@tine//package_system/rpm:defs.bzl", "rpm")
+
+rpm.package(
+    name = "systemd.rpm",
+    package = "systemd",
+    spec = "systemd.spec",
+    source_tree = ".",
+    buildroot = "catalog//:fedora.rawhide.buildroot",
+    release = "1",
+    source_date_epoch = 1744207869,
+    subpackages = [],
+)
+```
+
+Buck rejects `.` as soon as a subdirectory contains a `BUCK` file, because a directory source cannot include
+another Buck package. In that case, declare the tree with `project.source_tree()` in the root `BUCK` file and
+pass its label instead:
+
+```starlark
+load("@tine//package_system/rpm:defs.bzl", "rpm")
+load("@tine//project:defs.bzl", "project")
+
+project.source_tree(name = "source")
+
+rpm.package(
+    name = "systemd.rpm",
+    package = "systemd",
+    spec = "systemd.spec",
+    source_tree = ":source",
+    buildroot = "catalog//:fedora.rawhide.buildroot",
+    release = "1",
+    source_date_epoch = 1744207869,
+    subpackages = [],
+)
+```
+
+`project.source_tree()` lists the files of its own directory. It cannot list the files below another `BUCK`
+file, so every other `BUCK` file in the project lists its own files with `project.source_listing()`:
+
+```starlark
+load("@tine//project:defs.bzl", "project")
+
+project.source_listing()
+```
+
+If a `BUCK` file lacks the call, the build fails with an ``Unknown target `source_tree_listing` `` error that
+names the directory of that `BUCK` file.
+
+The build reads the tree as it is on disk, like a local checkout; see [Building from a local checkout
+instead](git.md#building-from-a-local-checkout-instead) for which files are inputs. `tine buck build
+--show-output :source` prints the path of a file that lists the inputs. [Project source
+trees](../design/architecture.md#project-source-trees) describes the few files that the list leaves out.
+
+A dev build keeps its build directory between builds, and an edit recompiles only what it changes. Pass
+`dev = True` to `rpm.package()` for a dev build.
+
 ## Build dependencies
 
 The build installs the BuildRequires of the spec over the shared base buildroot. `build_requires` lists
