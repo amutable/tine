@@ -35,6 +35,21 @@ _checkout = rule(
     },
 )
 
+def _fetched_impl(ctx: AnalysisContext) -> list[Provider]:
+    info = ctx.attrs.fetch[DefaultInfo]
+    return [info, SourceTreeInfo(dev = False, path = info.default_outputs[0], sources = None)]
+
+# The prelude's git_fetch() provides only DefaultInfo. rpm.package() takes a source tree only from a target
+# that provides SourceTreeInfo, like a checkout does.
+_fetched = rule(
+    doc = "Expose a git_fetch() as a source tree.",
+    impl = _fetched_impl,
+    attrs = {
+        "fetch": attrs.dep(doc = "the git_fetch() target"),
+        "labels": attrs.list(attrs.string(), default = [], doc = "labels used to query this target"),
+    },
+)
+
 def fetch(name: str, repo: str, rev: str, sub_targets: list[str] = [], visibility: list[str] | None = None, labels: list[str] = [], **kwargs) -> None:
     """Fetch `rev` unless this package contains a non-empty checkout named after the target."""
     directory = name.removesuffix(".git")
@@ -42,7 +57,10 @@ def fetch(name: str, repo: str, rev: str, sub_targets: list[str] = [], visibilit
     if project.populated(directory):
         _checkout(name = name, labels = labels, src = directory, sub_targets = sub_targets, visibility = visibility, **kwargs)
     else:
-        git_fetch(name = name, repo = repo, rev = rev, sub_targets = sub_targets, visibility = visibility, labels = labels, **kwargs)
+        # `tine mount` finds checkout slots by the label. Only the public target has it, because tine maps
+        # the name of every labeled target to a directory.
+        git_fetch(name = name + ".fetch", repo = repo, rev = rev, sub_targets = sub_targets, **kwargs)
+        _fetched(name = name, fetch = ":" + name + ".fetch", labels = labels, visibility = visibility)
 
 def checkout(name: str, labels: list[str] = [], **kwargs) -> bool:
     """Expose the directory named after the target as a tree, empty until committed or mounted.
