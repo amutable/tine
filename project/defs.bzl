@@ -3,6 +3,8 @@
 
 """Source directories, dev mode and build outputs of a project, exported as the `project` namespace."""
 
+load(":source.bzl", "all_files")
+
 _SECTION = "tine"
 _DEV = "dev"
 
@@ -48,10 +50,7 @@ def is_dev(
 
 def has_files(directory: str) -> bool:
     """Whether `directory` in this package contains a file that Buck does not ignore."""
-
-    # A glob() pattern matches a file that starts with a dot, or a file in a directory that starts with
-    # a dot, only if the pattern itself contains that dot.
-    return bool(glob([directory + "/**", directory + "/**/.*", directory + "/**/.*/**"]))
+    return bool(all_files(directory))
 
 def populated(directory: str) -> bool:
     """Whether `directory` in this package contains a file, or is mounted for dev mode."""
