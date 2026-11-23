@@ -11,6 +11,7 @@ load("//package:buildroot.bzl", "BuildrootInfo", "package_buildroot", "recipe_de
 load("//package:packaging.bzl", "pinned_packaging")
 load("//package:repository.bzl", "RepositoryPin", "declare_remote_repository")
 load("//package:system.bzl", "PackageSystemInfo")
+load("//project:source.bzl", "SourceTreeInfo")
 
 PACKAGE_SYSTEM = "@tine//package_system/rpm:package_system"
 
@@ -46,7 +47,7 @@ def _query_buildrequires(
     actions: AnalysisActions,
     query: RunInfo,
     parse: dict[str, typing.Any],
-    source_tree: Artifact | None,
+    source_tree: cmd_args | None,
     lower: list[Artifact],
 ) -> Artifact:
     """Return a JSON list of the BuildRequires of the spec that `parse` describes and the layers `lower` lack."""
@@ -68,19 +69,28 @@ def _query_buildrequires(
 
 def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     base_buildroot = ctx.attrs.buildroot[BuildrootInfo]
-    source_tree = ctx.attrs.source_tree
-    in_place_spec = ctx.attrs.in_place_spec if source_tree != None else None
+    tree = ctx.attrs.source_tree
+    if isinstance(tree, Dependency):
+        tree = tree[SourceTreeInfo]
+    elif tree != None:
+        tree = SourceTreeInfo(path = tree, sources = None)
+    source_tree = specs.argument(tree.path) if tree != None else None
+    in_place_spec = ctx.attrs.in_place_spec if tree != None else None
     spec_file = ctx.attrs.spec
-    if source_tree != None and in_place_spec != None:
-        spec_file = source_tree.project(in_place_spec)
+    if in_place_spec != None:
+        # The drivers read an in-place spec from the source tree through `in_place_spec`.
+        spec_file = in_place_spec
     pinned = None
-    if source_tree != None and ctx.attrs.in_place_packaging != None:
+    if tree != None and ctx.attrs.in_place_packaging != None:
+        pin = ctx.attrs.in_place_packaging
+        if tree.sources != None and pin not in tree.sources:
+            fail("rpm_package: the source tree contains no in_place_packaging file {}".format(repr(pin)))
         pinned = pinned_packaging(
             ctx,
             base_buildroot,
             "git-core",
             ctx.attrs._packaging,
-            source_tree.project(ctx.attrs.in_place_packaging),
+            tree.sources[pin] if tree.sources != None else tree.path.project(pin),
             ctx.attrs.in_place_packaging_distro,
         )
         spec_file = pinned.project(ctx.attrs.package + ".spec")
@@ -95,7 +105,7 @@ def _rpm_package_impl(ctx: AnalysisContext) -> list[Provider]:
     # The build and the BuildRequires query parse the spec with the same fields.
     parse = {
         "dist": ctx.attrs.dist,
-        "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if source_tree != None else [],
+        "in_place_rpmbuild_options": ctx.attrs.in_place_rpmbuild_options if tree != None else [],
         "in_place_spec": in_place_spec,
         # package_build() keeps the build directory of a dev build, because rpm_package passes keep_build_dir.
         "incremental": ctx.attrs.configured_dev,

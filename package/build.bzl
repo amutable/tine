@@ -7,6 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//git:defs.bzl", "git")
 load("//project:defs.bzl", "project")
+load("//project:source.bzl", "SourceTreeInfo")
 load(":buildroot.bzl", "BuildrootInfo")
 load(":manager.bzl", "PackageManagerInfo")
 load(":repository.bzl", "LocalPackageInfo")
@@ -48,7 +49,8 @@ PACKAGE_BUILD_ATTRS = {
         doc = "the SOURCE_DATE_EPOCH of the build, or None to take it from the package's changelog where the recipe has one",
     ),
     "source_tree": attrs.option(
-        attrs.source(allow_directory = True),
+        # A label names a `project.source_tree()` or a checkout, and a directory of the package coerces as a source.
+        attrs.one_of(attrs.dep(providers = [SourceTreeInfo]), attrs.source(allow_directory = True)),
         default = None,
         doc = "a prepared tree built in place of the declared sources",
     ),

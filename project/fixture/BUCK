@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
+# SPDX-License-Identifier: MPL-2.0
+
+"""A project tree with BUCK files in subdirectories, as one source tree."""
+
+load("//box:defs.bzl", "box")
+load("//package_system/rpm:defs.bzl", "rpm")
+load("//project:defs.bzl", "project")
+
+_DISTRO = "catalog//:fedora.rawhide.distribution"
+
+_FILES = """\
+.dotdir/.dotfile
+.dotdir/.inner/file
+.dotdir/file
+.dotfile
+BUCK
+file
+source-tree.spec
+sub/.dotdir/file
+sub/.dotfile
+sub/BUCK
+sub/deeper/nested/BUCK
+sub/deeper/nested/file
+sub/file
+sub/link
+sub/plain/file
+"""
+
+project.source_tree(name = "tree")
+
+# The tree must track every file of this package and of its subpackages: dotfiles, files below nested
+# dot directories, and the files of `sub/deeper/nested`, which is a subpackage of a subpackage.
+box.sh_test(
+    name = "source-tree-test",
+    distributed = False,
+    box = "tine//tools:dev.box",
+    script = """
+        diff -u - "$1" <<'FILES'
+{}FILES
+    """.format(_FILES),
+    args = ["$(location :tree)"],
+)
+
+# source-tree.spec copies the source tree into the package. `tree.rpm` is a regular build and `dev.rpm` a
+# dev build. `tree.rpm` and `dev.rpm` read this package directory in place.
+[
+    rpm.package(
+        name = name,
+        distro = _DISTRO,
+        package = "source-tree",
+        buildroot = "catalog//:fedora.rawhide.buildroot",
+        dev = dev,
+        in_place_spec = "source-tree.spec",
+        release = "1",
+        source_date_epoch = 1754006400,
+        source_tree = ":tree",
+        subpackages = ["source-tree"],
+    )
+    for name, dev in (
+        ("tree.rpm", None),
+        ("dev.rpm", True),
+    )
+]
+
+# `tree.rpm` and `dev.rpm` must contain every file of the tree, and `sub/link` must keep its target. A
+# git-ignored file in this directory, such as an editor backup, can add files to the packages, so the test
+# checks only for the expected ones. The build of `dev.rpm` must keep its build directory, which only a dev
+# build does.
+box.sh_test(
+    name = "source-tree-rpm-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = "catalog//:fedora.rawhide.box",
+    script = """
+        [[ -d "$3" ]]
+        expected=$(LC_ALL=C sort <<'FILES'
+{}FILES
+        )
+        for package in "$1" "$2"; do
+            listing=$(
+                rpm -qp --queryformat '[%{{FILEMODES:perms}} %{{FILENAMES}}\\n]' "$package" |
+                    sed -n 's|^[-l][^ ]* /usr/share/source-tree/||p' |
+                    LC_ALL=C sort
+            )
+            missing=$(LC_ALL=C comm -23 <(printf '%s\\n' "$expected") <(printf '%s\\n' "$listing"))
+            if [[ -n "$missing" ]]; then
+                printf '%s lacks:\\n%s\\n' "$package" "$missing" >&2
+                exit 1
+            fi
+            rpm -qp --queryformat '[%{{FILENAMES}} %{{FILELINKTOS}}\\n]' "$package" |
+                grep -qx '/usr/share/source-tree/sub/link file'
+        done
+    """.format(_FILES),
+    args = [
+        "$(location :tree.rpm[source-tree])",
+        "$(location :dev.rpm[source-tree])",
+        "$(location :dev.rpm[build])",
+    ],
+)

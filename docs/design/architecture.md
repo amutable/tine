@@ -252,6 +252,34 @@ tine exports the pinned binary's path as `BUCK2_BINARY`. A tool running under a 
 `tine` wrapper, but directly calls the exported binary (`util.buck2_argv()`), inherits the current
 mounts, and runs against the shared configuration the invoking command already wrote.
 
+### Project source trees
+
+A directory source cannot include a subdirectory that has a `BUCK` file of its own:
+
+    Directory `` of package `tine//project/fixture` may not cover any subpackages, but includes subpackage `sub`.
+
+`project.source_tree()` collects the files of a project the way `prelude/utils/source_listing_impl.bzl`
+does. `project.source_listing()` declares a `source_tree_listing` target in every `BUCK` file. The target
+lists the files of its package and depends on the `source_tree_listing` target of each direct subpackage.
+A build of the tree gets the project path of its package, with the listed files as hidden inputs, and
+reads the directory in place. A copy would get new timestamps whenever an edit makes Buck copy the tree
+again, and a dev build would then recompile everything after every edit.
+
+The list leaves out a few files that the build still sees:
+
+- `glob()` matches a name that starts with a dot only with a pattern component such as `.*`. The listing
+  has patterns for up to four such names in a path relative to the `BUCK` file, and leaves out a file with
+  more.
+- A cell that tine adds below the project root has its own packages, and the listing does not include
+  them.
+- The listing of the root package leaves out `.buckconfig.local`. tine writes the mounts and the address of
+  the cache into it, and as an input it would give a build different cache keys on different machines.
+
+A build of a tree at the project root sees an empty `buck-out`. The sandbox puts the upper and work
+directories of the overlay of the tree in the scratch directory of the action, which is in `buck-out`.
+overlayfs fails a lookup of them through the overlay with `ELOOP`. `source_overlay()` in `rootfs.py`
+therefore mounts a tmpfs over `buck-out` in the overlay.
+
 ### Component model
 
 The package model separates identity and policy from the exact inputs used by an action:
