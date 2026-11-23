@@ -70,7 +70,7 @@ def pack_manifest(
         "blk": tarfile.BLKTYPE,
         "fifo": tarfile.FIFOTYPE,
     }
-    links: dict[int, str] = {}
+    groups = uapi16.hardlink_groups(objects)
     with tarfile.open(out, "w", format=tarfile.PAX_FORMAT) as archive:
         for obj in objects:
             kind = obj["type"]
@@ -88,14 +88,12 @@ def pack_manifest(
                 headers["SCHILY.xattr.user." + name] = data.decode("utf-8", "surrogateescape")
             info.pax_headers = headers
             token = obj.get("inodeToken")
-            if token and token in links:
-                info.type, info.linkname = tarfile.LNKTYPE, links[token]
+            if token and groups[token][0] != obj["name"]:
+                info.type, info.linkname = tarfile.LNKTYPE, "./" + groups[token][0]
             elif kind == "lnk":
                 info.linkname = uapi16.symlink_target(obj)
             elif kind == "reg":
                 info.size = obj["size"]
-            if token:
-                links.setdefault(token, info.name)
             if info.isreg():
                 with content(obj).open("rb") as stream:
                     archive.addfile(info, stream)

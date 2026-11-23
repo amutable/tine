@@ -9,7 +9,7 @@ import json
 import os
 import stat
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -230,6 +230,41 @@ def _b64decode(value: str) -> bytes:
     return base64.b64decode(value.replace("-", "+").replace("_", "/"), validate=True)
 
 
+def tree_objects(
+    tree: Path, found: Sequence[Entry], *, epoch: int, digest: Callable[[Entry], str | None] | None = None
+) -> list[Object]:
+    """List `tree` and the entries `found` below it, with modification times clamped to `epoch`.
+
+    `digest` returns the known SHA-256 of a regular file. A file without one is read.
+    """
+    tokens = hardlink_tokens(found)
+    root = file_object(Entry("", tree, tree.lstat()), epoch=epoch)
+    root.pop("name")
+    root["mediaType"] = MEDIA_TYPE
+    objects = [root]
+    inodes: dict[tuple[int, int], Object] = {}
+    for entry in found:
+        if entry.inode in inodes:
+            obj = inodes[entry.inode].copy()
+            obj["name"] = entry.name
+        else:
+            known = digest(entry) if digest is not None else None
+            obj = inodes[entry.inode] = file_object(
+                entry, epoch=epoch, token=tokens.get(entry.inode), digest=known
+            )
+        objects.append(obj)
+    return objects
+
+
+def hardlink_groups(objects: Sequence[Object]) -> dict[int, list[str]]:
+    """Map each inodeToken of `objects` to the names that share it, in manifest order."""
+    groups: dict[int, list[str]] = {}
+    for obj in objects:
+        if token := obj.get("inodeToken"):
+            groups.setdefault(token, []).append(obj["name"])
+    return groups
+
+
 def symlink_target(obj: Object) -> str:
     return os.fsdecode(_b64decode(obj["contents"][0]["literal"]))
 
@@ -346,10 +381,10 @@ def merge(sources: Sequence[Path], out: Path) -> int:
 
 def renumber(objects: Sequence[Object]) -> None:
     tokens: dict[int, int] = {}
-    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    groups = hardlink_groups(objects)
     for obj in objects:
         token = obj.pop("inodeToken", None)
-        if isinstance(token, int) and counts[token] > 1:
+        if token and len(groups[token]) > 1:
             obj["inodeToken"] = tokens.setdefault(token, len(tokens) + 1)
 
 

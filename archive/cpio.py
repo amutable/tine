@@ -407,14 +407,14 @@ def pack_manifest(
     out: Path,
     epoch: int,
 ) -> None:
-    counts = Counter(obj.get("inodeToken") for obj in objects if obj.get("inodeToken"))
+    groups = uapi16.hardlink_groups(objects)
     kinds = {"fifo": stat.S_IFIFO, "chr": stat.S_IFCHR, "blk": stat.S_IFBLK, "sock": stat.S_IFSOCK}
     with Writer(out, epoch) as w:
         for obj in objects:
             kind = obj["type"]
             name, mtime = obj.get("name", "."), obj["mTimeNSec"] // 10**9
             token = obj.get("inodeToken")
-            link = (token, counts[token]) if token else None
+            link = (token, len(groups[token])) if token else None
             if kind == "reg":
                 w.add_file(name, content(obj), mode=obj["mode"], mtime=mtime, link=link)
             elif kind == "dir":
