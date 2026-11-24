@@ -30,6 +30,18 @@ def _image(image: Dependency, image_format: str) -> Artifact:
     return qcow2[DiskConversionInfo].image
 
 def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
+    for name, size in (("grow", ctx.attrs.grow), ("RAM", ctx.attrs.ram)):
+        if size != None and not regex_match(SIZE_PATTERN, size):
+            fail("image_vm: invalid {} size {!r}".format(name, size))
+    if ctx.attrs.cpus != None and ctx.attrs.cpus < 1:
+        fail("image_vm: cpus must be positive, got {}".format(ctx.attrs.cpus))
+    for name in ctx.attrs.credentials:
+        if not name or ":" in name:
+            fail("image_vm: invalid credential name {!r}".format(name))
+    for argument in ctx.attrs.cmdline_extra:
+        if not argument:
+            fail("image_vm: cmdline_extra arguments cannot be empty")
+
     linux, initrd, cmdline_file = ctx.attrs.linux, ctx.attrs.initrd, ctx.attrs.cmdline_file
 
     # A disk without an ESP has nothing for the firmware to boot, so its own kernel boots directly
@@ -40,62 +52,45 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
         initrd = initrd if initrd != None else direct.initrd
         cmdline_file = cmdline_file if cmdline_file != None else direct.cmdline
 
-    if cmdline_file != None:
-        run = cmd_args(
-            box.run(box = ctx.attrs._box[box.Info], exe = "sh", relaxed = True),
-            "-c",
-            _CMDLINE_FILE_RUNNER,
-            "sh",
-            cmdline_file,
-        )
-    else:
-        run = cmd_args(box.run(box = ctx.attrs._box[box.Info], exe = "systemd-vmspawn", relaxed = True))
-
-    run.add(
-        "--image",
-        _image(ctx.attrs.image, ctx.attrs.image_format),
-        "--image-format={}".format(ctx.attrs.image_format),
-        "--console=native",
-        # Necessary rather than a default: the image is a build output, which the guest must not write.
-        "--ephemeral",
-        "--kvm=yes",
-        "--network-user-mode",
-    )
-
-    if linux != None:
-        run.add(cmd_args(linux, format = "--linux={}"))
-    if initrd != None:
-        run.add(cmd_args(initrd, format = "--initrd={}"))
-
-    if ctx.attrs.grow != None:
-        if not regex_match(SIZE_PATTERN, ctx.attrs.grow):
-            fail("image_vm: invalid grow size {!r}".format(ctx.attrs.grow))
-
-        # vmspawn creates the ephemeral overlay at this size, and leaves the qcow2 alone.
-        run.add("--grow-image={}".format(ctx.attrs.grow))
-
-    if ctx.attrs.ram != None:
-        if not regex_match(SIZE_PATTERN, ctx.attrs.ram):
-            fail("image_vm: invalid RAM size {!r}".format(ctx.attrs.ram))
-        run.add("--ram={}".format(ctx.attrs.ram))
-
-    if ctx.attrs.cpus != None:
-        if ctx.attrs.cpus < 1:
-            fail("image_vm: cpus must be positive, got {}".format(ctx.attrs.cpus))
-        run.add("--cpus={}".format(ctx.attrs.cpus))
-
-    if ctx.attrs.secure_boot:
-        # OVMF variable store starts in setup mode and sd-boot enrolls the
-        # image's loader/keys/auto keys on first boot.
-        run.add("--secure-boot=yes")
+    image = _image(ctx.attrs.image, ctx.attrs.image_format)
 
     # Unset, Secure Boot brings a TPM for the expected-PCR policy to be measured into. Always say
     # which: left to itself, vmspawn attaches one whenever swtpm is installed, which the tools box does.
     tpm = ctx.attrs.tpm if ctx.attrs.tpm != None else ctx.attrs.secure_boot
-    run.add("--tpm={}".format("yes" if tpm else "no"))
+
+    # The options that make the machine, except for its credentials; the runner adds those and the
+    # interactive ones.
+    options = cmd_args(
+        "--image",
+        image,
+        "--image-format={}".format(ctx.attrs.image_format),
+        # Necessary rather than a default: the image is a build output, which the guest must not write.
+        "--ephemeral",
+        "--kvm=yes",
+    )
+
+    if linux != None:
+        options.add(cmd_args(linux, format = "--linux={}"))
+    if initrd != None:
+        options.add(cmd_args(initrd, format = "--initrd={}"))
+
+    if ctx.attrs.grow != None:
+        # vmspawn creates the ephemeral overlay at this size, and leaves the qcow2 alone.
+        options.add("--grow-image={}".format(ctx.attrs.grow))
+    if ctx.attrs.ram != None:
+        options.add("--ram={}".format(ctx.attrs.ram))
+    if ctx.attrs.cpus != None:
+        options.add("--cpus={}".format(ctx.attrs.cpus))
+
+    if ctx.attrs.secure_boot:
+        # OVMF variable store starts in setup mode and sd-boot enrolls the
+        # image's loader/keys/auto keys on first boot.
+        options.add("--secure-boot=yes")
+
+    options.add("--tpm={}".format("yes" if tpm else "no"))
 
     if ctx.attrs.coco != None:
-        run.add("--coco={}".format(ctx.attrs.coco))
+        options.add("--coco={}".format(ctx.attrs.coco))
 
     directories = {}
     for dep in ctx.attrs.extensions:
@@ -115,7 +110,7 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
             if name in files:
                 fail("image_vm: duplicate {} DDI {!r}".format(directory, name))
             files[name] = disk
-        run.add(
+        options.add(
             cmd_args(
                 ctx.actions.copied_dir(directory, files),
                 # The binds can't go below /run. vmspawn marks binds x-initrd.mount, so the initrd
@@ -125,6 +120,22 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
             ),
         )
 
+    # After everything tine passes, so that an option vmspawn takes the last value of overrides it.
+    options.add(ctx.attrs.vmspawn_args)
+
+    if cmdline_file != None:
+        run = cmd_args(
+            box.run(box = ctx.attrs._box[box.Info], exe = "sh", relaxed = True),
+            "-c",
+            _CMDLINE_FILE_RUNNER,
+            "sh",
+            cmdline_file,
+        )
+    else:
+        run = cmd_args(box.run(box = ctx.attrs._box[box.Info], exe = "systemd-vmspawn", relaxed = True))
+
+    # The interactive options come first, so that the target's vmspawn_args override them, too.
+    run.add("--console=native", "--network-user-mode")
     if ctx.attrs.autologin != None:
         if not ctx.attrs.autologin:
             fail("image_vm: autologin user cannot be empty")
@@ -136,23 +147,15 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
             "--set-credential=login.noauth:yes",
             "--set-credential=passwd.hashed-password.root:!*",
         )
-
     for name in sorted(ctx.attrs.credentials):
-        if not name or ":" in name:
-            fail("image_vm: invalid credential name {!r}".format(name))
         run.add("--set-credential={}:{}".format(name, ctx.attrs.credentials[name]))
-
-    # After everything tine passes, so that an option vmspawn takes the last value of overrides it.
-    run.add(ctx.attrs.vmspawn_args)
+    run.add(options)
 
     # vmspawn takes extra kernel command line arguments as its own trailing arguments, and picks how
     # to deliver them from what it is booting: an SMBIOS OEM string each for the stub and the boot
     # loader for a UKI, `-append` for a bare kernel image. Handing it the arguments rather than the
     # OEM strings also lets it read them, which is how it knows not to add a root= of its own.
-    for argument in ctx.attrs.cmdline_extra:
-        if not argument:
-            fail("image_vm: cmdline_extra arguments cannot be empty")
-        run.add(argument)
+    run.add(ctx.attrs.cmdline_extra)
     return [DefaultInfo(), RunInfo(args = run)]
 
 _image_vm = rule(
