@@ -15,6 +15,17 @@ load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "sys
 # is not, as a command line can carry patterns such as systemd.image_filter=usr=AOS_*.
 _CMDLINE_FILE_RUNNER = 'set -f; cmdline=$(cat "$1"); shift; exec systemd-vmspawn $cmdline "$@"'
 
+# The longest socket path vmspawn creates for a VM is the one of virtiofsd:
+#
+#     /run/user/<uid>/systemd/vmspawn/<target name>-<16 hex>/sock-<16 hex>
+#
+# Taking 10 digits for UID max (as some LDAP seem to use) and 16 for target and sock suffix, we
+# have:
+#     len("/run/user//systemd/vmspawn/-/sock-") + 10 + 16 + 16 = 76
+#
+# A unix socket path has at most 107 bytes.
+_MACHINE_NAME_MAX = 107 - 76
+
 def _image(image: Dependency, image_format: str) -> Artifact:
     if image_format == "raw":
         disk = image[DdiInfo].disk
@@ -40,9 +51,17 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     else:
         run = cmd_args(box.run(box = ctx.attrs._box[box.Info], exe = "systemd-vmspawn", relaxed = True))
 
+    # vmspawn names the machine after the file name of the image, and adds a random suffix to the name
+    # of an ephemeral one so that several can run at once. A disk's file name grows with its version,
+    # until the socket paths vmspawn derives from the machine name are too long for a unix socket. A
+    # link named after the target keeps the name short, and the suffix.
+    if len(ctx.label.name) > _MACHINE_NAME_MAX:
+        fail("image_vm: name {!r} is longer than {} characters".format(ctx.label.name, _MACHINE_NAME_MAX))
+    image = ctx.actions.symlink_file(ctx.label.name, _image(ctx.attrs.image, ctx.attrs.image_format))
+
     run.add(
         "--image",
-        _image(ctx.attrs.image, ctx.attrs.image_format),
+        image,
         "--image-format={}".format(ctx.attrs.image_format),
         "--console=native",
         # Necessary rather than a default: the image is a build output, which the guest must not write.
