@@ -31,9 +31,10 @@ class Spec(finalize.ImageSpec):
     manifest: str | None
 
 
-def _pack(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int) -> None:
+def _pack(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int, *, compressed: bool) -> None:
     if fmt == "tar":
-        tar.pack_manifest(snapshot.objects, snapshot.content, out)
+        # A compressed archive shares no data blocks, so aligning its file data only makes it larger.
+        tar.pack_manifest(snapshot.objects, snapshot.content, out, align=not compressed)
     elif fmt == "cpio":
         cpio.pack_manifest(snapshot.objects, snapshot.content, out, epoch)
     else:
@@ -46,7 +47,7 @@ def _archive(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int, compres
             util.fail("archive: the snapshot format cannot be compressed")
         uapi16.save(snapshot, out)
     elif compression == "none":
-        _pack(snapshot, out, fmt, epoch)
+        _pack(snapshot, out, fmt, epoch, compressed=False)
     elif compression != "zstd":
         util.fail(f"archive: unknown compression {compression!r}")
     else:
@@ -55,7 +56,7 @@ def _archive(snapshot: uapi16.Snapshot, out: Path, fmt: str, epoch: int, compres
         # uncompressed archive.
         with tempfile.TemporaryDirectory(dir="/var/tmp") as scratch:
             raw = Path(scratch) / out.name
-            _pack(snapshot, raw, fmt, epoch)
+            _pack(snapshot, raw, fmt, epoch, compressed=True)
             util.compress_zstd(raw, out)
 
 
