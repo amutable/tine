@@ -3,6 +3,7 @@
 
 """The conventional Fedora distribution declaration."""
 
+load("//:settings.bzl", "SETTINGS")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:buildroot.bzl", "buildroot")
@@ -145,12 +146,21 @@ def _release(
         root = True,
         visibility = visibility,
     )
+    # A local repository in SETTINGS.package_manager can contain packages that the buildroot builds. Buck
+    # fails with a dependency cycle if the buildroot installs packages with a package manager that contains
+    # the repository.
+    package_manager(
+        name = name + ".buildroot.package-manager",
+        target_compatible_with = distribution.serves(name, architectures, in_box = True),
+        release = ":" + name + ".release",
+        repository_priorities = repository_priorities,
+        visibility = visibility,
+    )
     package_manager(
         name = name + ".package-manager",
         target_compatible_with = distribution.serves(name, architectures, in_box = True),
-        release = ":" + name + ".release",
-        additional_repositories = additional_repositories,
-        repository_priorities = repository_priorities,
+        base = ":" + name + ".buildroot.package-manager",
+        additional_repositories = SETTINGS.package_manager.additional_repositories,
         visibility = visibility,
     )
     buildroot(
@@ -161,7 +171,7 @@ def _release(
         # tools box, so the tools box can install a package that the buildroot builds.
         box = ":" + name + ".box",
         incoming_transition = ":" + name + ".distribution",
-        package_manager = ":" + name + ".package-manager",
+        package_manager = ":" + name + ".buildroot.package-manager",
         package_set = "buildroot",
         visibility = visibility,
     )

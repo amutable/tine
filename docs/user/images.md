@@ -109,9 +109,10 @@ root box of the release that the build chooses, and images build in it. The tool
 the built images. How a box bootstraps itself is described in [architecture.md](../design/architecture.md).
 
 The `settings.bzl` file of the `settings` cell defines a `SETTINGS` struct. Its `tools_box` field lists the
-packages and local repositories that the tools box installs in addition to its own. tine's own `settings`
-cell lists none. To add some, declare a `settings` cell of your own in `tine.toml`. Your project keeps
-tine's catalog:
+packages and local repositories that the tools box installs in addition to its own. Its `package_manager`
+field lists the repositories that the package manager of each release, `<family>.<release>.package-manager`,
+installs packages from in addition to the repositories of the release. tine's own `settings` cell lists none.
+To add some, declare a `settings` cell of your own in `tine.toml`. Your project keeps tine's catalog:
 
 ```toml
 [buckconfig.cells]
@@ -120,25 +121,36 @@ tine = "tine"
 settings = "tine-settings"
 ```
 
-Your `settings.bzl` only needs the fields that you change. To build images with a locally built systemd,
-list its repository in `tine-settings/settings.bzl`:
+Your `settings.bzl` only needs the fields that you change. To build images with a locally built systemd and
+to install that systemd in the images, list its repository in the `package_manager` and `tools_box` fields
+of `tine-settings/settings.bzl`:
 
 ```Starlark
 load("@tine//distribution:defs.bzl", "distribution")
 
 SETTINGS = struct(
+    package_manager = struct(
+        additional_repositories = distribution.select({
+            "DEFAULT": [],
+            "fedora.rawhide": ["root//packages:systemd.repository"],
+        }),
+    ),
     tools_box = struct(
         additional_repositories = distribution.select({
             "DEFAULT": [],
-            "fedora": ["root//packages:systemd.repository"],
+            "fedora.rawhide": ["root//packages:systemd.repository"],
         }),
     ),
 )
 ```
 
-The tools box prefers the packages of a local repository over those of its release (see
-[box.md](box.md#installing-locally-built-packages)). The repository has to be visible to
-`tine//distribution`. A repository is built for one distribution, so select it per distribution.
+If a local repository and the release contain the same package, the tools box and the package manager of the
+release install the package from the local repository (see
+[box.md](box.md#installing-locally-built-packages)). A buildroot installs packages without the repositories
+of `SETTINGS.package_manager`. The repository has to be visible to `tine//distribution` and to the root
+package of the `catalog` cell. A repository is built for one release, so key it on that release, such as
+`fedora.rawhide`. Give the select an empty `DEFAULT` list. Without `DEFAULT`, `buck build catalog//...`
+fails, because it builds the package manager of every release without choosing a distribution.
 
 ## Commands
 
@@ -1461,7 +1473,9 @@ image.archive(
 ```
 
 `distribution.package_manager()` returns that package manager. To add repositories of your own, pass it as
-the `base` of a `package.manager()`, and pass the result as the image's `package_manager`.
+the `base` of a `package.manager()`, and pass the result as the image's `package_manager`. To add
+repositories to the package manager of every release, list them in `SETTINGS.package_manager` (see
+[Concepts](#concepts)).
 
 A package that builds for other releases, or needs more per release, declares its own table in its
 `PACKAGE` file. Each entry's `release` names a release of the catalog. `package_manager` defaults to the

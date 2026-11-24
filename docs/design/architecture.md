@@ -78,9 +78,11 @@ tine loads `releases.bzl` from every catalog. It lists the releases that images 
 
 The `settings` cell configures tine's own targets. Its `settings.bzl` defines one `SETTINGS` struct. The
 `tools_box` field of `SETTINGS` lists the packages and local repositories that the tools box installs in
-addition to its own. tine's `settings` cell is the `settings/` directory of the tine checkout. A project
-replaces it like the catalog, by declaring its own `settings` cell, and `bin/tine` writes the fallback cell
-in the same way. A project can therefore change the tools box without replacing tine's catalog.
+addition to its own. The `package_manager` field lists the repositories that the package manager of each
+release installs packages from in addition to the repositories of the release. tine's `settings` cell is the
+`settings/` directory of the tine checkout. A project replaces it like the catalog, by declaring its own
+`settings` cell, and `bin/tine` writes the fallback cell in the same way. A project can therefore change the
+tools box and the package managers without replacing tine's catalog.
 
 Starlark has no optional `load()`, and Buck fails on a missing file, symbol or struct field. tine therefore
 loads only `SETTINGS` from the cell. tine's targets read the settings from `tine//:settings.bzl`, which adds
@@ -533,6 +535,13 @@ release it may operate on.
 A buildroot runs in the root box of its release. rpmbuild and the package manager run chrooted in the
 buildroot, so a buildroot action only needs Python and the package system outside of it. A buildroot doesn't
 depend on the tools box, so the tools box can contain packages that the project builds.
+
+`<family>.<release>.package-manager` installs packages from the repositories of the release and of
+`SETTINGS.package_manager`. A buildroot installs packages with
+`<family>.<release>.buildroot.package-manager`, which leaves out the repositories of
+`SETTINGS.package_manager`. A local repository in `SETTINGS.package_manager` can contain packages that the
+buildroot builds. If the buildroot installed packages from the repository, Buck would fail with a dependency
+cycle.
 
 A box runs on the build host. An image, a buildroot, a VM runner, a test and the AMI of a disk take their box
 as an ordinary dependency, so that the box takes their distribution. A box whose release follows the
