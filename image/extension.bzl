@@ -78,9 +78,7 @@ EXTENSION_SCOPES = ["system", "initrd", "portable"]
 # refuses "+".
 _NAME_PATTERN = "^[a-zA-Z0-9][a-zA-Z0-9.-]*$"
 
-# erofs dedup keys off the filesystem UUID, so combined with a stable seed these keep the DDI
-# reproducible.
-_MKFS_OPTIONS = {"erofs": ["--quiet", "-zzstd,level=3", "-C524288", "-Efragments,ztailpacking,dedupe"]}
+_MKFS_OPTIONS = {"erofs": ["--quiet"]}
 
 def ddi_names(what: str, name: str, version: str, arch: str) -> (str, str):
     """Return the name a DDI is published under, and the architecture its release file names.
@@ -118,6 +116,9 @@ def _declare_preset(
     copy_files: list[str],
     seed: str | None,
     verity_key: SigningKeyInfo | None,
+    compression: str | None,
+    compression_level: str | None,
+    compress: bool,
     extension: dict[str, typing.Any] | None = None,
     operations: list[LayerOperation] = [],
     extra: list[Provider] = [],
@@ -131,11 +132,15 @@ def _declare_preset(
     """
     # The partitions match the definitions systemd-repart --make-ddi uses, so that a DDI does not
     # depend on the systemd version of the box that builds it.
+    # With compression off, the DDI is uncompressed. mkfs.erofs then copies the data of the files with
+    # copy_file_range(), and on btrfs or XFS the DDI shares the data blocks of the image's files.
     root = partition(
         type = "root",
         filesystem = "erofs",
         copy_files = copy_files,
         minimize = "best",
+        compression = compression,
+        compression_level = compression_level,
         verity = "data",
         verity_match_key = "root",
     )
@@ -147,6 +152,7 @@ def _declare_preset(
         definitions = verity_partitions(root, signed = verity_key != None),
         basename = filename,
         mkfs_options = _MKFS_OPTIONS,
+        compress = compress,
         seed = seed,
         # A merged extension must not replace the host's package database.
         strip_pkgdb = extension != None,
@@ -185,6 +191,9 @@ def declare_extension(
     release: dict[str, str] = {},
     seed: str | None = None,
     verity_key: SigningKeyInfo | None = None,
+    compression: str | None,
+    compression_level: str | None,
+    compress: bool,
 ) -> list[Provider]:
     """Declare an extension DDI with one extension-release file per class.
 
@@ -249,6 +258,9 @@ def declare_extension(
         copy_files = copy_files,
         seed = seed,
         verity_key = verity_key,
+        compression = compression,
+        compression_level = compression_level,
+        compress = compress,
         extension = {
             "identity": str(ctx.label),
             "name": name,
@@ -280,6 +292,9 @@ def declare_portable(
     version: str,
     seed: str | None = None,
     verity_key: SigningKeyInfo | None = None,
+    compression: str | None,
+    compression_level: str | None,
+    compress: bool,
 ) -> list[Provider]:
     """Declare a portable service DDI that contains the whole tree of `image`."""
     basename, systemd_arch = ddi_names("portable", name, version, arch)
@@ -298,6 +313,9 @@ def declare_portable(
         copy_files = ["/"],
         seed = seed,
         verity_key = verity_key,
+        compression = compression,
+        compression_level = compression_level,
+        compress = compress,
         extra = [PortableInfo()],
     )
 
@@ -307,6 +325,16 @@ _COMMON_ATTRS = {
         default = architecture.configured(),
         doc = "architecture the image runs on, in its name and the ARCHITECTURE of an extension, "
         + "\"_any\" publishes the DDI as '..._all' and sets ARCHITECTURE=_any",
+    ),
+    "compression": attrs.option(
+        attrs.string(),
+        default = None,
+        doc = 'algorithm that mkfs.erofs compresses the root partition with when compression is on, zstd if unset; "none" keeps it uncompressed',
+    ),
+    "compression_level": attrs.option(
+        attrs.string(),
+        default = None,
+        doc = "level of `compression` when compression is on, 3 if neither is set",
     ),
     "seed": attrs.option(
         attrs.string(),

@@ -57,7 +57,9 @@ Cell layout and architecture: [the design plan](docs/design/architecture.md). Us
   lock matches.
 - **Example image digests:** `examples/image:reproducibility-test` asserts the digests committed in
   `examples/image/expected.json`, and on a failure writes `actual.<arch>.json` beside it; `buck run
-  tine//examples/image:refresh-expected` accepts them (usually with `--amend`). Anything that can alter
+  tine//examples/image:refresh-expected` accepts them (usually with `--amend`). The digests are those of
+  compressed images, so the test only runs with `-c tine.compression=true`. `tools/ci.sh` turns
+  compression on for the whole run. Anything that can alter
   what the example images build needs this: a package they install, an image or UKI rule, a driver that
   writes into a root. The test carries the `image` label, so `check` does not run it and only CI's
   image step catches a stale file.

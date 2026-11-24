@@ -33,6 +33,7 @@ DEFINITION = {
     "size_max": None,
     "minimize": "best",
     "compression": "zstd",
+    "compression_level": None,
     "verity": "data",
     "verity_match_key": "usr",
 }
@@ -47,6 +48,66 @@ class TestSplitName(unittest.TestCase):
     def test_no_split_name_without_split(self) -> None:
         rendered = ddi.Definition.parse(DEFINITION).render(split=False)
         self.assertNotIn("SplitName", rendered)
+
+
+class TestCompressionLevel(unittest.TestCase):
+    def test_renders_a_compression_level(self) -> None:
+        # A set compression_level must reach repart as CompressionLevel=, and a definition without a
+        # level must render none.
+        rendered = ddi.Definition.parse(DEFINITION | {"compression_level": "3"}).render(split=False)
+        self.assertIn("CompressionLevel=3", rendered.splitlines())
+        self.assertNotIn("CompressionLevel", ddi.Definition.parse(DEFINITION).render(split=False))
+
+
+class TestCompressed(unittest.TestCase):
+    def test_drops_the_compression_of_an_uncompressed_run(self) -> None:
+        # Without compression, a definition renders no Compression= or CompressionLevel=, even when it
+        # names an algorithm and a level.
+        definition = ddi.Definition.parse(DEFINITION | {"compression_level": "19"})
+        rendered = ddi.compressed(definition, False).render(split=False)
+        self.assertNotIn("Compression", rendered)
+
+    def test_compresses_erofs_without_an_algorithm_with_zstd(self) -> None:
+        # With compression, an erofs definition without an algorithm gets zstd at level 3, and a
+        # definition that names an algorithm and a level keeps them.
+        plain = ddi.Definition.parse(DEFINITION | {"compression": None})
+        lines = ddi.compressed(plain, True).render(split=False).splitlines()
+        self.assertIn("Compression=zstd", lines)
+        self.assertIn("CompressionLevel=3", lines)
+        chosen = ddi.Definition.parse(DEFINITION | {"compression": "lz4hc", "compression_level": "12"})
+        self.assertEqual(ddi.compressed(chosen, True), chosen)
+
+    def test_keeps_the_level_of_a_partition_without_an_algorithm(self) -> None:
+        # An erofs definition with a level but without an algorithm gets zstd at that level.
+        leveled = ddi.Definition.parse(DEFINITION | {"compression": None, "compression_level": "19"})
+        lines = ddi.compressed(leveled, True).render(split=False).splitlines()
+        self.assertIn("Compression=zstd", lines)
+        self.assertIn("CompressionLevel=19", lines)
+
+    def test_keeps_a_partition_with_compression_none_uncompressed(self) -> None:
+        # compression = "none" keeps a partition uncompressed in a compressed run.
+        kept = ddi.Definition.parse(DEFINITION | {"compression": "none"})
+        self.assertNotIn("Compression", ddi.compressed(kept, True).render(split=False))
+
+    def test_leaves_other_filesystems_uncompressed(self) -> None:
+        # The default algorithm only applies to erofs. A vfat ESP stays without Compression=.
+        esp = ddi.Definition.parse(DEFINITION | {"filesystem": "vfat", "compression": None})
+        self.assertNotIn("Compression", ddi.compressed(esp, True).render(split=False))
+
+
+class TestCompressedErofs(unittest.TestCase):
+    def test_tunes_only_runs_whose_erofs_partitions_are_all_compressed(self) -> None:
+        # The tuning options make mkfs.erofs switch an uncompressed partition to chunk-based
+        # deduplication. A compressed run with one partition that keeps compression = "none" must not
+        # get them, and a run whose erofs partitions are all compressed must.
+        def written(compression: str | None) -> ddi.WrittenPartition:
+            definition = ddi.compressed(
+                ddi.Definition.parse(DEFINITION | {"compression": compression}), True
+            )
+            return ddi.WrittenPartition(definition, None, None, None)
+
+        self.assertTrue(ddi._compressed_erofs([written(None), written("zstd")]))
+        self.assertFalse(ddi._compressed_erofs([written(None), written("none")]))
 
 
 class TestCopyPartition(unittest.TestCase):
@@ -92,11 +153,27 @@ class TestCopyPartition(unittest.TestCase):
 class TestMkfsEnvironment(unittest.TestCase):
     def test_records_erofs_digests_without_options(self) -> None:
         self.assertEqual(
-            ddi.mkfs_environment({}), {"SYSTEMD_REPART_MKFS_OPTIONS_EROFS": "--xattr-inode-digest"}
+            ddi.mkfs_environment({}, compressed_erofs=False),
+            {"SYSTEMD_REPART_MKFS_OPTIONS_EROFS": "--xattr-inode-digest"},
+        )
+
+    def test_tunes_compressed_erofs_before_the_options_of_the_caller(self) -> None:
+        # A run whose erofs partitions are all compressed gets the options that make them small. The
+        # options of the caller come after them, so that mkfs.erofs takes the value of the caller for
+        # an option that is given twice.
+        environment = ddi.mkfs_environment({"erofs": ["-C65536"]}, compressed_erofs=True)
+        self.assertEqual(
+            environment,
+            {
+                "SYSTEMD_REPART_MKFS_OPTIONS_EROFS": "-C524288 -Efragments,ztailpacking,dedupe -C65536 "
+                "--xattr-inode-digest"
+            },
         )
 
     def test_appends_the_digest_to_erofs_options(self) -> None:
-        environment = ddi.mkfs_environment({"erofs": ["-zzstd", "-C524288"], "vfat": ["--invariant"]})
+        environment = ddi.mkfs_environment(
+            {"erofs": ["-zzstd", "-C524288"], "vfat": ["--invariant"]}, compressed_erofs=False
+        )
         self.assertEqual(
             environment,
             {
@@ -106,7 +183,9 @@ class TestMkfsEnvironment(unittest.TestCase):
         )
 
     def test_keeps_a_digest_name_the_caller_picked(self) -> None:
-        environment = ddi.mkfs_environment({"erofs": ["--xattr-inode-digest=user.digest"]})
+        environment = ddi.mkfs_environment(
+            {"erofs": ["--xattr-inode-digest=user.digest"]}, compressed_erofs=False
+        )
         self.assertEqual(
             environment, {"SYSTEMD_REPART_MKFS_OPTIONS_EROFS": "--xattr-inode-digest=user.digest"}
         )

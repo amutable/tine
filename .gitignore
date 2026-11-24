@@ -14,6 +14,7 @@
 /.buckconfig.*.tmp
 /.buckconfig.d/tine-mounts
 /.buckconfig.d/tine-box
+/.buckconfig.d/tine-compression
 /tine.local.toml
 .claude/settings.local.json
 

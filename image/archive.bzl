@@ -18,7 +18,7 @@ COMPRESSIONS = ["none", "zstd"]
 _COMPRESSION_EXT = {"none": "", "zstd": ".zst"}
 
 ImageArchiveInfo = provider(
-    doc = "A deterministic tar or newc cpio archive of a logical image, compressed as declared.",
+    doc = "A deterministic tar or newc cpio archive of a logical image, compressed as declared when compression is on.",
     fields = {
         "archive": provider_field(Artifact),
         "format": provider_field(str),

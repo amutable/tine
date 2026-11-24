@@ -1441,9 +1441,16 @@ cpio uses whole seconds. The cpio reader/writer aligns regular-file payloads and
 possible so large archives can share extents on reflink-capable filesystems. `compression = "zstd"`
 compresses the finished archive in the same action, so the uncompressed form never becomes a Buck artifact;
 zstd's multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The
-initrd uses it, while the kernel-modules cpio that `uki.py` appends stays raw because the distribution
-already ships each module compressed; the kernel unpacks the concatenation as independently compressed
-segments.
+initrd uses it when compression is on, while the kernel-modules cpio that `uki.py` appends stays raw because
+the distribution already ships each module compressed; the kernel unpacks the concatenation as independently
+compressed segments.
+
+Compression is on when `[tine] compression = true` is set. Every image rule's macro reads the setting into
+its `compression_enabled` attribute, so turning it on changes attributes and not the configuration, and the
+layers of the images stay cached.
+With compression off, the `compression` attributes of erofs partitions, extensions, initrds and archives have
+no effect, so a development build spends no time compressing and its uncompressed outputs share data blocks
+with the snapshot blobs.
 
 `declare_ddi()` in `ddi.bzl` deliberately distinguishes `definitions` from `partitions`. Definitions describe
 new partitions to populate directly from `image.ImageInfo`: repart reads a temporary root reconstructed
@@ -1476,7 +1483,7 @@ certificate.
 A bootable `image.disk()` with an ESP composes:
 
 ```text
-base initrd package image (zstd cpio)
+base initrd package image (cpio)
               ├──────┐
 root filesystem layer ──> identity layer ──> split /usr + verity ──> hash ──> versioned UKIs
                                 │                                               │
@@ -1512,7 +1519,8 @@ pointing to systemd and `/etc/initrd-release` pointing to `/etc/os-release`, ins
 never means restating what it already does, and `install_docs` and `install_langs` invert the defaults an OS
 image wants, since documentation and translations only cost an initrd boot memory. It generates before it
 prunes, so the hardware database it ships is compiled from the sources it then drops. The rule archives the
-image into the cpio itself, at the `compression` it declares, and returns both as `image.InitrdInfo`
+image into the cpio itself, at the `compression` it declares when compression is on, and returns both as
+`image.InitrdInfo`
 alongside the image's own providers. That cpio omits the package database from the paths the image's package
 system declares: nothing in an initrd resolves a dependency or verifies a package, and the kernel unpacks the
 whole cpio into tmpfs, so shipping it would only cost boot memory. The `[manifest]` view describes the cpio
@@ -1546,7 +1554,8 @@ directory into `EFI/Linux` and includes the operations returned by `image.ops.in
 create the ESP path, run the box's `bootctl` with its paths in the command environment, and remove the
 random seed. The final repart action creates the ESP while copying the previously split system partitions
 into the same disk. It splits nothing itself: the system partitions arrive already split, and nothing updates
-the ESP as a partition. The default system partition is a compressed EROFS `/usr` protected by
+the ESP as a partition. The default system partition is an EROFS `/usr`, compressed only when compression is
+on, protected by
 dm-verity; the generated `usrhash=` is embedded in every UKI. A caller places other files on the ESP, such
 as device trees or bootloader entries, with `image.ops.copy()` operations to `/boot` or `/efi` in `ops`. The
 system partitions leave out what `/boot` and `/efi` contain, so the files are only on the ESP, also with a
@@ -1581,7 +1590,7 @@ supply-chain metadata, and constituents are lazy subtargets:
 ├── [sbom]
 │   ├── [spdx]
 │   └── [cyclonedx]
-├── [initrd]                    # default output: zstd cpio
+├── [initrd]                    # default output: cpio
 │   ├── [manifest]
 │   ├── [pkgdb]
 │   └── [sbom]

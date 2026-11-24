@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Self, TypedDict
 
@@ -23,6 +23,10 @@ import util
 import finalize
 import storage
 import uapi16
+
+# The algorithm of an erofs partition without `compression` in a compressed run, and its level when the
+# partition sets no `compression_level` either.
+_EROFS_COMPRESSION = ("zstd", "3")
 
 _SEED_NAMESPACE = uuid.UUID("5af2de99-4f9f-4e0b-a04b-bde36b068c4f")
 
@@ -53,9 +57,19 @@ def _key_arguments(signing: KeySpec | None) -> list[str]:
     return arguments
 
 
-def mkfs_environment(options: dict[str, list[str]]) -> dict[str, str]:
-    """Return the systemd-repart environment that passes `options` to mkfs, per filesystem."""
+def mkfs_environment(options: dict[str, list[str]], *, compressed_erofs: bool) -> dict[str, str]:
+    """Return the systemd-repart environment that passes `options` to mkfs, per filesystem.
+
+    `compressed_erofs` is set when every erofs partition of the run is compressed.
+    """
     erofs = options.get("erofs", [])
+    if compressed_erofs:
+        # -C524288 and -Efragments,ztailpacking,dedupe make a compressed erofs partition substantially
+        # smaller. The options of the caller come after them and override them. An uncompressed
+        # partition must not get -Ededupe. With -Ededupe, mkfs.erofs switches to chunk-based
+        # deduplication and reads the file data into a separate blob first. The partition then no longer
+        # shares the data blocks of the image's files.
+        erofs = ["-C524288", "-Efragments,ztailpacking,dedupe", *erofs]
     # The kernel shares the page cache of identical files between erofs images mounted with
     # inode_share, but only for images that record a digest of each file.
     if not any(option.startswith("--xattr-inode-digest") for option in erofs):
@@ -119,6 +133,8 @@ class Spec(finalize.ImageSpec):
     manifest: str | None
     # Filesystem -> the options mkfs is given for it.
     mkfs_options: dict[str, list[str]]
+    # Whether compression is on. Then each partition is compressed as compressed() says.
+    compress: bool
     extension: ExtensionSpec | None
 
 
@@ -133,6 +149,7 @@ class Definition:
     size_max: str | int | None
     minimize: str | None
     compression: str | None
+    compression_level: str | int | None
     verity: str | None
     verity_match_key: str | None
 
@@ -148,6 +165,7 @@ class Definition:
             size_max=value["size_max"],
             minimize=value["minimize"],
             compression=value["compression"],
+            compression_level=value["compression_level"],
             verity=value["verity"],
             verity_match_key=value["verity_match_key"],
         )
@@ -165,6 +183,7 @@ class Definition:
         _setting(lines, "SizeMaxBytes", self.size_max)
         _setting(lines, "Minimize", self.minimize)
         _setting(lines, "Compression", self.compression)
+        _setting(lines, "CompressionLevel", self.compression_level)
         _setting(lines, "Verity", self.verity)
         _setting(lines, "VerityMatchKey", self.verity_match_key)
         for copy in self.copy_files:
@@ -354,6 +373,27 @@ def write_root_hash(rows: list[dict[str, Any]], output: Path) -> None:
     output.write_text(hashes.pop() + "\n")
 
 
+def compressed(definition: Definition, compress: bool) -> Definition:
+    """Return `definition` with the compression it gets in a run with `compress`.
+
+    `compression = "none"` keeps a partition uncompressed in a compressed run.
+    """
+    if not compress or definition.compression == "none":
+        return replace(definition, compression=None, compression_level=None)
+    if definition.filesystem == "erofs" and definition.compression is None:
+        algorithm, level = _EROFS_COMPRESSION
+        return replace(
+            definition, compression=algorithm, compression_level=definition.compression_level or level
+        )
+    return definition
+
+
+def _compressed_erofs(written: list[WrittenPartition]) -> bool:
+    """Return whether the run writes erofs partitions and compresses every one of them."""
+    erofs = [partition.definition for partition in written if partition.definition.filesystem == "erofs"]
+    return bool(erofs) and all(definition.compression is not None for definition in erofs)
+
+
 def _repart(
     tree: Path,
     definitions: Path,
@@ -362,6 +402,7 @@ def _repart(
     seed: uuid.UUID,
     signing: KeySpec | None,
     mkfs_options: dict[str, list[str]],
+    compressed_erofs: bool,
     architecture: str | None,
     split: bool = False,
 ) -> list[dict[str, Any]]:
@@ -387,7 +428,7 @@ def _repart(
     if split:
         cmd.append("--split=yes")
     cmd += _key_arguments(signing)
-    env = os.environ | mkfs_environment(mkfs_options)
+    env = os.environ | mkfs_environment(mkfs_options, compressed_erofs=compressed_erofs)
     result = subprocess.run([*cmd, str(image)], check=True, env=env, stdout=subprocess.PIPE, text=True)
     return json.loads(result.stdout)
 
@@ -400,7 +441,7 @@ def main(argv: list[str] | None = None) -> None:
     raw_definitions = [entry["definition"] for entry in spec["definitions"]]
     written = [
         WrittenPartition(
-            Definition.parse(entry["definition"]),
+            compressed(Definition.parse(entry["definition"]), spec["compress"]),
             Path(entry["blocks"]) if entry["blocks"] else None,
             Path(entry["metadata"]) if entry["metadata"] else None,
             Path(entry["manifest"]) if entry["manifest"] else None,
@@ -490,6 +531,7 @@ def main(argv: list[str] | None = None) -> None:
             seed=seed,
             signing=spec["signing"],
             mkfs_options=spec["mkfs_options"],
+            compressed_erofs=_compressed_erofs(written),
             architecture=spec["architecture"],
             split=bool(splits),
         )

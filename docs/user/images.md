@@ -363,10 +363,10 @@ image.disk(
 
 `packages`, `package_sets`, and `ops` are added to the defaults, never replace them: the release's `initrd`
 package set and the operations every initrd needs (`/init`, `/etc/initrd-release`, and the databases an
-initrd never reads) apply either way. `compression` picks how the cpio the UKI carries is packed, default
-`zstd`, and `strip_pkgdb` (default true) keeps the package database out of it while `[pkgdb]` still reports
-it from the tree. `install_docs` and `install_langs` default the other way round from an OS image, since
-documentation and translations only cost an initrd boot memory.
+initrd never reads) apply either way. `compression` picks how the cpio the UKI contains is packed when
+compression is on (see "Compression"), default `zstd`, and `strip_pkgdb` (default true) keeps the package
+database out of it while `[pkgdb]` still reports it from the tree. `install_docs` and `install_langs` default
+the other way round from an OS image, since documentation and translations only cost an initrd boot memory.
 
 Every initrd can import system credentials, such as an SSH key, from a cloud's instance metadata service
 (IMDS). systemd's IMDS generator enables that (together with networkd to reach the service) on a cloud
@@ -494,13 +494,13 @@ when needed:
   provides `image.VmInfo`.
 
 `image.archive` builds one logical image from operations and writes it as a deterministic tar or newc cpio
-archive, optionally zstd-compressed (`compression = "zstd"`). `image.sysext`, `image.confext` and
-`image.extension` are the compositions for extension DDIs (see "Extensions" below), and `image.portable` is
-the composition for portable service images (see "image.portable" below). `image.archive`, the extension
-rules, `image.portable` and `image.disk` start their image from `package_manager`, or add their
-operations on top of the image in `parent`. Without either, they start their image from the package manager
-of the distribution that the build chooses. Every composition takes `install_docs` and passes it to the image
-it builds.
+archive, zstd-compressed with `compression = "zstd"` when compression is on (see "Compression").
+`image.sysext`, `image.confext` and `image.extension` are the compositions for extension DDIs (see
+"Extensions" below), and `image.portable` is the composition for portable service images (see
+"image.portable" below). `image.archive`, the extension rules, `image.portable` and `image.disk` start their
+image from `package_manager`, or add their operations on top of the image in `parent`. Without either, they
+start their image from the package manager of the distribution that the build chooses. Every composition
+takes `install_docs` and passes it to the image it builds.
 
 Each composition publishes one product target that also provides its logical filesystem as `image.ImageInfo`.
 `image.archive` defaults to its archive and provides `image.ImageArchiveInfo`, which names the format of the
@@ -525,6 +525,29 @@ rules expose their supply-chain artifacts as subtargets:
 
 The product targets provide `image.ImageSbomInfo` for typed consumers. Buck builds an optional artifact
 only when it is requested, so declaring these views costs nothing on a default build.
+
+### Compression
+
+The erofs partitions, initrds and archives of an image are uncompressed by default. On a filesystem with
+reflinks, such as btrfs or XFS, an uncompressed erofs partition shares its data blocks with the files of the
+image, and a build spends no time on compression. `[raw.zst]` and `[vmdk]` are compressed formats and are
+always compressed. A released image is downloaded and deployed, where its size matters. To compress it, set
+`compression = true` in the `[tine]` section of `.buckconfig` for the build of the release, or pass `-c
+tine.compression=true` to it.
+
+With compression on, each image compresses its outputs the way its attributes say:
+
+- An erofs partition takes `compression` and `compression_level` from `image.partition()`. Without
+  `compression`, it is compressed with zstd, at `compression_level` or else at level 3. `compression =
+  "none"` keeps it uncompressed. When every erofs partition of a disk is compressed, the disk also gives
+  `mkfs.erofs` the options that make a compressed partition small (see `mkfs_options` under "image.disk").
+- `image.sysext`, `image.confext`, `image.extension` and `image.portable` take `compression` and
+  `compression_level` for their root partition, with the same defaults.
+- `image.initrd` and `image.archive` take `compression`, `"zstd"` or `"none"`. An initrd defaults to
+  `"zstd"`, and an archive to `"none"`.
+
+With compression off, every one of these outputs is uncompressed, whatever its attributes say. An archive
+then has no `.zst` suffix.
 
 ### Extensions
 
@@ -559,7 +582,8 @@ except another extension. Without `parent`, the DDI contains the whole tree of t
 erofs root partition, its verity hash partition and, with `verity_key`, a signature over the verity root
 hash. A host validates the signature against the certificates in its `/usr/lib/verity.d/`, and enforces it
 only where its image policy says so (see "Example targets" below). The DDI contains no os-release and no
-package database.
+package database. `compression` and `compression_level` pick how the root partition is compressed when
+compression is on (see "Compression").
 
 When the host and the extension come from different projects, sign the extension with
 `image.derived_signing_key()`. It derives an ECDSA P-256 pair from the target name, so every project that
@@ -642,7 +666,8 @@ first `_`, and attaches the units whose names start with that image name: `webap
 `webapp-worker.service` or `webapp@.service`. The target defaults to its DDI and provides `image.DdiInfo`,
 with the same `[roothash]`, `[disk-manifest]` and `[manifest]` subtargets as an extension. It takes an
 optional `package_manager` or `parent`, the operations and packages of any composition, and `version`,
-`arch`, `seed` and `verity_key`.
+`arch`, `seed`, `verity_key`, `compression` and `compression_level`. Like the root partition of an extension,
+the root partition is only compressed when compression is on.
 
 ### image.disk
 
@@ -658,6 +683,8 @@ Required attributes:
   and `image.usr_verity_partitions(signed, esp)`, with or without a verity signature partition and an ESP,
   are reusable conventional layouts. A bootable disk needs system partitions. A partition label can't
   contain `%`, because repart would expand it as a specifier from the build box rather than from the image.
+  `image.partition()` takes the algorithm in `compression` and its level in `compression_level`. A partition
+  is only compressed when compression is on (see "Compression").
 
 Optional attributes:
 
@@ -677,12 +704,13 @@ Optional attributes:
   creating a partition of that filesystem. The disk hands each list to
   `systemd-repart` as `SYSTEMD_REPART_MKFS_OPTIONS_<FSTYPE>`. Naming a filesystem the disk never formats
   fails the build rather than going nowhere, and an option holding whitespace is refused because repart
-  splits the variable on it. This is where a disk's compression is really decided: an `image.partition()`'s
-  `compression` only picks the algorithm, so an erofs partition left at the defaults comes out
-  substantially larger than one built the way the extension rules build their own, which is
-  `["-zzstd,level=3", "-C524288", "-Efragments,ztailpacking,dedupe"]`. `["--invariant"]` for vfat makes an
-  ESP byte-stable across rebuilds, which `mkfs.fat` otherwise is not, because it stamps the volume label
-  entry with the wall clock even under `SOURCE_DATE_EPOCH`.
+  splits the variable on it. An erofs option that starts with `-z` is refused, because it would compress the
+  partitions with compression off too; set `compression` on the partition instead. When every erofs partition
+  of the disk is compressed, the disk gives `mkfs.erofs` the options `-C524288
+  -Efragments,ztailpacking,dedupe` first, which make the partitions substantially smaller. Options in
+  `mkfs_options` come after them and override them, for example `-E^fragments`. `["--invariant"]` for vfat
+  makes an ESP byte-stable across rebuilds, which `mkfs.fat` otherwise is not, because it stamps the volume
+  label entry with the wall clock even under `SOURCE_DATE_EPOCH`.
 - `strip_pkgdb` (bool, default `False`): Leaves the package database out of the system partitions, for a
   system that ships without its package manager and never resolves a package again. The logical image keeps
   it, so `[pkgdb]` still captures the database and `[sbom]` still reports every installed package rather than
@@ -1067,7 +1095,7 @@ selected here.
 
 The default is `image.DEFAULT_INITRD_MODULES`, exported from `//image:defs.bzl`. It is a core set rather than
 every module the kernel package ships, because only the path to `/usr` has to work from the UKI: `/usr`
-keeps the complete set, the erofs partition compresses it, and the system loads any other module from
+keeps the complete set, and the system loads any other module from
 there once it has switched root. The core set covers the usual ways a machine reaches its root
 filesystem, meaning AHCI, NVMe, SCSI and USB storage, the virtio devices a VM is given, device-mapper
 including dm-verity, the filesystems these images use, and keyboard and console input so that a rescue
