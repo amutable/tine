@@ -7,6 +7,7 @@ load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load(":ami.bzl", "AMI_IMPORT_ATTR", "declare_ami_from_base")
+load(":compression.bzl", compression_switch = "enabled")
 load(":ddi.bzl", "DISK_FORMATS", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN", "VIRTUAL_SIZE_FORMATS")
 load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "system_extension")
 load(":image.bzl", "IMAGE_TOOLS_ATTR", "ImageToolsInfo", "spec_path")
@@ -60,6 +61,7 @@ def _ddi_preloaded_disk_impl(ctx: AnalysisContext) -> list[Provider]:
                     spec_path(format, "preload"),
                     {
                         "base": base,
+                        "compress": ctx.attrs.compression_enabled,
                         "files": files,
                         "format": format,
                         "out": out.as_output(),
@@ -93,6 +95,7 @@ _ddi_preloaded_disk = rule(
     impl = _ddi_preloaded_disk_impl,
     attrs = {
         "base": attrs.dep(providers = [DdiInfo], doc = "the disk, raw or zstd-compressed, whose ESP gets the DDIs"),
+        "compression_enabled": attrs.bool(default = False, doc = "set by the macro; whether compression is on"),
         "extensions": attrs.list(
             attrs.dep(providers = [DdiInfo, ExtensionInfo]),
             default = [],
@@ -125,7 +128,9 @@ def ddi_preloaded_disk(
     **kwargs,
 ) -> None:
     """Declare one, compatible with the distributions its package serves."""
-    _ddi_preloaded_disk(name = name, **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs))
+    _ddi_preloaded_disk(
+        name = name, compression_enabled = compression_switch(), **(distribution.distributed(name, distro, visibility, target_compatible_with) | kwargs)
+    )
 
 def _imported_disk_impl(ctx: AnalysisContext) -> list[Provider]:
     disk = ctx.attrs.disk

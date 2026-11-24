@@ -588,6 +588,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             box_dep = top.box,
             format = format,
             virtual_size = ctx.attrs.virtual_size if format in VIRTUAL_SIZE_FORMATS else None,
+            compress = ctx.attrs.compression_enabled,
         )
         for format in DISK_FORMATS
     ]

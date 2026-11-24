@@ -531,9 +531,9 @@ only when it is requested, so declaring these views costs nothing on a default b
 The erofs partitions, initrds and archives of an image are uncompressed by default. On a filesystem with
 reflinks, such as btrfs or XFS, an uncompressed erofs partition shares its data blocks with the files of the
 image, and a build spends no time on compression. `[raw.zst]` and `[vmdk]` are compressed formats and are
-always compressed. A released image is downloaded and deployed, where its size matters. To compress it, set
-`compression = true` in the `[tine]` section of `.buckconfig` for the build of the release, or pass `-c
-tine.compression=true` to it.
+always compressed. With compression off, `[qcow2]` also shares its data blocks with the raw disk. A released
+image is downloaded and deployed, where its size matters. To compress it, set `compression = true` in the
+`[tine]` section of `.buckconfig` for the build of the release, or pass `-c tine.compression=true` to it.
 
 With compression on, each image compresses its outputs the way its attributes say:
 
