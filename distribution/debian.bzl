@@ -3,6 +3,7 @@
 
 """The conventional Debian distribution declaration."""
 
+load("//:settings.bzl", "SETTINGS")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
 load("//package:manager.bzl", "package_manager")
@@ -199,7 +200,7 @@ def _release(
         release = ":" + name + ".release",
         enable_repository_groups = enable_repository_groups,
         disable_repository_groups = disable_repository_groups,
-        additional_repositories = additional_repositories,
+        additional_repositories = SETTINGS.package_manager.additional_repositories,
         repository_priorities = repository_priorities,
         visibility = visibility,
     )

@@ -8,6 +8,9 @@ load("@settings//:settings.bzl", _SETTINGS = "SETTINGS")
 # A project's settings cell only sets the fields that it changes, and it can be older than a field that tine
 # reads. Buck fails to load a file that reads a field that the project's `SETTINGS` doesn't have.
 _DEFAULTS = struct(
+    package_manager = struct(
+        additional_repositories = [],
+    ),
     tools_box = struct(
         additional_repositories = [],
         packages = [],
