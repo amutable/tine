@@ -38,18 +38,18 @@
   },
   "python3": {
     "repository": "astral-sh/python-build-standalone",
-    "release": "20261110",
+    "release": "20261123",
     "platforms": {
       "arm64": {
-        "artifact": "cpython-3.14.10+20261110-aarch64-unknown-linux-gnu-install_only.tar.gz",
-        "sha256": "e59f83159984a55e719bb3805a0b2b5b281f645769222218084b78b92eedc07f",
-        "size": 59065738,
+        "artifact": "cpython-3.14.10+20261123-aarch64-unknown-linux-gnu-install_only.tar.gz",
+        "sha256": "e22a598b87c744318e3c0da365f2d2f1880ff4b46c851fb5ec0fcd20a9397ef8",
+        "size": 59054360,
         "strip_prefix": "python"
       },
       "x86_64": {
-        "artifact": "cpython-3.14.10+20261110-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        "sha256": "3fe0d7c0538eb5d190c34582992d26230532551355cbd789fabc6591621cfc07",
-        "size": 76373285,
+        "artifact": "cpython-3.14.10+20261123-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        "sha256": "6f216be7b5209a88586d5b6cf84ffd953db83d8942c5eb3b09517d056dac0d8d",
+        "size": 76639720,
         "strip_prefix": "python"
       }
     }
@@ -74,18 +74,18 @@
   },
   "ty": {
     "repository": "astral-sh/ty",
-    "release": "0.0.107",
+    "release": "0.0.109",
     "platforms": {
       "arm64": {
         "artifact": "ty-aarch64-unknown-linux-musl.tar.gz",
-        "sha256": "e121ea63adbbfb3a2e130bff7a1f5143bfbc90dbb36297044da4d5f91102f3ec",
-        "size": 13807498,
+        "sha256": "6f23820fef99672f5a58a62aa1b26f110d39f6b1a23fc3bf897d77f3fc41caae",
+        "size": 14140263,
         "strip_prefix": "ty-aarch64-unknown-linux-musl"
       },
       "x86_64": {
         "artifact": "ty-x86_64-unknown-linux-musl.tar.gz",
-        "sha256": "c98b2c3767d44161b7634ff8aa7f0dfc3db840fc5585ccab20cc90a49ad54d93",
-        "size": 15014651,
+        "sha256": "f13c865b0a47d0c35c864db62cf4e7ce4a29ae2a70c90930fe4286f95018fffd",
+        "size": 15374958,
         "strip_prefix": "ty-x86_64-unknown-linux-musl"
       }
     }
@@ -126,17 +126,17 @@
   },
   "seaweedfs": {
     "repository": "seaweedfs/seaweedfs",
-    "release": "4.54",
+    "release": "4.55",
     "platforms": {
       "arm64": {
         "artifact": "linux_arm64.tar.gz",
-        "sha256": "e4eeae433dc6f5111034b8b1cc0c1a08b9b094b4eea101a36650ddc3a7c0ce58",
-        "size": 42960031
+        "sha256": "ced87c09a2a5e87c7c94fd25e36c421670b97fded064026738a69f13ee8c7b96",
+        "size": 43256108
       },
       "x86_64": {
         "artifact": "linux_amd64.tar.gz",
-        "sha256": "e7424a82eee327809bfa449fda4924c9a0f42f6669a01288eebb1b79674c8196",
-        "size": 48705323
+        "sha256": "f156c609eeaf9e5fcfeea33fd70411222005f83760aa95893c9d58eff006b45c",
+        "size": 49059307
       }
     }
   },
@@ -183,6 +183,6 @@
   "quarry": {
     "repository": "https://github.com/amutable/quarry",
     "ref": "main",
-    "commit": "cf2ecbb91827770bda2e90a9931bd358e8dd261b"
+    "commit": "66d835b9137e82a88746f33f41cf4061f4983001"
   }
 }
