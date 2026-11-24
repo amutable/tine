@@ -20,9 +20,11 @@ class Spec(TypedDict):
     input: str
     out: str
     virtual_size: str | None
+    # Whether compression is on.
+    compress: bool
 
 
-def convert(source: Path, out: Path, fmt: str, virtual_size: str | None) -> None:
+def convert(source: Path, out: Path, fmt: str, virtual_size: str | None, compress: bool) -> None:
     """Write the raw disk `source` to `out` in the format `fmt`, one of ddi.bzl's DISK_FORMATS.
 
     `virtual_size` sizes the disk of a qcow2 or vmdk, which otherwise is as large as `source`.
@@ -42,7 +44,10 @@ def convert(source: Path, out: Path, fmt: str, virtual_size: str | None) -> None
         return
 
     if fmt == "qcow2":
-        options = []
+        # With -C, qemu-img copies data clusters with copy_file_range(). On btrfs or XFS, the qcow2
+        # then shares its data blocks with the raw disk. -C also copies clusters that contain only
+        # zeros and makes the qcow2 larger. A compressed build publishes its qcow2 and leaves -C out.
+        options = [] if compress else ["-C"]
     elif fmt == "vmdk":
         # streamOptimized is compressed and skips zero grains, and is the variant cloud importers
         # such as AWS VM Import take. Not reproducible: qemu-img writes a random content ID.
@@ -72,7 +77,8 @@ def convert(source: Path, out: Path, fmt: str, virtual_size: str | None) -> None
             source_format, source = "qcow2", overlay
         else:
             source_format = "raw"
-        # convert drops zero clusters, so the output stays compact regardless of the disk size.
+        # qemu-img convert leaves out the holes of the raw disk, so the output stays compact regardless
+        # of the disk size.
         subprocess.run(
             ["qemu-img", "convert", "-f", source_format, "-O", fmt, *options, str(source), str(out)],
             check=True,
@@ -81,7 +87,7 @@ def convert(source: Path, out: Path, fmt: str, virtual_size: str | None) -> None
 
 def main(argv: list[str] | None = None) -> None:
     spec = specs.parse(Spec, "convert", argv)
-    convert(Path(spec["input"]), Path(spec["out"]), spec["format"], spec["virtual_size"])
+    convert(Path(spec["input"]), Path(spec["out"]), spec["format"], spec["virtual_size"], spec["compress"])
 
 
 if __name__ == "__main__":

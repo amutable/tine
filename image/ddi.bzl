@@ -560,6 +560,7 @@ def declare_disk_conversion(
     format: str,
     virtual_size: str | None,
     basename: str,
+    compress: bool,
 ) -> DiskConversionInfo:
     """Declare a disk format conversion from a resolved raw disk provider.
 
@@ -573,6 +574,7 @@ def declare_disk_conversion(
             ctx.actions,
             spec_path(format, "convert"),
             {
+                "compress": compress,
                 "format": format,
                 "input": disk.disk,
                 "out": out.as_output(),

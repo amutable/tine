@@ -27,6 +27,8 @@ class Spec(TypedDict):
     format: str
     out: str
     virtual_size: str | None
+    # Whether compression is on.
+    compress: bool
 
 
 def esp_offset(disk: Path) -> int:
@@ -95,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             subprocess.run(["cp", "--sparse=always", str(base), str(disk)], check=True)
         add(f"{disk}@@{esp_offset(disk)}", spec["files"])
-        convert(disk, Path(spec["out"]), spec["format"], spec["virtual_size"])
+        convert(disk, Path(spec["out"]), spec["format"], spec["virtual_size"], spec["compress"])
 
 
 if __name__ == "__main__":
