@@ -41,6 +41,7 @@ def partition(
     size_max: str | int | None = None,
     minimize: str | None = None,
     compression: str | None = None,
+    compression_level: str | int | None = None,
     verity: str | None = None,
     verity_match_key: str | None = None,
 ) -> Partition:
@@ -61,6 +62,8 @@ def partition(
         fail("partition: invalid verity value {!r}".format(verity))
     if (verity == None) != (verity_match_key == None):
         fail("partition: verity and verity_match_key must be specified together")
+    if compression == "none" and compression_level != None:
+        fail('partition: compression_level of a partition that compression = "none" keeps uncompressed')
     for copy in copy_files:
         if not copy:
             fail("partition: copy_files entries cannot be empty")
@@ -78,6 +81,7 @@ def partition(
         "size_max": size_max,
         "minimize": minimize,
         "compression": compression,
+        "compression_level": compression_level,
         "verity": verity,
         "verity_match_key": verity_match_key,
     }
@@ -136,13 +140,16 @@ def usr_verity_partitions(signed: bool, esp: bool = True) -> list[Partition]:
     image ID and version as placeholders, which `disk()` fills in from its image_id and version
     attributes.
     """
+
+    # With compression off, the usr partition is uncompressed. mkfs.erofs then copies the data of the
+    # files with copy_file_range(), and on btrfs or XFS the partition shares the data blocks of the
+    # image's files.
     usr = partition(
         type = "usr",
         label = "{image_id}_{version}",
         filesystem = "erofs",
         copy_files = ["/usr:/"],
         minimize = "best",
-        compression = "zstd",
         verity = "data",
         verity_match_key = "usr",
     )
@@ -289,6 +296,7 @@ def declare_ddi(
     strip_pkgdb: bool = False,
     strip_paths: list[str] = [],
     mkfs_options: dict[str, list[str]] = {},
+    compress: bool,
     basename: str = "image",
     identifier: str | None = None,
     extension: dict[str, typing.Any] | None = None,
@@ -304,7 +312,8 @@ def declare_ddi(
     what the partitions do not need but a sibling target reading the same layer still does.
     `extension` packages the tree as an extension (see extension.bzl). `operations` change the tree before
     repart reads it. The partitions leave out the contents of the directories in `exclude`.
-    `virtual_size` goes into the provider, see DdiInfo.
+    `virtual_size` goes into the provider, see DdiInfo. Without `compress`, the partitions are
+    uncompressed, whatever their definitions say.
     """
     image = declare_stripped(
         ctx,
@@ -336,6 +345,10 @@ def declare_ddi(
                         option,
                     )
                 )
+
+            # An erofs -z option would compress the partitions whether compression is on or off.
+            if filesystem == "erofs" and option.startswith("-z"):
+                fail("ddi: erofs mkfs option {!r} compresses; set compression on the partition instead".format(option))
 
     imported_partitions = []
     for info in imported:
@@ -396,6 +409,7 @@ def declare_ddi(
         # repart has no partition type for any architecture, so an `_any` DDI gets the build host's types.
         "architecture": None if systemd_arch == "_any" else systemd_arch,
         "basename": basename,
+        "compress": compress,
         "definitions": definition_specs,
         "exclude": exclude,
         "extension": extension,

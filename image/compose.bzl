@@ -28,6 +28,7 @@ load(
     "encode_profiles",
     "uki_subtargets",
 )
+load(":compression.bzl", compression_switch = "enabled")
 load(
     ":ddi.bzl",
     "DDI_ATTRS",
@@ -145,7 +146,7 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
     cpio = declare_image_archive(
         ctx,
         tools = tools,
-        compression = ctx.attrs.compression,
+        compression = ctx.attrs.compression if ctx.attrs.compression_enabled else "none",
         format = "cpio",
         image = image,
         strip_pkgdb = ctx.attrs.strip_pkgdb,
@@ -157,10 +158,17 @@ def _initrd_image_impl(ctx: AnalysisContext) -> list[Provider]:
         image = image,
     )
 
+# The macros set this from `[tine] compression`. The `compression` attributes of a target only take
+# effect when it is set.
+_COMPRESSION_ENABLED_ATTRS = {
+    "compression_enabled": attrs.bool(default = False, doc = "set by the macro; whether `compression` takes effect"),
+}
+
 _initrd_image = rule(
     impl = _initrd_image_impl,
     supports_incoming_transition = True,
     attrs = IMAGE_ATTRS
+    | _COMPRESSION_ENABLED_ATTRS
     | {
         "compression": attrs.enum(COMPRESSIONS, default = "zstd"),
         # An initrd is small, short-lived, and read once, so the defaults an OS image wants are the
@@ -193,6 +201,7 @@ def initrd_image(
     """
     _initrd_image(
         name = name,
+        compression_enabled = compression_switch(),
         ops = flatten_operations(ops),
         package_manager = initial_package_manager(package_manager, None, distro),
         version = resolve_version("initrd_image {}".format(name), version),
@@ -230,7 +239,7 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
     archive = declare_image_archive(
         ctx,
         tools = tools,
-        compression = ctx.attrs.compression,
+        compression = ctx.attrs.compression if ctx.attrs.compression_enabled else "none",
         format = ctx.attrs.format,
         image = image,
     )
@@ -244,7 +253,7 @@ def _archive_impl(ctx: AnalysisContext) -> list[Provider]:
 _archive = rule(
     impl = _archive_impl,
     supports_incoming_transition = True,
-    attrs = IMAGE_ATTRS | ARCHIVE_ATTRS | _ROOT_ATTRS,
+    attrs = IMAGE_ATTRS | ARCHIVE_ATTRS | _ROOT_ATTRS | _COMPRESSION_ENABLED_ATTRS,
 )
 
 def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -284,13 +293,16 @@ def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
         scope = ctx.attrs.scope,
         seed = ctx.attrs.seed,
         verity_key = resolve_signing_key(ctx.attrs.verity_key),
+        compression = ctx.attrs.compression,
+        compression_level = ctx.attrs.compression_level,
+        compress = ctx.attrs.compression_enabled,
         version = ctx.attrs.version,
     )
 
 _extension = rule(
     impl = _extension_impl,
     supports_incoming_transition = True,
-    attrs = IMAGE_ATTRS | EXTENSION_ATTRS | _ROOT_ATTRS,
+    attrs = IMAGE_ATTRS | EXTENSION_ATTRS | _ROOT_ATTRS | _COMPRESSION_ENABLED_ATTRS,
 )
 
 def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -316,13 +328,16 @@ def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
         name = ctx.label.name,
         seed = ctx.attrs.seed,
         verity_key = resolve_signing_key(ctx.attrs.verity_key),
+        compression = ctx.attrs.compression,
+        compression_level = ctx.attrs.compression_level,
+        compress = ctx.attrs.compression_enabled,
         version = ctx.attrs.version,
     )
 
 _portable = rule(
     impl = _portable_impl,
     supports_incoming_transition = True,
-    attrs = IMAGE_ATTRS | PORTABLE_ATTRS | _ROOT_ATTRS,
+    attrs = IMAGE_ATTRS | PORTABLE_ATTRS | _ROOT_ATTRS | _COMPRESSION_ENABLED_ATTRS,
 )
 
 def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
@@ -419,6 +434,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             identifier = "system",
             image = identity,
             mkfs_options = ctx.attrs.mkfs_options,
+            compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             split = True,
             strip_paths = ctx.attrs.strip_paths,
@@ -462,6 +478,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             image = top,
             imported = [system.info],
             mkfs_options = ctx.attrs.mkfs_options,
+            compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             virtual_size = ctx.attrs.virtual_size,
         )
@@ -480,6 +497,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             identifier = "disk",
             image = top,
             mkfs_options = ctx.attrs.mkfs_options,
+            compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             split = True,
             strip_paths = ctx.attrs.strip_paths,
@@ -636,6 +654,7 @@ _DISK_ATTRS = (
     IMAGE_ATTRS
     | DDI_ATTRS
     | _ROOT_ATTRS
+    | _COMPRESSION_ENABLED_ATTRS
     | {
         "arch": UKI_ATTRS["arch"],
         "disk_seed": attrs.option(attrs.string(), default = None),
@@ -699,6 +718,7 @@ def archive(
     """Build one logical image from operations and emit it as an archive."""
     _archive(
         name = name,
+        compression_enabled = compression_switch(),
         ops = flatten_operations(ops),
         package_manager = initial_package_manager(package_manager, parent, distro),
         parent = parent,
@@ -724,6 +744,7 @@ def extension(
     """
     _extension(
         name = name,
+        compression_enabled = compression_switch(),
         ops = flatten_operations(ops),
         package_manager = initial_package_manager(package_manager, parent, distro),
         parent = parent,
@@ -753,6 +774,7 @@ def portable(
     """Build one logical image from operations and package it as a portable service DDI."""
     _portable(
         name = name,
+        compression_enabled = compression_switch(),
         ops = flatten_operations(ops),
         package_manager = initial_package_manager(package_manager, parent, distro),
         parent = parent,
@@ -815,6 +837,7 @@ def disk(
     package_manager = initial_package_manager(package_manager, parent, distro)
     common = dict(
         name = name,
+        compression_enabled = compression_switch(),
         image_id = image_id,
         # The rule renders label placeholders from its own identity during analysis.
         definitions = [json.encode(definition) for definition in definitions],

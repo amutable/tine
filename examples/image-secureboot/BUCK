@@ -108,17 +108,8 @@ image.disk(
     # This key signs the UKIs and systemd-boot, puts auto-enrollment files onto the ESP, and signs
     # the verity root hash. For a key that caches across workspaces, see image.pem_signing_key() under
     # "Secure Boot signing" in images.md.
-    # `compression = "zstd"` on the partition only picks the algorithm; these are what actually make
-    # the erofs small, and they are the same options image.sysext builds a DDI with. --invariant keeps
-    # the ESP byte-stable, which mkfs.fat is not by default.
-    mkfs_options = {
-        "erofs": [
-            "-zzstd,level=3",
-            "-C524288",
-            "-Efragments,ztailpacking,dedupe",
-        ],
-        "vfat": ["--invariant"],
-    },
+    # --invariant keeps the ESP byte-stable, which mkfs.fat is not by default.
+    mkfs_options = {"vfat": ["--invariant"]},
     secure_boot_key = _SIGNING,
     # A signed /usr is read-only and carries no package manager, so the database in it would only be
     # weight under verity. `:image[pkgdb]` still captures it from the image itself.

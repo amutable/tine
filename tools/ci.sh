@@ -86,12 +86,16 @@ fi
 # Buck runs, such as the ones `check` starts, take no command-line configuration, so the setting goes
 # into the project's configuration for as long as this script runs.
 box_config=.buckconfig.d/tine-box
-box_cleanup() { rm -f "$box_config"; }
-box_cleanup
+# CI builds and tests what a release publishes, so compression is on for the whole run. A local build
+# leaves it off.
+compression_config=.buckconfig.d/tine-compression
+config_cleanup() { rm -f "$box_config" "$compression_config"; }
+config_cleanup
+trap config_cleanup EXIT
+mkdir -p .buckconfig.d
+printf '[tine]\ncompression = true\n' > "$compression_config"
 if [ -n "${TINE_TEST_DISTRO:-}" ]; then
-    mkdir -p .buckconfig.d
     printf '[tine]\nbox = %s\n' "$TINE_TEST_DISTRO" > "$box_config"
-    trap box_cleanup EXIT
 fi
 
 # A run builds and tests one distro release (TINE_TEST_DISTRO, or else the catalog's default release
@@ -148,7 +152,7 @@ secureboot_pkcs11() {
     pkcs11_dir=$(mktemp -d)
     "${buck[@]}" run tine//tools:signing-server -- "$pkcs11_dir" > "$pkcs11_dir/log" 2>&1 &
     server_pid=$!
-    trap 'pkcs11_cleanup; box_cleanup' EXIT
+    trap 'pkcs11_cleanup; config_cleanup' EXIT
     until [ -S "$pkcs11_dir/sock/pkcs11" ]; do
         # Any setup failure exits the server before it gets to listen; its log then says why.
         kill -0 "$server_pid" 2> /dev/null || return 1

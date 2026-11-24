@@ -407,7 +407,7 @@ box.sh_test(
     script = """
 raw=$1
 shift
-test "$(stat -c %s "$raw")" -lt $((900 << 20))
+test "$(stat -c %s "$raw")" -lt $((2 << 30))
 for disk in "$@"; do
     test "$(qemu-img info --output=json "$disk" | python3 -c 'import json, sys; print(json.load(sys.stdin)["virtual-size"])')" = 2147483648
     qemu-img compare -q -f raw "$raw" "$disk"
@@ -819,11 +819,21 @@ box.sh_test(
     distro = _FEDORA,
     # expected.json records the digests of images that the catalog's default boxes build. The boxes of
     # another release build the same images with other tools, which write different bytes.
-    target_compatible_with = []
-    if read_config("tine", "box") == None
-    else select({
-        "DEFAULT": select_incompatible("expected.json records the digests that the catalog's default boxes build"),
-    }),
+    target_compatible_with = (
+        []
+        if read_config("tine", "box") == None
+        else select({
+            "DEFAULT": select_incompatible("expected.json records the digests that the catalog's default boxes build"),
+        })
+    )
+    + (
+        []
+        if read_config("tine", "compression") == "true"
+        else select({
+            # A release publishes compressed images, and CI builds with compression on.
+            "DEFAULT": select_incompatible("expected.json records the digests of compressed images; build with -c tine.compression=true"),
+        })
+    ),
 )
 
 python.binary(
