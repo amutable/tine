@@ -1297,6 +1297,11 @@ vmspawn takes the last value of, such as `--console=` or `--tpm=`, overrides tin
 always passes are `--image`, `--image-format`, `--ephemeral`, which keeps the guest from writing the build
 output, and the defaults `--console=native`, `--kvm=yes` and `--network-user-mode`.
 
+`--image` is a link named after the target, as vmspawn names the machine after the image's file name. So
+`machinectl --user list` shows `<target name>-<random suffix>`, and several VMs of one target can run at
+once. A disk's own file name grows with its version until vmspawn's socket paths, which contain the machine
+name, are too long for a unix socket. For the same reason the target name can have at most 31 characters.
+
 ```sh
 tine buck run //examples/image:boot-demo-vm.fedora
 ```
