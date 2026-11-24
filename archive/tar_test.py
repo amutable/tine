@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 import tar
+import uapi16
 
 EPOCH = 1000000000
 
@@ -52,3 +53,48 @@ class TestPackTree(unittest.TestCase):
                 # The file was stamped an hour past the epoch; nothing may outlive it.
                 self.assertLessEqual(member.mtime, EPOCH)
             self.assertEqual(members["./link"].linkname, "dir/file")
+
+
+class TestPackManifest(unittest.TestCase):
+    def test_aligns_the_data_of_large_files_to_filesystem_blocks(self) -> None:
+        # Regular files of at least 4096 bytes must start their data on a 4096-byte boundary of the archive,
+        # whatever the length of the headers before them. Pack files of several sizes with names of several
+        # lengths, and check the data offsets and that tarfile reads back every file unchanged.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            sizes = {"a": 4096, "b" * 120: 5000, "c": 100, "d" * 300: 70000, "e": 12288}
+            objects: list[uapi16.Object] = [
+                {"mediaType": uapi16.MEDIA_TYPE, "type": "dir", "mode": 0o755, "mTimeNSec": 0}
+            ]
+            blobs = {name: root / f"{index}.blob" for index, name in enumerate(sizes)}
+            for name, size in sizes.items():
+                blobs[name].write_bytes(os.urandom(size))
+                objects.append({"name": name, "type": "reg", "mode": 0o644, "mTimeNSec": 0, "size": size})
+            archive = root / "image.tar"
+            tar.pack_manifest(objects, lambda obj: blobs[obj["name"]], archive, align=True)
+
+            with tarfile.open(archive) as packed:
+                for member in packed.getmembers():
+                    name = member.name.removeprefix("./")
+                    if name not in sizes:
+                        continue
+                    if sizes[name] >= 4096:
+                        self.assertEqual(member.offset_data % 4096, 0, name)
+                    extracted = packed.extractfile(member)
+                    assert extracted is not None
+                    self.assertEqual(extracted.read(), blobs[name].read_bytes(), name)
+
+    def test_leaves_the_data_unaligned_without_align(self) -> None:
+        # Without align, the writer adds no pax comment record to pad the headers of a large file.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            blob = root / "blob"
+            blob.write_bytes(os.urandom(5000))
+            objects: list[uapi16.Object] = [
+                {"name": "large", "type": "reg", "mode": 0o644, "mTimeNSec": 0, "size": 5000}
+            ]
+            archive = root / "image.tar"
+            tar.pack_manifest(objects, lambda obj: blob, archive, align=False)
+            with tarfile.open(archive) as packed:
+                (member,) = packed.getmembers()
+            self.assertNotIn("comment", member.pax_headers)

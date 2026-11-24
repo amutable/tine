@@ -1437,13 +1437,15 @@ Tar uses deterministic PAX archives and stores user xattrs using `SCHILY.xattr.u
 format has no general xattr representation. Tar/cpio entries are ordered and encode explicit hardlinks
 independently of content identity. Linux's initramfs unpacker [recreates hardlinked symlinks as separate
 symlinks][initramfs-symlinks]. Mtimes are clamped to the fixed assembly epoch. Tar retains nanoseconds; newc
-cpio uses whole seconds. The cpio reader/writer aligns regular-file payloads and uses `copy_file_range` when
-possible so large archives can share extents on reflink-capable filesystems. `compression = "zstd"`
-compresses the finished archive in the same action, so the uncompressed form never becomes a Buck artifact;
-zstd's multi-threaded output is byte-identical to its single-threaded output, so this stays reproducible. The
-initrd uses it when compression is on, while the kernel-modules cpio that `uki.py` appends stays raw because
-the distribution already ships each module compressed; the kernel unpacks the concatenation as independently
-compressed segments.
+cpio uses whole seconds. The cpio writer starts the data of each regular file of 4 KiB or more of an image
+archive on a 4 KiB boundary and copies it with `copy_file_range`, and the tar writer does the same in an
+uncompressed archive. On btrfs or XFS, an uncompressed archive then shares its data blocks with the files of
+the image. The tar writer pads the pax headers before the file data with a `comment` record, which readers
+ignore. `compression = "zstd"` compresses the finished archive in the same action, so the uncompressed form
+never becomes a Buck artifact; zstd's multi-threaded output is byte-identical to its single-threaded output,
+so this stays reproducible. The initrd uses it when compression is on, while the kernel-modules cpio that
+`uki.py` appends stays raw because the distribution already ships each module compressed; the kernel unpacks
+the concatenation as independently compressed segments.
 
 Compression is on when `[tine] compression = true` is set. Every image rule's macro reads the setting into
 its `compression_enabled` attribute, so turning it on changes attributes and not the configuration, and the

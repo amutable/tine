@@ -16,7 +16,7 @@ python.library(
     name = "tar",
     srcs = ["tar.py"],
     visibility = ["tine//..."],
-    deps = ["//uapi16:uapi16"],
+    deps = ["//:util", "//uapi16:uapi16"],
 )
 
 python.test(
