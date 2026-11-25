@@ -15,7 +15,7 @@ load(
     "ImageSnapshotInfo",
     "image_snapshot",
 )
-load(":boot.bzl", "UkiInfo", "bootable", "uki", "uki_profile")
+load(":boot.bzl", "UkiInfo", "uki", "uki_profile")
 load(
     ":compose.bzl",
     "InitrdInfo",
@@ -71,7 +71,6 @@ image = struct(
     uki = uki,
     uki_profile = uki_profile,
     resolve_version = resolve_version,
-    bootable = bootable,
     partition = partition,
     vm = image_vm,
     derived_signing_key = derived_signing_key,

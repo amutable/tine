@@ -468,8 +468,6 @@ when needed:
   a `secure_boot_key`, the UKI and its embedded kernel are signed for Secure Boot. With a
   `sign_expected_pcr_key`, a signed expected-PCR 11 policy covers each profile; set its `sign_expected_pcr`
   to false to opt out;
-- `image.bootable` selects a kernel and matching initrd from a logical image, exposed as `[uki]`, `[kernel]`,
-  and `[initrd]` subtargets, and `[cmdline]`, the base command line of the UKI, for a direct kernel boot;
 - `image.vm` runs the image's qcow2 (or raw) ephemerally, from its ESP or by a direct kernel boot, with the
   `systemd-vmspawn`, QEMU and OVMF stack of the tools box
   of the image's release, and binds the DDIs in `extensions` into the guest, where systemd merges them at

@@ -16,8 +16,6 @@ ImageToolsInfo = provider(
     doc = "The pinned drivers every image rule and terminal output runs.",
     fields = {
         "archive": provider_field(Dependency),
-        "artifacts": provider_field(Dependency),
-        "boot": provider_field(Dependency),
         "convert": provider_field(Dependency),
         "ddi": provider_field(Dependency),
         "layer": provider_field(Dependency),
@@ -32,8 +30,6 @@ ImageToolsInfo = provider(
 
 _TOOLS = [
     "archive",
-    "artifacts",
-    "boot",
     "convert",
     "ddi",
     "layer",
