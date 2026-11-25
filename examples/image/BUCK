@@ -261,6 +261,8 @@ image.vm(
     image = ":boot-demo",
     extensions = [":demo-confext", ":demo-ext"],
     portables = [":demo-portable", ":demo-portable-ext"],
+    # Already the default; set explicitly for vm-spec-test.
+    ram = "2G",
     # Exercise this field, too (only read in the smoke test)
     vmspawn_args = ["--smbios11=tine.vmspawn-args=1"],
 )
@@ -381,6 +383,19 @@ tests.vm_smoke(
     vm = ":boot-demo-direct-vm",
     # Settling shows that the initrd found the usr partition by the root hash on the command line.
     checks = ["grep -q ' usrhash=' /proc/cmdline"],
+)
+
+# Test the image.vm spec provider.
+python.test(
+    name = "vm-spec-test",
+    labels = ["image"],
+    srcs = ["vm_spec_test.py"],
+    env = {
+        "BOOT_DEMO_DIRECT_VM": "$(location :boot-demo-direct-vm.fedora[spec])",
+        "BOOT_DEMO_VM": "$(location :boot-demo-vm.fedora[spec])",
+        "BOOT_DEMO_VM_DIRECT": "$(location :boot-demo-vm-direct.fedora[spec])",
+        "SECUREBOOT_VM": "$(location //examples/image-secureboot:vm.fedora[spec])",
+    },
 )
 
 # The qcow2 and vmdk describe a disk of the image's virtual_size with the raw's content, while the raw stays

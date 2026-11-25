@@ -206,6 +206,8 @@ image.vm(
     # boot; VM then enforces Secure Boot.
     secure_boot = True,
     extensions = [":demo-ext"],
+    # for vm-spec-test
+    visibility = ["tine//examples/image:"],
 )
 
 # Boot smoke test: enrolls keys on first boot, settles under Secure Boot with a vTPM, then powers
