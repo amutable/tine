@@ -633,23 +633,25 @@ optional `package_manager` or `parent`, the operations and packages of any compo
 
 ### image.disk
 
-`image.disk()` composes the partitions in `definitions` into a GPT disk. A bootable disk also contains
-systemd-boot, the initrd and versioned UKIs in its ESP. Most attributes parameterize the terminal rules
-described above.
+`image.disk()` composes the partitions in `definitions` into a GPT disk. A bootable disk with an ESP also
+contains systemd-boot, the initrd and versioned UKIs in it. A VM (especially a confidential one) can also
+boot its kernel directly; for that, its kernel, initrd and command line are files beside the disk. Most
+attributes parameterize the terminal rules described above.
 
 Required attributes:
 
 - `ops` (operation list): Build the root filesystem layer; passed on to `image.layer`.
 - `definitions` (list of `image.partition()` descriptors): Partition layout; `image.DEFAULT_ROOT_PARTITIONS`
-  and `image.usr_verity_partitions(signed)`, with or without a verity signature partition, are reusable
-  conventional layouts; a bootable disk needs system and ESP partitions. A partition label can't contain
-  `%`, because repart would expand it as a specifier from the build box rather than from the image.
+  and `image.usr_verity_partitions(signed, esp)`, with or without a verity signature partition and an ESP,
+  are reusable conventional layouts. A bootable disk needs system partitions. A partition label can't
+  contain `%`, because repart would expand it as a specifier from the build box rather than from the image.
 
 Optional attributes:
 
-- `bootable` (bool): Makes the disk boot. It defaults to whether `definitions` contain an ESP partition, and
-  `True` without one fails the build. A disk that does not boot refuses `initrd`, `profiles`, `splash`,
-  `cmdline`, `initrd_modules`, `secure_boot_key` and `sign_expected_pcr_key`.
+- `bootable` (bool): Makes the disk boot. It defaults to whether `definitions` contain an ESP partition;
+  `True` without one boots the kernel directly. A disk that does not boot refuses `initrd`, `profiles`,
+  `splash`, `cmdline`, `initrd_modules`, `secure_boot_key` and `sign_expected_pcr_key`. One that boots its
+  kernel directly takes only `initrd`, `cmdline` and `initrd_modules`.
 - `disk_seed` (string): Seeds stable partition UUIDs.
 - `verity_key` (target providing `image.SigningKeyInfo`): Signs the verity signature partition.
 - `secure_boot_key` (target providing `image.SigningKeyInfo`): Signs the UKIs and systemd-boot; see "Secure
@@ -780,11 +782,14 @@ an Amazon Machine Image of the raw disk is registered with, see [aws.md](aws.md)
 bootable-image provider: it returns `image.ImageInfo`, `image.DdiInfo`, `image.InitrdInfo`,
 `image.ImageSnapshotInfo`, `image.UkiInfo`, and `image.PublishedInfo` independently. A disk that does not
 boot has no `[uki]`, `[initrd]`, `[boot]` or `[ami]` subtargets, returns no `image.InitrdInfo` or
-`image.UkiInfo`, and publishes no UKI, kernel or initrd.
+`image.UkiInfo`, and publishes no UKI, kernel or initrd. One that boots its kernel directly has no `[uki]`,
+`[boot][uki]` or `[ami]`, returns `image.DirectBootInfo` instead of `image.UkiInfo`, and publishes its kernel
+command line instead of a UKI.
 
 `image.PublishedInfo` is what a target contributes to a release, keyed by the name it is published under:
-for a disk the raw image, the UKI, the kernel and the initrd, plus the partitions, and for an
-extension its DDI. Each rule names what it builds, so anything gathering a release reads those
+for a disk the raw image, the UKI (the command line, for one that boots its kernel directly), the kernel and
+the initrd, plus the partitions, and for an extension its DDI. Each rule names what it builds, so anything
+gathering a release reads those
 names instead of composing names of its own. Each name maps to an `image.PublishedFile`, which holds the
 artifact, its kind and its optional subkind. The provider's required `image` field names the image they
 belong to, and its optional `version` field gives the version of that image. The release's description
@@ -848,6 +853,8 @@ The `files` key maps each published name to an entry with these fields:
   - `partition` with the type its definition gives as its subkind, such as `usr`, `usr-verity`,
     `usr-verity-sig` or `root`.
   - `uki`, `kernel` and `initrd`, which have no subkind.
+  - `cmdline` is the kernel command line of a disk that boots its kernel directly, with the root hash of its
+    verity partitions, if it has any. It has no subkind.
   - `extension` with its classes as its subkind, `sysext`, `confext` or `sysext+confext`.
   - `portable`, which has no subkind.
   - `roothash` is the verity root hash file of an extension or a portable image and has no subkind.
@@ -912,11 +919,10 @@ A consumer can match on these fields rather than file names. The excerpt below a
 ```
 
 `image.DdiInfo` contains the optional `image.RootHashInfo` when verity is enabled. The completed
-`image.ImageInfo` includes the ESP layer, so another image can use the bootable image as its parent without
-relying on a generated
-helper label. The same `image.InitrdInfo`, containing its logical `image.ImageInfo` and derived
-`image.ImageArchiveInfo`, is the sole typed provider published by `[initrd]`. Merely carrying an artifact
-in a provider does not build it;
+`image.ImageInfo` includes the ESP layer, if the disk has one, so another image can use the bootable image as
+its parent without relying on a generated helper label. The same `image.InitrdInfo`, containing its logical
+`image.ImageInfo` and derived `image.ImageArchiveInfo`, is the sole typed provider published by `[initrd]`.
+Merely carrying an artifact in a provider does not build it;
 optional actions run only when a consumer uses the artifact or a user selects its subtarget.
 `[snapshot]` contains a UAPI.16 manifest and content blobs. `buck run` on it exports the snapshot as a
 directory that keeps modes, times, user extended attributes, symlinks and hardlinks.
@@ -1281,7 +1287,8 @@ vmspawn's `--linux` and `--initrd`, and take any file; a bootable disk's `[boot]
 `[boot][initrd]` are the ones its UKI carries. Unlike the UKI, a bare kernel brings no command line of its
 own, so `cmdline_file` names the file to read it from when the VM starts, usually the disk's
 `[boot][cmdline]`: it carries the root hash, which is only known once the image is built. `cmdline_extra`
-follows it.
+follows it. A disk without an ESP partition has nothing for the firmware to boot, so its own `[boot]` files
+are the defaults of all three, which it provides as `image.DirectBootInfo`.
 
 ```Starlark
 image.vm(

@@ -110,7 +110,7 @@ class TestSupplements(unittest.TestCase):
 class TestMarks(unittest.TestCase):
     def test_update(self) -> None:
         for name in (f"{BASE}.efi", USR, VERITY_SIG, f"{EXT}.sysext.raw", f"{BOTH}.raw", f"{PORTABLE}.raw"):
-            self.assertTrue(targets.is_update(FILES[name]), name)
+            self.assertTrue(targets.is_update(FILES[name], FILES), name)
         for name in (
             f"{BASE}.qcow2",
             f"{BASE}.raw",
@@ -118,7 +118,15 @@ class TestMarks(unittest.TestCase):
             f"{EXT}.sysext.roothash",
             f"{PORTABLE}.roothash",
         ):
-            self.assertFalse(targets.is_update(FILES[name]), name)
+            self.assertFalse(targets.is_update(FILES[name], FILES), name)
+
+    def test_direct_boot_pins_its_usr_partition(self) -> None:
+        """A disk that boots its kernel directly publishes its command line instead of a UKI."""
+        files = {name: entry for name, entry in FILES.items() if entry["kind"] != "uki"}
+        files[f"{BASE}.cmdline"] = {"image": BASE, "kind": "cmdline", "version": VERSION}
+        for name in (USR, VERITY, VERITY_SIG, f"{BASE}.cmdline"):
+            self.assertFalse(targets.is_update(files[name], files), name)
+        self.assertTrue(targets.is_update(files[f"{EXT}.sysext.raw"], files))
 
     def test_custom_marks(self) -> None:
         custom = targets.custom_marks(targets.published(FILES, EXCLUDE))

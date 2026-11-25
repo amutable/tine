@@ -329,6 +329,56 @@ tests.vm_smoke(
     ],
 )
 
+# boot-demo without its ESP. A VM boots its kernel directly, so the disk carries no UKI or boot loader.
+image.disk(
+    name = "boot-demo-direct",
+    bootable = True,
+    definitions = image.usr_verity_partitions(signed = False, esp = False),
+    initrd = ":boot-demo.initrd",
+    parent = ":boot-demo",
+    version = "unversioned",
+)
+
+# The disk has no ESP, and the kernel's command line ends with the root hash of its usr partition.
+box.sh_test(
+    name = "boot-demo-direct-test",
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    script = """
+disk=$1 cmdline=$2 roothash=$3
+table=$(sfdisk --json "$disk")
+if grep -qi c12a7328-f81f-11d2-ba4b-00a0c93ec93b <<<"$table"; then
+    echo "$disk has an ESP" >&2
+    exit 1
+fi
+grep -q " usrhash=$(cat "$roothash")$" "$cmdline"
+""",
+    args = [
+        "$(location :boot-demo-direct.fedora)",
+        "$(location :boot-demo-direct.fedora[boot][cmdline])",
+        "$(location :boot-demo-direct.fedora[roothash])",
+    ],
+    distro = _FEDORA,
+)
+
+image.vm(
+    name = "boot-demo-direct-vm",
+    autologin = "root",
+    credentials = {
+        "firstboot.locale": "C.UTF-8",
+        "firstboot.timezone": "UTC",
+    },
+    # Boots the disk's kernel directly, as the disk has no ESP.
+    image = ":boot-demo-direct",
+)
+
+tests.vm_smoke(
+    name = "boot-demo-direct-vm-smoke",
+    vm = ":boot-demo-direct-vm",
+    # Settling shows that the initrd found the usr partition by the root hash on the command line.
+    checks = ["grep -q ' usrhash=' /proc/cmdline"],
+)
+
 # The qcow2 and vmdk describe a disk of the image's virtual_size with the raw's content, while the raw stays
 # as small as its partitions.
 box.sh_test(

@@ -73,7 +73,7 @@ def _ddi_preloaded_disk_impl(ctx: AnalysisContext) -> list[Provider]:
         disks[format] = out
     sub_targets = {format: [DefaultInfo(default_output = out), DiskConversionInfo(format = format, image = out)] for format, out in disks.items()}
 
-    # A base that registers as an AMI has `[ami]`, as a bootable image.disk does.
+    # A base that registers as an AMI has `[ami]`, as a bootable image.disk with an ESP does.
     base_ami = ctx.attrs.base[DefaultInfo].sub_targets.get("ami")
     if base_ami != None:
         sub_targets["ami"] = declare_ami_from_base(

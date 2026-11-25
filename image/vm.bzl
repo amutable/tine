@@ -6,6 +6,7 @@
 load("@prelude//platforms:defs.bzl", "host_configuration")
 load("//box:defs.bzl", "box")
 load("//distribution:defs.bzl", "distribution")
+load(":boot.bzl", "DirectBootInfo")
 load(":ddi.bzl", "DdiInfo", "DiskConversionInfo", "SIZE_PATTERN")
 load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "system_extension")
 
@@ -29,13 +30,23 @@ def _image(image: Dependency, image_format: str) -> Artifact:
     return qcow2[DiskConversionInfo].image
 
 def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
-    if ctx.attrs.cmdline_file != None:
+    linux, initrd, cmdline_file = ctx.attrs.linux, ctx.attrs.initrd, ctx.attrs.cmdline_file
+
+    # A disk without an ESP has nothing for the firmware to boot, so its own kernel boots directly
+    # unless the target names another.
+    direct = ctx.attrs.image.get(DirectBootInfo)
+    if direct != None:
+        linux = linux if linux != None else direct.kernel
+        initrd = initrd if initrd != None else direct.initrd
+        cmdline_file = cmdline_file if cmdline_file != None else direct.cmdline
+
+    if cmdline_file != None:
         run = cmd_args(
             box.run(box = ctx.attrs._box[box.Info], exe = "sh", relaxed = True),
             "-c",
             _CMDLINE_FILE_RUNNER,
             "sh",
-            ctx.attrs.cmdline_file,
+            cmdline_file,
         )
     else:
         run = cmd_args(box.run(box = ctx.attrs._box[box.Info], exe = "systemd-vmspawn", relaxed = True))
@@ -51,10 +62,10 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
         "--network-user-mode",
     )
 
-    if ctx.attrs.linux != None:
-        run.add(cmd_args(ctx.attrs.linux, format = "--linux={}"))
-    if ctx.attrs.initrd != None:
-        run.add(cmd_args(ctx.attrs.initrd, format = "--initrd={}"))
+    if linux != None:
+        run.add(cmd_args(linux, format = "--linux={}"))
+    if initrd != None:
+        run.add(cmd_args(initrd, format = "--initrd={}"))
 
     if ctx.attrs.grow != None:
         if not regex_match(SIZE_PATTERN, ctx.attrs.grow):
@@ -160,7 +171,7 @@ _image_vm = rule(
         "cmdline_file": attrs.option(
             attrs.source(),
             default = None,
-            doc = "file holding the kernel command line to boot `linux` with, such as a disk's `[boot][cmdline]`; `cmdline_extra` follows it",
+            doc = "file holding the kernel command line to boot `linux` with, such as a disk's `[boot][cmdline]`, its default for a disk without an ESP; `cmdline_extra` follows it",
         ),
         "coco": attrs.option(
             attrs.string(),
@@ -197,12 +208,12 @@ _image_vm = rule(
         "initrd": attrs.option(
             attrs.source(),
             default = None,
-            doc = "initrd for a direct kernel boot of `linux`, such as a disk's `[boot][initrd]`",
+            doc = "initrd for a direct kernel boot of `linux`, such as a disk's `[boot][initrd]`, its default for a disk without an ESP",
         ),
         "linux": attrs.option(
             attrs.source(),
             default = None,
-            doc = "kernel to boot directly rather than through the image's ESP, such as a disk's `[boot][kernel]`",
+            doc = "kernel to boot directly rather than through the image's ESP, such as a disk's `[boot][kernel]`, its default for a disk without an ESP",
         ),
         "portables": attrs.list(
             attrs.dep(providers = [DdiInfo]),

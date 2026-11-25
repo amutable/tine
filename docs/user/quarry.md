@@ -54,7 +54,7 @@ description:
 | Mark | On |
 | --- | --- |
 | `version` | every file: the version of the release's images, which must all have the same one |
-| `update` | what systemd-sysupdate installs: UKIs, usr partitions and their verity partitions, extensions of any class, portable images |
+| `update` | what systemd-sysupdate installs: UKIs, the usr partitions of an image with a UKI and their verity partitions, extensions of any class, portable images. A disk that boots its kernel directly pins its usr partition on its command line, so it gets none |
 | `supplemented-by` | what a client fetches alongside: a UKI brings its usr partition and the initrd's SBOMs and package database, a usr partition its verity partitions and the image's SBOMs and package database, an extension or a portable image its own SBOMs and package database. Each names its media type where it has one |
 | `verity-root-hash` | the usr partition, extensions and portable images |
 

@@ -308,14 +308,26 @@ BootArtifactsInfo = record(
     cmdline = Artifact,
     initrd = Artifact,
     kernel = Artifact,
-    uki = Artifact,
+    # None for a disk whose kernel boots directly, without its UKI.
+    uki = Artifact | None,
+)
+
+DirectBootInfo = provider(
+    doc = "What a disk without an ESP boots: a kernel directly, with its initrd and command line.",
+    fields = {
+        "cmdline": provider_field(Artifact),
+        "initrd": provider_field(Artifact),
+        "kernel": provider_field(Artifact),
+    },
 )
 
 def boot_subtargets(artifacts: BootArtifactsInfo) -> dict[str, list[Provider]]:
     """The boot artifacts, exposed wherever the image they come from is."""
-    return {
+    sub_targets = {
         "cmdline": [DefaultInfo(default_output = artifacts.cmdline)],
         "initrd": [DefaultInfo(default_output = artifacts.initrd)],
         "kernel": [DefaultInfo(default_output = artifacts.kernel)],
-        "uki": [DefaultInfo(default_output = artifacts.uki)],
     }
+    if artifacts.uki != None:
+        sub_targets["uki"] = [DefaultInfo(default_output = artifacts.uki)]
+    return sub_targets

@@ -1463,7 +1463,7 @@ disk contains exactly the partition bytes whose hash was embedded in the UKI. Th
 as the disk's `roothash` subtarget. Signature partitions require an explicitly declared key and
 certificate.
 
-A bootable `image.disk()` composes:
+A bootable `image.disk()` with an ESP composes:
 
 ```text
 base initrd package image (zstd cpio)
@@ -1477,6 +1477,9 @@ root filesystem layer ──> identity layer ──> split /usr + verity ──>
                                               │          └─> terminal views and supply-chain artifacts
                                               └─> ESP + system partitions ─> bootable-image result
 ```
+
+A bootable disk without an ESP writes its system partitions in one run and builds the UKI from their root
+hash, only to take its kernel, initrd and command line, which boot the kernel directly. It has no ESP layer.
 
 The identity layer stamps `IMAGE_ID` and `IMAGE_VERSION` into the image's os-release. It is a separate
 thin layer so that a per-commit version string invalidates only the version-embedding artifacts below it,
@@ -1612,7 +1615,8 @@ archive or DDI. Each target returns `image.ImageInfo` alongside its terminal pro
 depend on generated `.layer`, `.pkgdb`, or `.sbom` labels. The standalone terminal rules share the same
 provider-oriented declaration functions.
 
-The disk, directory, package database, and SBOM derive from the same ESP layer. The initrd is a second
+The disk, directory, package database, and SBOM derive from the same layer, the ESP layer of a disk that
+has one. The initrd is a second
 logical image with its own package closure, declared and archived by its own target, so the composition
 republishes the package database and SBOM that image carries rather than deriving anything. The `[initrd]`
 subtarget exposes only the encompassing `image.InitrdInfo` as its typed contract, plus the image's metadata

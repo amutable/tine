@@ -15,7 +15,7 @@ load(
     "ImageSnapshotInfo",
     "image_snapshot",
 )
-load(":boot.bzl", "UkiInfo", "uki", "uki_profile")
+load(":boot.bzl", "DirectBootInfo", "UkiInfo", "uki", "uki_profile")
 load(
     ":compose.bzl",
     "InitrdInfo",
@@ -105,6 +105,7 @@ image = struct(
     ImageSnapshotInfo = ImageSnapshotInfo,
     ExtensionInfo = ExtensionInfo,
     UkiInfo = UkiInfo,
+    DirectBootInfo = DirectBootInfo,
     DdiInfo = DdiInfo,
     RootHashInfo = RootHashInfo,
     DiskConversionInfo = DiskConversionInfo,

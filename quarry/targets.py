@@ -59,12 +59,16 @@ def _is_ddi(entry: Entry) -> bool:
     return entry["kind"] in ("extension", "portable")
 
 
-def is_update(entry: Entry) -> bool:
+def is_update(entry: Entry, files: dict[str, Entry]) -> bool:
     """Return whether systemd-sysupdate installs the file.
 
-    It installs UKIs, usr partitions, extensions and portable images.
+    It installs UKIs, extensions and portable images, and the usr partitions of an image with a UKI. A
+    disk without one boots its kernel directly, with the root hash of its usr partition on a command line
+    that the machine does not update by itself.
     """
-    return entry["kind"] == "uki" or _is_ddi(entry) or _is_usr(entry)
+    if _is_usr(entry):
+        return any(e["kind"] == "uki" and e["image"] == entry["image"] for e in files.values())
+    return entry["kind"] == "uki" or _is_ddi(entry)
 
 
 def selected(entry: Entry, selectors: list[str]) -> bool:
@@ -125,7 +129,7 @@ def custom_marks(files: dict[str, Entry]) -> dict[str, Any]:
     custom: dict[str, Any] = {}
     for name, entry in sorted(files.items()):
         quarry: dict[str, Any] = {}
-        if is_update(entry):
+        if is_update(entry, files):
             quarry["update"] = True
         supp = supplements(name, files)
         if supp:
