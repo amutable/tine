@@ -19,10 +19,10 @@ load(
 )
 load(
     ":boot.bzl",
+    "BootArtifactsInfo",
     "UKI_ATTRS",
     "UkiProfile",  # @unused Used as a type.
     "boot_subtargets",
-    "declare_boot_artifacts",
     "declare_uki",
     "encode_profiles",
     "uki_subtargets",
@@ -470,9 +470,14 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         manifests = system.info.manifests | composed.info.manifests
 
         # What this disk boots, as files rather than as PE sections: a direct kernel boot needs the
-        # kernel and the initrd the UKI carries, and publishing needs the one UKI out of the set the
-        # image ships. Declared here so a caller does not have to point a second target at the ESP.
-        boot = declare_boot_artifacts(ctx, tools = tools, identifier = "boot", image = top)
+        # kernel and the initrd the UKI carries, and publishing needs the UKI. Exposed here so a caller
+        # does not have to point a second target at the ESP.
+        boot = BootArtifactsInfo(
+            cmdline = uki.cmdline,
+            initrd = uki.initrd,
+            kernel = uki.kernel,
+            uki = uki.uki,
+        )
         boot_sub_targets = {
             "boot": [
                 DefaultInfo(

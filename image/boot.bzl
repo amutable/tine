@@ -369,9 +369,10 @@ def declare_boot_artifacts(
     )
 
 def boot_subtargets(artifacts: BootArtifactsInfo) -> dict[str, list[Provider]]:
-    """The extracted artifacts, exposed wherever the image they come from is."""
+    """The boot artifacts, exposed wherever the image they come from is."""
     return {
-        # Only a UKI carries one, so like [uki] it extracts on demand and fails for a plain kernel.
+        # Of an image.bootable, only a UKI carries one, so like [uki] it extracts on demand and fails
+        # for a plain kernel.
         "cmdline": [DefaultInfo(default_output = artifacts.cmdline)],
         "initrd": [DefaultInfo(default_output = artifacts.initrd)],
         "kernel": [DefaultInfo(default_output = artifacts.kernel)],
