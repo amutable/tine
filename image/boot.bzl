@@ -34,6 +34,12 @@ UkiInfo = provider(
 
 UkiProfile = dict
 
+def _check_profile_fields(what: str, fields: dict[str, str]) -> None:
+    for key, value in fields.items():
+        check_name(what + " field", key, "^[A-Z][A-Z0-9_]*$")
+        if "\n" in value:
+            fail("{}: the value of field {} must be a single line".format(what, key))
+
 def uki_profile(id: str, title: str, cmdline: list[str], sign_expected_pcr: bool = True, fields: dict[str, str] = {}) -> UkiProfile:
     """Describe one alternative boot profile embedded in a UKI.
 
@@ -49,12 +55,10 @@ def uki_profile(id: str, title: str, cmdline: list[str], sign_expected_pcr: bool
     for argument in cmdline:
         if not argument:
             fail("uki_profile: cmdline arguments cannot be empty")
-    for key, value in fields.items():
-        check_name("uki_profile field", key, "^[A-Z][A-Z0-9_]*$")
-        if key in ("ID", "TITLE"):
+    for key in ("ID", "TITLE"):
+        if key in fields:
             fail("uki_profile: pass {} as the {} argument, not as a field".format(key, key.lower()))
-        if "\n" in value:
-            fail("uki_profile: the value of field {} must be a single line".format(key))
+    _check_profile_fields("uki_profile", fields)
     return {
         "cmdline": cmdline,
         "fields": fields,
@@ -81,6 +85,7 @@ def declare_uki(
     initrds: list[ImageArchiveInfo],
     cmdline: list[str],
     profiles: list[str],
+    profile_fields: dict[str, str],
     arch: str,
     image_id: str,
     version: str,
@@ -120,6 +125,19 @@ def declare_uki(
     # Declared next to the UKIs, not inside them: that directory is copied onto the ESP whole.
     modules = declare_out(ctx, identifier, "modules.json")
     check_name("uki image_id", image_id, FILENAME_PATTERN)
+    for key in ("ID", "TITLE"):
+        if key in profile_fields:
+            fail("uki: every profile has an id and a title of its own, profile_fields can't set {}".format(key))
+    _check_profile_fields("uki profile_fields", profile_fields)
+    decoded_profiles = [json.decode(profile) for profile in profiles]
+    if profile_fields:
+        # ukify only writes a .profile section for the base profile into a UKI that joins further profiles.
+        if not decoded_profiles:
+            fail("uki: profile_fields needs at least one profile")
+        # The base profile has the id main, which ukify also uses to select it with --sign-profile.
+        for profile in decoded_profiles:
+            if profile["id"].lower() == "main":
+                fail("uki: the profile id main names the base profile")
     check_version("uki version", version)
     for initrd in initrds:
         if initrd.format != "cpio":
@@ -141,7 +159,8 @@ def declare_uki(
             "initrds": [initrd.archive for initrd in initrds],
             "modules_manifest": modules.as_output(),
             "out": out.as_output(),
-            "profiles": [json.decode(profile) for profile in profiles],
+            "profile_fields": profile_fields,
+            "profiles": decoded_profiles,
             "root_hash": {
                 "kind": root_hash.kind,
                 "path": root_hash.hash,
@@ -178,6 +197,7 @@ def _uki_impl(ctx: AnalysisContext) -> list[Provider]:
         initrd_modules = ctx.attrs.initrd_modules,
         initrds = [initrd[ImageArchiveInfo] for initrd in ctx.attrs.initrds],
         profiles = ctx.attrs.profiles,
+        profile_fields = ctx.attrs.profile_fields,
         root_hash = root_hash,
         secure_boot_key = resolve_signing_key(ctx.attrs.secure_boot_key),
         sign_expected_pcr_key = resolve_signing_key(ctx.attrs.sign_expected_pcr_key),
@@ -197,6 +217,12 @@ UKI_ATTRS = {
         attrs.string(),
         default = _INITRD_MODULES["patterns"],
         doc = "glob patterns selecting the kernel modules the UKI's per-kernel initrd carries",
+    ),
+    "profile_fields": attrs.dict(
+        attrs.string(),
+        attrs.string(),
+        default = {},
+        doc = "KEY=VALUE lines of the .profile section of every profile, the base profile included, such as TOFU=; needs profiles",
     ),
     "profiles": attrs.list(
         attrs.string(),

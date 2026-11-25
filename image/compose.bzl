@@ -435,6 +435,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             initrd_modules = ctx.attrs.initrd_modules,
             initrds = [initrd_info.cpio],
             profiles = ctx.attrs.profiles,
+            profile_fields = ctx.attrs.profile_fields,
             root_hash = system.info.root_hash,
             secure_boot_key = secure_boot_key,
             sign_expected_pcr_key = resolve_signing_key(ctx.attrs.sign_expected_pcr_key),
