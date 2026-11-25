@@ -326,7 +326,7 @@ _portable = rule(
 
 def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     tools = ctx.attrs._tools[ImageToolsInfo]
-    bootable = ctx.attrs._bootable
+    boot_mode = _BootMode(ctx.attrs._boot)
     image_id = check_name(
         "disk image_id",
         ctx.attrs.image_id or ctx.label.name,
@@ -335,7 +335,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     # The version lands in partition labels and the UKI filename.
     version = check_name("disk version", ctx.attrs.version, VERSION_PATTERN)
 
-    secure_boot_key = resolve_signing_key(ctx.attrs.secure_boot_key) if bootable else None
+    secure_boot_key = resolve_signing_key(ctx.attrs.secure_boot_key) if boot_mode == _BootMode("uki") else None
 
     root = declare_image(
         ctx,
@@ -392,9 +392,9 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     # and every split partition, which repart names after the image it writes them out of.
     basename = "{}_{}_{}".format(image_id, version, architecture.ARCHITECTURES[ctx.attrs.arch].systemd)
 
-    initrd_info = ctx.attrs.initrd[InitrdInfo] if bootable else None
-    if bootable:
-        # The disk() macro makes a disk bootable only when its definitions contain an ESP partition.
+    initrd_info = ctx.attrs.initrd[InitrdInfo] if boot_mode != _BootMode("none") else None
+    if boot_mode == _BootMode("uki"):
+        # The disk() macro boots a disk through a UKI only when its definitions contain an ESP partition.
         system_definitions = [definition for definition in definitions if definition["type"] != "esp"]
         boot_definitions = [definition for definition in definitions if definition["type"] == "esp"]
         if not system_definitions:
@@ -547,7 +547,9 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     sub_targets.update(manifest_sub_targets(manifests))
     sub_targets.update(boot_sub_targets)
     sub_targets["snapshot"] = image_snapshot_providers(tools, snapshot)
-    if bootable:
+
+    # EC2 boots an instance through the firmware, which needs the ESP.
+    if boot_mode == _BootMode("uki"):
         sub_targets["ami"] = declare_ami(
             ctx.actions,
             arch = ctx.attrs.arch,
@@ -638,16 +640,19 @@ _BOOTABLE_ATTRS = (
     | AMI_IMPORT_ATTR
 )
 
+# How a disk boots: not at all, or through a UKI on its ESP.
+_BootMode = enum("none", "uki")
+
 _disk = rule(
     impl = _disk_impl,
     supports_incoming_transition = True,
-    attrs = _DISK_ATTRS | {"_bootable": attrs.bool(default = False)},
+    attrs = _DISK_ATTRS | {"_boot": attrs.enum(_BootMode.values(), default = "none")},
 )
 
 _bootable_disk = rule(
     impl = _disk_impl,
     supports_incoming_transition = True,
-    attrs = _DISK_ATTRS | _BOOTABLE_ATTRS | {"_bootable": attrs.bool(default = True)},
+    attrs = _DISK_ATTRS | _BOOTABLE_ATTRS | {"_boot": attrs.enum(_BootMode.values(), default = "uki")},
 )
 
 def archive(
