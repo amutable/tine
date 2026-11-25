@@ -79,7 +79,33 @@ class TestProfileSection(unittest.TestCase):
             "fields": {"PCRLOCK": "yes", "TOFU": "test.tofu"},
         }
         self.assertEqual(
-            uki._profile_section(profile), "ID=Profile2\nTITLE=Profile Two\nPCRLOCK=yes\nTOFU=test.tofu\n"
+            uki._profile_section(profile, {}),
+            "ID=Profile2\nTITLE=Profile Two\nPCRLOCK=yes\nTOFU=test.tofu\n",
+        )
+
+    def test_own_fields_override_shared_fields(self) -> None:
+        # A profile must be able to override a field that the UKI sets for every profile, for example
+        # to opt out of TOFU= with an empty token. Write a profile whose own TOFU= is empty, with a
+        # shared TOFU= and PCRLOCK=, and check that the section has a single, empty TOFU= line.
+        profile: uki.Profile = {
+            "id": "install",
+            "title": "Install",
+            "cmdline": [],
+            "sign_expected_pcr": True,
+            "fields": {"TOFU": ""},
+        }
+        self.assertEqual(
+            uki._profile_section(profile, {"TOFU": "com.example.os", "PCRLOCK": "yes"}),
+            "ID=install\nTITLE=Install\nTOFU=\nPCRLOCK=yes\n",
+        )
+
+    def test_base_profile_is_main(self) -> None:
+        # The base profile must have the id main, which ukify selects it by with --sign-profile, and no
+        # TITLE=. Build the section from the shared fields and check that ID=main comes first, followed
+        # by each field as its own KEY=VALUE line.
+        self.assertEqual(
+            uki._base_profile_section({"TOFU": "com.example.os", "PCRLOCK": "yes"}),
+            "ID=main\nTOFU=com.example.os\nPCRLOCK=yes\n",
         )
 
 

@@ -460,10 +460,14 @@ when needed:
   to carry modules for the kernel in question (see "Kernel modules in the UKI"). Alternative kernel
   command lines are `image.uki_profile()` descriptors, which add boot profiles as separate sd-boot menu
   entries, each appending its arguments to the base kernel command line. A profile's `fields` add further
-  `KEY=VALUE` lines to its `.profile` section, such as `PCRLOCK=yes` or `TOFU=`. `splash` names the BMP
-  image to embed for the EFI stub to display while booting. With a `secure_boot_key`, the UKI and its
-  embedded kernel are signed for Secure Boot. With a `sign_expected_pcr_key`, a signed expected-PCR 11
-  policy covers each profile; set its `sign_expected_pcr` to false to opt out;
+  `KEY=VALUE` lines to its `.profile` section, such as `PCRLOCK=yes` or `TOFU=`. `profile_fields` adds
+  such lines to every `.profile` section, including a section for the base profile, whose id is `main`. A
+  profile's own `fields` override them, for example `TOFU=` with an empty value to opt one profile out.
+  ukify only writes the section of the base profile into a UKI with further profiles, so `profile_fields`
+  needs `profiles`. `splash` names the BMP image to embed for the EFI stub to display while booting. With
+  a `secure_boot_key`, the UKI and its embedded kernel are signed for Secure Boot. With a
+  `sign_expected_pcr_key`, a signed expected-PCR 11 policy covers each profile; set its `sign_expected_pcr`
+  to false to opt out;
 - `image.bootable` selects a kernel and matching initrd from a logical image, exposed as `[uki]`, `[kernel]`,
   and `[initrd]` subtargets, and `[cmdline]`, the base command line of the UKI, for a direct kernel boot;
 - `image.vm` runs the image's qcow2 (or raw) ephemerally, from its ESP or by a direct kernel boot, with the
@@ -696,6 +700,8 @@ Optional attributes:
   `image.DEFAULT_INITRD_MODULES`; see "Kernel modules in the UKI"; passed on to `image.uki()`.
 - `profiles` (`image.uki_profile()` descriptor list): Alternative sd-boot menu entries, passed on to
   `image.uki()`.
+- `profile_fields` (string dict): `KEY=VALUE` lines of every `.profile` section, the base profile
+  included, passed on to `image.uki()`.
 - `splash` (source target or absolute image path): BMP image embedded in the UKI and displayed by the EFI
   stub while booting; passed on to `image.uki()`. An absolute path names a file the image ships, so one
   declaration can pick each distribution's own logo:

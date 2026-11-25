@@ -62,6 +62,8 @@ class Spec(finalize.ImageSpec):
     modules_manifest: str
     cmdline: list[str]
     profiles: list[Profile]
+    # Fields of every .profile section, the base profile included. A profile's own fields override them.
+    profile_fields: dict[str, str]
     root_hash: RootHash | None
     # ukify's EFI architecture (e.g. x64) and systemd's spelling in the UKI name (e.g. x86-64).
     efi_arch: str
@@ -205,10 +207,17 @@ def _microcode(tree: Path, scratch: Path, epoch: int, efi_arch: str) -> Path | N
     return archive
 
 
-def _profile_section(profile: Profile) -> str:
+def _profile_section(profile: Profile, shared: dict[str, str]) -> str:
     """Return the .profile section of a profile, in os-release format."""
-    fields = {"ID": profile["id"], "TITLE": profile["title"], **profile["fields"]}
+    fields = {"ID": profile["id"], "TITLE": profile["title"], **shared, **profile["fields"]}
     return "".join(f"{key}={value}\n" for key, value in fields.items())
+
+
+def _base_profile_section(fields: dict[str, str]) -> str:
+    """Return the .profile section of the base profile, in os-release format."""
+    # sd-boot appends the TITLE= of a profile to the name of the UKI in its menu. The base profile has no
+    # TITLE=, so its menu entry shows the name of the UKI alone.
+    return "".join(f"{key}={value}\n" for key, value in {"ID": "main", **fields}.items())
 
 
 def _signing_arguments(
@@ -309,7 +318,7 @@ def main(argv: list[str] | None = None) -> None:
             fail("uki: the image ships no addon stub — install systemd-boot-unsigned")
         for profile in profiles:
             section = scratch / f"{profile['id']}.profile"
-            section.write_text(_profile_section(profile))
+            section.write_text(_profile_section(profile, spec["profile_fields"]))
             profile_cmdline = scratch / f"{profile['id']}.cmdline"
             profile_cmdline.write_text(" ".join(([base] if base else []) + profile["cmdline"]) + "\x00")
             pe = scratch / f"{profile['id']}.efi"
@@ -323,6 +332,12 @@ def main(argv: list[str] | None = None) -> None:
             ]  # fmt: skip
             subprocess.run(cmd, check=True)
             profile_pes.append(pe)
+
+        base_profile = []
+        if spec["profile_fields"]:
+            section = scratch / "main.profile"
+            section.write_text(_base_profile_section(spec["profile_fields"]))
+            base_profile = ["--profile", f"@{section}"]
 
         signing = _signing_arguments(secure_boot, pcr, profiles, _ukify_options() if pcr else set())
 
@@ -348,6 +363,7 @@ def main(argv: list[str] | None = None) -> None:
             cmd += ["--microcode", str(microcode)]
         cmd += [
             "--cmdline", f"@{cmdline}",
+            *base_profile,
             *(argument for pe in profile_pes for argument in ("--join-profile", str(pe))),
             "--os-release", f"@{os_release}",
             "--uname", kver,

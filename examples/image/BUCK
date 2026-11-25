@@ -227,6 +227,9 @@ image.disk(
         # this file on its ESP.
         image.ops.copy(":demo[sbom][spdx]", "/boot/metadata/demo.spdx.json"),
     ],
+    # systemd-stub only trusts unsigned addons on first use when the booted profile sets TOFU=. The first boot
+    # of a profile with the token records the addons for every profile with the token.
+    profile_fields = {"TOFU": "dev.tine.example"},
     profiles = [
         image.uki_profile(
             id = "debug",
@@ -618,6 +621,26 @@ box.sh_test(
     box = "tine//distribution:tools.box",
     test = "uki-microcode.sh",
     args = ["$(location :boot-demo.fedora[boot][uki])"] + architecture.select({name: [name] for name in architecture.ARCHITECTURES}),
+    distro = _FEDORA,
+)
+
+# systemd-stub reads the TOFU= token of the booted profile from the .profile section of that profile. The base
+# profile only has a .profile section if profile_fields is set.
+box.sh_test(
+    name = "uki-profiles-test",
+    labels = ["image"],
+    box = "tine//distribution:tools.box",
+    script = """
+profiles=$(ukify inspect "$1" | grep -E '^\\.profile:$|^    (ID|TOFU)=' | sed -n '/^\\.profile:$/,$p')
+expected='.profile:
+    ID=main
+    TOFU=dev.tine.example
+.profile:
+    ID=debug
+    TOFU=dev.tine.example'
+test "$profiles" = "$expected"
+""",
+    args = ["$(location :boot-demo.fedora[boot][uki])"],
     distro = _FEDORA,
 )
 
