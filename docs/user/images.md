@@ -943,12 +943,11 @@ image. It describes the terminal contents, including package-database removal. A
 verity partitions without a listing keeps the `[manifest]` of the logical image. `[pkgdb]` and `[sbom]`
 describe the installed package set.
 
-`[boot]` is what the disk boots, as files: the `bootable` rule run against the composition's own ESP, so a
-direct kernel boot or a publisher needs no second target pointing back at it. Its `[kernel]` and `[initrd]`
-come out of the selected UKI's PE sections, which is why `[boot][initrd]` and `[initrd]` differ: the latter
-is the initrd image this composition was given, while the former also carries the kernel modules the UKI
-adds for the kernel it selected. `[boot][uki]` is the single selected UKI, where `[uki]` is the directory of
-every UKI the image ships.
+`[boot]` is what the disk boots, as files, so a direct kernel boot or a publisher needs no second target
+pointing back at it. Its `[kernel]`, `[initrd]` and `[cmdline]` are what the UKI carries, which is why
+`[boot][initrd]` and `[initrd]` differ: the latter is the initrd image this composition was given, while
+the former also carries the kernel modules the UKI adds for the image's kernel. `[boot][uki]` is the UKI
+itself, where `[uki]` is the directory that holds it.
 
 The nested metadata describes the initrd, which resolves its own package closure and may therefore contain
 packages that the root filesystem does not install. Nothing scans the initrd once it is a cpio inside the
