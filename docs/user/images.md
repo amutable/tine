@@ -478,7 +478,8 @@ when needed:
   firmware without pre-enrolled keys, so an image carrying `loader/keys/auto` enrollment files enrolls them
   on first boot and then boots with Secure Boot enforced, and attaches a software TPM so the UKI's signed
   expected-PCR policy is measured. `tpm` overrides that either way: true attaches one without Secure
-  Boot, false leaves it out with Secure Boot. Unset and without Secure Boot, the guest has no TPM.
+  Boot, false leaves it out with Secure Boot. Unset and without Secure Boot, the guest has no TPM. It
+  provides `image.VmInfo`.
 
 `image.archive` builds one logical image from operations and writes it as a deterministic tar or newc cpio
 archive, optionally zstd-compressed (`compression = "zstd"`). `image.sysext`, `image.confext` and
@@ -1306,8 +1307,8 @@ boot for SEV-SNP. `vmspawn_args` passes any other vmspawn option. They follow ev
 they can override tine's for options whose last value wins, like `--console=` or `--tpm=`. `--bind=` and
 `--set-credential=` get appended to tine's instead; note that vmspawn refuses setting a credential name
 twice. The only options tine always passes are `--image`, `--image-format`, `--ephemeral`, which keeps
-the guest from writing the build output, `--tpm=`, and the defaults `--console=native`, `--kvm=yes` and
-`--network-user-mode`.
+the guest from writing the build output, `--tpm=`, and the default `--kvm=yes`; the runner adds the
+defaults `--console=native` and `--network-user-mode`.
 
 ```sh
 tine buck run //examples/image:boot-demo-vm.fedora
@@ -1315,6 +1316,11 @@ tine buck run //examples/image:boot-demo-vm.fedora
 
 The example image uses a tmpfs root with `mount.usr=dissect`; SELinux is disabled because the build does not
 yet produce filesystem labels. Ephemeral mode preserves the Buck disk artifact.
+
+A test harness that wants to start the VM by itself can take `image.VmInfo` from the `image.vm` target rather
+than running it, or the `[spec]` subtarget in a rule that takes no provider, such as a test's `env`. The
+provider's doc describes the spec and how a harness passes it to `systemd-vmspawn`. The spec includes the
+target's `vmspawn_args`, so these are options of the machine, not only of the interactive runner.
 
 ## Example targets
 

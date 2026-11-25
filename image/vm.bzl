@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Amutable GmbH <https://amutable.com/>
 # SPDX-License-Identifier: MPL-2.0
 
-"""Interactive virtual-machine image runners."""
+"""Virtual machines of images, for an interactive runner and for harnesses that start them."""
 
 load("@prelude//platforms:defs.bzl", "host_configuration")
 load("//box:defs.bzl", "box")
@@ -12,9 +12,34 @@ load(":extension.bzl", "ExtensionInfo", "check_portable", "ddi_image_name", "sys
 
 # vmspawn takes the kernel command line as its own trailing arguments, and only the build knows the
 # one a direct kernel boot needs, as the UKI's carries the root hash. So the runner reads it from the
-# file at run time. Word splitting is harmless: vmspawn joins the arguments with spaces again. Globbing
-# is not, as a command line can carry patterns such as systemd.image_filter=usr=AOS_*.
+# file at run time, and VmInfo's spec at build time. Word splitting is harmless: vmspawn joins the
+# arguments with spaces again. Globbing is not, as a command line can carry patterns such as
+# systemd.image_filter=usr=AOS_*.
 _CMDLINE_FILE_RUNNER = 'set -f; cmdline=$(cat "$1"); shift; exec systemd-vmspawn $cmdline "$@"'
+
+VmInfo = provider(
+    doc = """The VM configuration that `image.vm` boots.
+
+`spec` is a JSON file with:
+
+- `vmspawn_args`: the `systemd-vmspawn` options of the machine, ending with the target's own, which
+  therefore are machine options as well. The interactive runner specifics are left out: console,
+  network and `autologin`.
+- `credentials`: the credentials by name, for `--set-credential=`.
+- `cmdline`: the kernel command line arguments, the words of `cmdline_file` and then `cmdline_extra`.
+- `image`: the disk the machine boots.
+- `coco`, `linux`, `secure_boot` and `tpm`: the attributes, for a harness to know what to expect, with
+  `linux` resolved from a disk without an ESP and `tpm` from `secure_boot` when unset. An override in
+  the target's `vmspawn_args` doesn't change them.
+
+A harness runs `systemd-vmspawn` in the tools box of the image. It passes `vmspawn_args`, then its own
+options, which override those except for vmspawn's additive ones. Then it passes the credentials merged
+with its own (note that vmspawn refuses a credential name twice) and last `cmdline` and its own kernel
+command line arguments. Paths are relative to the project root, and the files they name are hidden
+inputs of `spec`.
+""",
+    fields = {"spec": provider_field(cmd_args)},
+)
 
 def _image(image: Dependency, image_format: str) -> Artifact:
     if image_format == "raw":
@@ -28,6 +53,28 @@ def _image(image: Dependency, image_format: str) -> Artifact:
     if qcow2 == None:
         fail("image_vm: {} is not a disk with a qcow2".format(image.label))
     return qcow2[DiskConversionInfo].image
+
+def _spec_impl(
+    actions: AnalysisActions,
+    cmdline_extra: list[str],
+    cmdline_file: ArtifactValue | None,
+    fields: dict[str, typing.Any],
+    spec: OutputArtifact,
+) -> list[Provider]:
+    cmdline = cmdline_file.read_string().split() if cmdline_file != None else []
+    actions.write_json(spec, fields | {"cmdline": cmdline + cmdline_extra}, pretty = True)
+    return []
+
+# Dynamic to read cmdline_file; see _CMDLINE_FILE_RUNNER.
+_spec = dynamic_actions(
+    impl = _spec_impl,
+    attrs = {
+        "cmdline_extra": dynattrs.value(list[str]),
+        "cmdline_file": dynattrs.option(dynattrs.artifact_value()),
+        "fields": dynattrs.value(dict[str, typing.Any]),
+        "spec": dynattrs.output(),
+    },
+)
 
 def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     for name, size in (("grow", ctx.attrs.grow), ("RAM", ctx.attrs.ram)):
@@ -58,8 +105,10 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     # which: left to itself, vmspawn attaches one whenever swtpm is installed, which the tools box does.
     tpm = ctx.attrs.tpm if ctx.attrs.tpm != None else ctx.attrs.secure_boot
 
-    # The options that make the machine, except for its credentials; the runner adds those and the
-    # interactive ones.
+    # The options that make the machine. An attribute that changes the machine belongs here, which both
+    # the runner and VmInfo's spec take, so that a harness that starts the VM itself boots the same
+    # machine as the runner. The credentials and the kernel command line stay apart, as a harness adds
+    # its own to them.
     options = cmd_args(
         "--image",
         image,
@@ -123,6 +172,25 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     # After everything tine passes, so that an option vmspawn takes the last value of overrides it.
     options.add(ctx.attrs.vmspawn_args)
 
+    # See VmInfo.
+    spec = ctx.actions.declare_output("spec.json")
+    ctx.actions.dynamic_output_new(
+        _spec(
+            cmdline_extra = ctx.attrs.cmdline_extra,
+            cmdline_file = cmdline_file,
+            fields = {
+                "coco": ctx.attrs.coco,
+                "credentials": ctx.attrs.credentials,
+                "image": image,
+                "linux": linux,
+                "secure_boot": ctx.attrs.secure_boot,
+                "tpm": tpm,
+                "vmspawn_args": options,
+            },
+            spec = spec.as_output(),
+        ),
+    )
+
     if cmdline_file != None:
         run = cmd_args(
             box.run(box = ctx.attrs._box[box.Info], exe = "sh", relaxed = True),
@@ -156,7 +224,12 @@ def _image_vm_impl(ctx: AnalysisContext) -> list[Provider]:
     # loader for a UKI, `-append` for a bare kernel image. Handing it the arguments rather than the
     # OEM strings also lets it read them, which is how it knows not to add a root= of its own.
     run.add(ctx.attrs.cmdline_extra)
-    return [DefaultInfo(), RunInfo(args = run)]
+    return [
+        DefaultInfo(sub_targets = {"spec": [DefaultInfo(default_output = spec, other_outputs = [options])]}),
+        RunInfo(args = run),
+        # Joined, so that a consumer's write_json renders it as a path rather than a list.
+        VmInfo(spec = cmd_args(spec, delimiter = "", hidden = options)),
+    ]
 
 _image_vm = rule(
     impl = _image_vm_impl,
@@ -240,7 +313,7 @@ _image_vm = rule(
         "vmspawn_args": attrs.list(
             attrs.arg(),
             default = [],
-            doc = "further systemd-vmspawn options, after the ones tine passes, so they can override those vmspawn takes the last value of",
+            doc = "further systemd-vmspawn options of the machine, after the ones tine passes, so they can override those vmspawn takes the last value of",
         ),
         # The tools box of the image's release built the image and contains the VM stack. Booting the image
         # in that box builds no other box.

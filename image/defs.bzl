@@ -59,7 +59,7 @@ load(
 )
 load(":substitute.bzl", "substitute")
 load(":version.bzl", "resolve_version")
-load(":vm.bzl", "image_vm")
+load(":vm.bzl", "VmInfo", "image_vm")
 
 image = struct(
     # Logical images and the operations that build them.
@@ -111,6 +111,7 @@ image = struct(
     DiskConversionInfo = DiskConversionInfo,
     InitrdInfo = InitrdInfo,
     PublishedInfo = PublishedInfo,
+    VmInfo = VmInfo,
     # The record PublishedInfo keys by published name.
     PublishedFile = PublishedFile,
 )
