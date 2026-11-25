@@ -1393,10 +1393,10 @@ locally backed in later solves. Unlike a static `local_repository`, only the pac
 pulls in are built; the universe target itself never forces a package build.
 
 Logical images and terminal outputs are separate rule families. Terminal rules merge the stack only when
-needed. The catalog of terminal rules (`image.snapshot`, `image.uki`, `image.bootable`,
-and `image.vm`) and the `image.archive`, `image.sysext`, `image.confext`, `image.extension`,
-`image.portable`, and `image.disk` composition rules are documented in
-[images.md](../user/images.md). All of them, with the operation helpers and conventional partition layouts,
+needed. The catalog of terminal rules (`image.snapshot`, `image.uki` and `image.vm`) and the
+`image.archive`, `image.sysext`, `image.confext`, `image.extension`, `image.portable`, and `image.disk`
+composition rules are documented in [images.md](../user/images.md).
+All of them, with the operation helpers and conventional partition layouts,
 are members of the `image` struct exported from `tine//image:defs.bzl`; that facade is the public API, and
 the modules behind it are implementation structure. Every public facade a consuming project loads from
 exports one namespace struct the same way: `box`, `cargo`, `go`, `git`, `package`, `package_system/rpm`,

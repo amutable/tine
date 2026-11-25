@@ -11,8 +11,6 @@ load(":image.bzl", "image_tools")
 image_tools(
     name = "tools",
     archive = ":archive",
-    artifacts = ":artifacts",
-    boot = ":boot",
     convert = ":convert",
     ddi = ":ddi",
     layer = ":layer",
@@ -199,37 +197,7 @@ python.library(
     name = "artifacts-lib",
     srcs = ["artifacts.py"],
     boxes = ["tine//distribution:tools.box"],
-    deps = [
-        ":finalize",
-        "//:specs",
-        "//:util",
-    ],
-)
-
-python.binary(
-    name = "artifacts",
-    main = "artifacts.py",
-    boxes = ["tine//distribution:tools.box"],
-    deps = [
-        ":finalize",
-        "//:specs",
-        "//:util",
-    ],
-    visibility = ["PUBLIC"],
-)
-
-python.binary(
-    name = "boot",
-    main = "boot.py",
-    deps = [
-        ":artifacts-lib",
-        ":finalize",
-        ":version",
-        "//:specs",
-        "//:util",
-        "//kmod:kmod",
-    ],
-    visibility = ["PUBLIC"],
+    deps = ["//:util"],
 )
 
 # Run by a bootable disk's `[ami]` subtarget, relaxed, with the host's AWS login.
