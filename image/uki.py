@@ -6,7 +6,8 @@
 """Build the unified kernel image for a logical filesystem image's single kernel.
 
 Box tools operate on the mounted image without chrooting. A kernel-modules cpio
-extends the supplied base initrds.
+extends the supplied base initrds. The kernel, initrd and command line the UKI
+carries are also written as separate files for a direct kernel boot.
 """
 
 import os
@@ -20,6 +21,7 @@ from typing import TypedDict
 import specs
 from util import fail
 
+import artifacts
 import cpio
 import finalize
 import kmod
@@ -60,16 +62,19 @@ class Spec(finalize.ImageSpec):
     # Patterns selecting the modules the per-kernel initrd carries, and the report of what it got.
     initrd_modules: list[str]
     modules_manifest: str
+    # What the UKI carries, as files: its kernel, initrd and command line.
+    kernel: str
+    initrd: str
+    cmdline_file: str
     cmdline: list[str]
     profiles: list[Profile]
     # Fields of every .profile section, the base profile included. A profile's own fields override them.
     profile_fields: dict[str, str]
     root_hash: RootHash | None
-    # ukify's EFI architecture (e.g. x64) and systemd's spelling in the UKI name (e.g. x86-64).
+    # ukify's EFI architecture, e.g. x64.
     efi_arch: str
-    systemd_arch: str
-    image_id: str
-    version: str
+    # The file name of the UKI in `out`.
+    name: str
     secure_boot: Key | None
     # Seals the expected-PCR policy; None leaves it unsealed.
     sign_expected_pcr: Key | None
@@ -308,6 +313,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         cmdline = scratch / "cmdline"
         cmdline.write_text(base + "\x00")
+        Path(spec["cmdline_file"]).write_text(base + "\n")
 
         # Each profile becomes a small PE of .profile and .cmdline sections, joined into every
         # UKI below; the profile arguments extend the shared base cmdline.
@@ -353,7 +359,7 @@ def main(argv: list[str] | None = None) -> None:
             file=sys.stderr,
         )
 
-        output = out / f"{spec['image_id']}_{spec['version']}_{spec['systemd_arch']}.efi"
+        output = out / spec["name"]
         cmd = ["ukify", "build", "--linux", str(kernel)]
         for initrd in [*initrds, modules]:
             cmd += ["--initrd", str(initrd)]
@@ -374,6 +380,12 @@ def main(argv: list[str] | None = None) -> None:
             "--output", str(output),
         ]  # fmt: skip
         subprocess.run(cmd, check=True)
+
+        # ukify post-processes the files (decompressing, signing, padding), so read back instead of
+        # directly taking them from the inputs.
+        sections = artifacts.pe_sections(output)
+        artifacts.copy_section(output, sections[".linux"], Path(spec["kernel"]))
+        artifacts.copy_section(output, sections[".initrd"], Path(spec["initrd"]))
     print(f"uki: built {output.name} -> {out}", file=sys.stderr)
 
 

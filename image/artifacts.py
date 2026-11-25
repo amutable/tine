@@ -101,7 +101,7 @@ def _read_source(manifest: Path, name: str) -> Source:
     return Source(path, section)
 
 
-def _copy_section(source: Path, section: Section, out: Path) -> None:
+def copy_section(source: Path, section: Section, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with source.open("rb") as src, out.open("wb") as dst:
         src.seek(section.offset)
@@ -123,7 +123,7 @@ def _extract(tree: Path, source: Source, out: Path) -> None:
     section = pe_sections(path).get(source.section)
     if section is None:
         util.fail(f"artifacts: {path} has no {source.section} section")
-    _copy_section(path, section, out)
+    copy_section(path, section, out)
 
 
 def _extract_text(tree: Path, source: Source, out: Path) -> None:
