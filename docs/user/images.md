@@ -1300,12 +1300,14 @@ image.vm(
 )
 ```
 
-`coco` runs the guest as a confidential VM, vmspawn's `--coco=`, for instance `"sev-snp"` or `"tdx"`; vmspawn
-checks what that needs of the host and of the rest of the command line, such as a direct kernel boot for
-SEV-SNP. `vmspawn_args` passes any other vmspawn option. They follow everything tine passes, so one that
-vmspawn takes the last value of, such as `--console=` or `--tpm=`, overrides tine's. The only options tine
-always passes are `--image`, `--image-format`, `--ephemeral`, which keeps the guest from writing the build
-output, and the defaults `--console=native`, `--kvm=yes` and `--network-user-mode`.
+`coco` runs the guest as a confidential VM, vmspawn's `--coco=`, for instance `"sev-snp"` or `"tdx"`;
+vmspawn checks what that needs of the host and of the rest of the command line, such as a direct kernel
+boot for SEV-SNP. `vmspawn_args` passes any other vmspawn option. They follow everything tine passes, so
+they can override tine's for options whose last value wins, like `--console=` or `--tpm=`. `--bind=` and
+`--set-credential=` get appended to tine's instead; note that vmspawn refuses setting a credential name
+twice. The only options tine always passes are `--image`, `--image-format`, `--ephemeral`, which keeps
+the guest from writing the build output, `--tpm=`, and the defaults `--console=native`, `--kvm=yes` and
+`--network-user-mode`.
 
 ```sh
 tine buck run //examples/image:boot-demo-vm.fedora
