@@ -128,12 +128,13 @@ def verity_partitions(data: Partition, signed: bool) -> list[Partition]:
         )
     return definitions
 
-def usr_verity_partitions(signed: bool) -> list[Partition]:
+def usr_verity_partitions(signed: bool, esp: bool = True) -> list[Partition]:
     """Return the conventional layout of a verity-protected usr partition and an ESP.
 
-    `signed` adds the verity signature partition. systemd-sysupdate matches A/B partitions by their
-    exact label, so the labels contain the image ID and version as placeholders, which `disk()` fills in
-    from its image_id and version attributes.
+    `signed` adds the verity signature partition. Without `esp`, a bootable disk boots its kernel
+    directly. systemd-sysupdate matches A/B partitions by their exact label, so the labels contain the
+    image ID and version as placeholders, which `disk()` fills in from its image_id and version
+    attributes.
     """
     usr = partition(
         type = "usr",
@@ -145,7 +146,7 @@ def usr_verity_partitions(signed: bool) -> list[Partition]:
         verity = "data",
         verity_match_key = "usr",
     )
-    return verity_partitions(usr, signed) + [_ESP_PARTITION]
+    return verity_partitions(usr, signed) + ([_ESP_PARTITION] if esp else [])
 
 def format_partition_labels(definitions: list[Partition], image_id: str, version: str) -> list[Partition]:
     """Render {image_id} and {version} placeholders in partition labels."""

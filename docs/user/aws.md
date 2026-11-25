@@ -12,8 +12,8 @@ that is a function of the image, and uploads it as a separate `buck run` step th
 
 ## The AMI
 
-Every bootable [image.disk](images.md#imagedisk) has an `[ami]` subtarget. `buck build` it to build the
-disk and an `<IMAGE_ID>_<IMAGE_VERSION>_<arch>.ami.json` with its registration parameters.
+Every bootable [image.disk](images.md#imagedisk) with an ESP has an `[ami]` subtarget. `buck build` it to
+build the disk and an `<IMAGE_ID>_<IMAGE_VERSION>_<arch>.ami.json` with its registration parameters.
 `buck run` it to [import](#importing-an-ami) the disk.
 
 Nothing about the disk is specific to EC2: every initrd supports

@@ -20,6 +20,7 @@ load(
 load(
     ":boot.bzl",
     "BootArtifactsInfo",
+    "DirectBootInfo",
     "UKI_ATTRS",
     "UkiProfile",  # @unused Used as a type.
     "boot_subtargets",
@@ -488,24 +489,41 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         )
         manifests = composed.info.manifests
         uki = None
+        if boot_mode == _BootMode("direct"):
+            # Nothing boots this UKI. It holds the boot files of the kernel, which boots directly.
+            uki = declare_uki(
+                ctx,
+                tools = tools,
+                arch = ctx.attrs.arch,
+                cmdline = ctx.attrs.cmdline,
+                identifier = "uki",
+                image = identity,
+                image_id = image_id,
+                initrd_modules = ctx.attrs.initrd_modules,
+                initrds = [initrd_info.cpio],
+                profiles = [],
+                profile_fields = {},
+                root_hash = composed.info.root_hash,
+                version = version,
+            )
 
     boot_sub_targets = {}
     boot_artifacts = {}
     boot_providers = []
     if uki != None:
         # What this disk boots, as files rather than as PE sections: a direct kernel boot needs the
-        # kernel and the initrd the UKI carries, and publishing needs the UKI. Exposed here so a caller
-        # does not have to point a second target at the ESP.
+        # kernel, initrd and command line the UKI carries. Only a disk that boots its UKI exposes and
+        # publishes it; for a direct kernel boot, it is a means of building those files.
         boot = BootArtifactsInfo(
             cmdline = uki.cmdline,
             initrd = uki.initrd,
             kernel = uki.kernel,
-            uki = uki.uki,
+            uki = uki.uki if boot_mode == _BootMode("uki") else None,
         )
         boot_sub_targets = {
             "boot": [
                 DefaultInfo(
-                    default_outputs = [boot.kernel, boot.initrd],
+                    default_outputs = [boot.kernel, boot.initrd, boot.cmdline],
                     sub_targets = boot_subtargets(boot),
                 ),
             ],
@@ -517,14 +535,21 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
                 ),
                 initrd_info,
             ],
-            "uki": [DefaultInfo(default_output = uki.ukis, sub_targets = uki_subtargets(uki)), uki],
         }
         boot_artifacts = {
-            "{}.efi".format(basename): PublishedFile(artifact = boot.uki, kind = "uki"),
             "{}.initrd".format(basename): PublishedFile(artifact = boot.initrd, kind = "initrd"),
             "{}.vmlinuz".format(basename): PublishedFile(artifact = boot.kernel, kind = "kernel"),
         }
-        boot_providers = [initrd_info, uki]
+        boot_providers = [initrd_info]
+        if boot_mode == _BootMode("uki"):
+            boot_sub_targets["uki"] = [DefaultInfo(default_output = uki.ukis, sub_targets = uki_subtargets(uki)), uki]
+            boot_artifacts["{}.efi".format(basename)] = PublishedFile(artifact = boot.uki, kind = "uki")
+            boot_providers.append(uki)
+        else:
+            # The published kernel boots with this command line, which holds the root hash, rather than
+            # through the UKI.
+            boot_artifacts["{}.cmdline".format(basename)] = PublishedFile(artifact = boot.cmdline, kind = "cmdline")
+            boot_providers.append(DirectBootInfo(cmdline = boot.cmdline, initrd = boot.initrd, kernel = boot.kernel))
 
     raw = composed.info.disk
     snapshot = declare_image_snapshot(ctx, tools = tools, identifier = "snapshot", image = top)
@@ -580,7 +605,8 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         ]
 
     # An update carries the partitions and the UKI; the disk itself is the installation medium, and
-    # the kernel and initrd are what boots one without a boot loader. The ESP is none of those: what
+    # the kernel and initrd are what boots one without a boot loader, with the command line where
+    # nothing else carries it. The ESP is none of those: what
     # it holds arrives as transfers of its own, so it is left out rather than published as a
     # partition nothing ever writes back. The listings join them: one per partition, naming what
     # that partition puts on a machine and nothing the image happens to hold besides, and one for
@@ -622,26 +648,24 @@ _DISK_ATTRS = (
     }
 )
 
-# Only a bootable disk has the attributes in _BOOTABLE_ATTRS. Buck refuses them on a disk that
-# doesn't boot.
-_BOOTABLE_ATTRS = (
-    UKI_ATTRS
-    | {
-        "cmdline": attrs.list(
-            attrs.string(),
-            default = ["root=tmpfs", "mount.usr=dissect", "rw"],
-        ),
-        "initrd": attrs.dep(
-            providers = [InitrdInfo],
-            doc = "the initrd to boot; the declaration macro declares a conventional one when given none",
-        ),
-        "_ami_box": attrs.dep(providers = [box.Info], default = "tine//tools:aws.box"),
-    }
-    | AMI_IMPORT_ATTR
-)
+# Only a bootable disk has the attributes in _KERNEL_ATTRS, and only one with an ESP those in
+# _BOOTABLE_ATTRS. Buck refuses them on any other disk.
+_KERNEL_ATTRS = {
+    "cmdline": attrs.list(
+        attrs.string(),
+        default = ["root=tmpfs", "mount.usr=dissect", "rw"],
+    ),
+    "initrd": attrs.dep(
+        providers = [InitrdInfo],
+        doc = "the initrd to boot; the declaration macro declares a conventional one when given none",
+    ),
+    "initrd_modules": UKI_ATTRS["initrd_modules"],
+}
 
-# How a disk boots: not at all, or through a UKI on its ESP.
-_BootMode = enum("none", "uki")
+_BOOTABLE_ATTRS = UKI_ATTRS | _KERNEL_ATTRS | {"_ami_box": attrs.dep(providers = [box.Info], default = "tine//tools:aws.box")} | AMI_IMPORT_ATTR
+
+# How a disk boots: not at all, through a UKI on its ESP, or its kernel directly.
+_BootMode = enum("none", "uki", "direct")
 
 _disk = rule(
     impl = _disk_impl,
@@ -653,6 +677,12 @@ _bootable_disk = rule(
     impl = _disk_impl,
     supports_incoming_transition = True,
     attrs = _DISK_ATTRS | _BOOTABLE_ATTRS | {"_boot": attrs.enum(_BootMode.values(), default = "uki")},
+)
+
+_direct_disk = rule(
+    impl = _disk_impl,
+    supports_incoming_transition = True,
+    attrs = _DISK_ATTRS | _KERNEL_ATTRS | {"_boot": attrs.enum(_BootMode.values(), default = "direct")},
 )
 
 def archive(
@@ -736,6 +766,10 @@ def disk(
     bootable: bool | None = None,
     ops: list[LayerOperationTree] = [],
     profiles: list[UkiProfile] = [],
+    profile_fields: dict[str, str] | None = None,
+    secure_boot_key: str | Select | None = None,
+    sign_expected_pcr_key: str | Select | None = None,
+    splash: str | Select | None = None,
     initrd: str | Select | None = None,
     package_manager: str | Select | None = None,
     parent: str | Select | None = None,
@@ -748,17 +782,27 @@ def disk(
 ) -> None:
     """Compose partitions into a disk, which boots when `bootable` is set.
 
-    `bootable` defaults to whether `definitions` contain an ESP partition. Without `initrd`, a
-    bootable disk declares a conventional `initrd_image()` as `<name>.initrd`. A bootable disk with
-    `parent` must be given an `initrd`, because the conventional initrd needs a package manager.
+    `bootable` defaults to whether `definitions` contain an ESP partition. A bootable disk without
+    one boots its kernel directly. Without `initrd`, a bootable disk declares a conventional
+    `initrd_image()` as `<name>.initrd`. A bootable disk with `parent` must be given an `initrd`,
+    because the conventional initrd needs a package manager.
     """
     esp = [definition for definition in definitions if definition["type"] == "esp"]
     if bootable == None:
         bootable = bool(esp)
-    elif bootable and not esp:
-        fail("disk {}: a bootable disk needs an ESP partition in definitions".format(name))
-    if not bootable and (profiles or initrd != None):
-        fail("disk {}: profiles and initrd apply only to a bootable disk".format(name))
+    if not bootable and initrd != None:
+        fail("disk {}: initrd applies only to a bootable disk".format(name))
+    if not (bootable and esp):
+        uki_attrs = {
+            "profile_fields": profile_fields,
+            "profiles": profiles or None,
+            "secure_boot_key": secure_boot_key,
+            "sign_expected_pcr_key": sign_expected_pcr_key,
+            "splash": splash,
+        }
+        given = [attr for attr, value in uki_attrs.items() if value != None]
+        if given:
+            fail("disk {}: {} apply only to a disk that boots a UKI from its ESP".format(name, ", ".join(given)))
 
     # Resolved once, against the labels this disk renders, and passed on: the initrd below carries
     # the version of the disk it boots rather than one rendered against its own empty budget.
@@ -800,4 +844,15 @@ def disk(
             # otherwise the leaf pulling it in decides, exactly as a parent chain does.
             distro = distro,
         )
-    _bootable_disk(initrd = initrd, profiles = encode_profiles(profiles), **common)
+    if esp:
+        _bootable_disk(
+            initrd = initrd,
+            profile_fields = profile_fields,
+            profiles = encode_profiles(profiles),
+            secure_boot_key = secure_boot_key,
+            sign_expected_pcr_key = sign_expected_pcr_key,
+            splash = splash,
+            **common,
+        )
+    else:
+        _direct_disk(initrd = initrd, **common)
