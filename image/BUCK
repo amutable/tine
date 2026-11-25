@@ -95,6 +95,7 @@ python.binary(
     name = "uki",
     main = "uki.py",
     deps = [
+        ":artifacts-lib",
         ":finalize",
         "//:specs",
         "//:util",
@@ -150,6 +151,7 @@ python.test(
         "version_test.py",
     ],
     deps = [
+        ":artifacts-lib",
         ":convert-lib",
         ":finalize",
         ":version",

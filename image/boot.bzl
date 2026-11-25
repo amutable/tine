@@ -27,7 +27,13 @@ load(":sign.bzl", "SigningKeyInfo", "external_signing_execution", "merge_signing
 UkiInfo = provider(
     doc = "Unified kernel images built for one logical image.",
     fields = {
+        # The pieces for a direct kernel boot.
+        "cmdline": provider_field(Artifact),
+        "initrd": provider_field(Artifact),
+        "kernel": provider_field(Artifact),
         "modules": provider_field(Artifact),
+        # The UKI, which the directory `ukis` holds.
+        "uki": provider_field(Artifact),
         "ukis": provider_field(Artifact),
     },
 )
@@ -124,6 +130,9 @@ def declare_uki(
     out = declare_out(ctx, identifier, "ukis", dir = True)
     # Declared next to the UKIs, not inside them: that directory is copied onto the ESP whole.
     modules = declare_out(ctx, identifier, "modules.json")
+    kernel = declare_out(ctx, identifier, "vmlinuz")
+    initrd = declare_out(ctx, identifier, "initrd")
+    cmdline_file = declare_out(ctx, identifier, "cmdline")
     check_name("uki image_id", image_id, FILENAME_PATTERN)
     for key in ("ID", "TITLE"):
         if key in profile_fields:
@@ -139,9 +148,10 @@ def declare_uki(
             if profile["id"].lower() == "main":
                 fail("uki: the profile id main names the base profile")
     check_version("uki version", version)
-    for initrd in initrds:
-        if initrd.format != "cpio":
-            fail("uki: initrd must be a cpio archive, got {!r}".format(initrd.format))
+    name = "{}_{}_{}.efi".format(image_id, version, architecture.ARCHITECTURES[arch].systemd)
+    for archive in initrds:
+        if archive.format != "cpio":
+            fail("uki: initrd must be a cpio archive, got {!r}".format(archive.format))
 
     signing_access = merge_signing_access([secure_boot_key, sign_expected_pcr_key])
     cmd = terminal_image_command(
@@ -153,11 +163,14 @@ def declare_uki(
         image = image,
         spec = {
             "cmdline": cmdline,
+            "cmdline_file": cmdline_file.as_output(),
             "efi_arch": architecture.ARCHITECTURES[arch].efi,
-            "image_id": image_id,
+            "initrd": initrd.as_output(),
             "initrd_modules": initrd_modules,
             "initrds": [initrd.archive for initrd in initrds],
+            "kernel": kernel.as_output(),
             "modules_manifest": modules.as_output(),
+            "name": name,
             "out": out.as_output(),
             "profile_fields": profile_fields,
             "profiles": decoded_profiles,
@@ -170,12 +183,17 @@ def declare_uki(
             "secure_boot": signing_key_spec(secure_boot_key),
             "sign_expected_pcr": signing_key_spec(sign_expected_pcr_key),
             "splash": splash,
-            "systemd_arch": architecture.ARCHITECTURES[arch].systemd,
-            "version": version,
         },
     )
     ctx.actions.run(cmd, category = "uki", identifier = identifier or "uki", **external_signing_execution(signing_access))
-    return UkiInfo(modules = modules, ukis = out)
+    return UkiInfo(
+        cmdline = cmdline_file,
+        initrd = initrd,
+        kernel = kernel,
+        modules = modules,
+        uki = out.project(name),
+        ukis = out,
+    )
 
 def uki_subtargets(info: UkiInfo) -> dict[str, list[Provider]]:
     """The selection manifest, exposed wherever the UKIs themselves are."""
