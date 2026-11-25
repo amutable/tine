@@ -392,13 +392,13 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
     # and every split partition, which repart names after the image it writes them out of.
     basename = "{}_{}_{}".format(image_id, version, architecture.ARCHITECTURES[ctx.attrs.arch].systemd)
 
+    initrd_info = ctx.attrs.initrd[InitrdInfo] if bootable else None
     if bootable:
         # The disk() macro makes a disk bootable only when its definitions contain an ESP partition.
         system_definitions = [definition for definition in definitions if definition["type"] != "esp"]
         boot_definitions = [definition for definition in definitions if definition["type"] == "esp"]
         if not system_definitions:
             fail("disk: a bootable disk needs system partitions besides the ESP")
-        initrd_info = ctx.attrs.initrd[InitrdInfo]
 
         # The UKI contains the verity root hash of the system partitions, and the ESP contains the
         # UKI. repart therefore writes the system partitions first, and copies them into the disk
@@ -468,7 +468,31 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
         # repart lists the files of the system partitions in the run that writes them. The disk
         # manifest therefore combines the manifests of both runs.
         manifests = system.info.manifests | composed.info.manifests
+    else:
+        top = identity
+        composed = declare_ddi(
+            ctx,
+            tools = tools,
+            systemd_arch = architecture.ARCHITECTURES[ctx.attrs.arch].systemd,
+            basename = basename,
+            definitions = definitions,
+            identifier = "disk",
+            image = top,
+            mkfs_options = ctx.attrs.mkfs_options,
+            seed = ctx.attrs.disk_seed,
+            split = True,
+            strip_paths = ctx.attrs.strip_paths,
+            strip_pkgdb = ctx.attrs.strip_pkgdb,
+            verity_key = resolve_signing_key(ctx.attrs.verity_key),
+            virtual_size = ctx.attrs.virtual_size,
+        )
+        manifests = composed.info.manifests
+        uki = None
 
+    boot_sub_targets = {}
+    boot_artifacts = {}
+    boot_providers = []
+    if uki != None:
         # What this disk boots, as files rather than as PE sections: a direct kernel boot needs the
         # kernel and the initrd the UKI carries, and publishing needs the UKI. Exposed here so a caller
         # does not have to point a second target at the ESP.
@@ -501,28 +525,6 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             "{}.vmlinuz".format(basename): PublishedFile(artifact = boot.kernel, kind = "kernel"),
         }
         boot_providers = [initrd_info, uki]
-    else:
-        top = identity
-        composed = declare_ddi(
-            ctx,
-            tools = tools,
-            systemd_arch = architecture.ARCHITECTURES[ctx.attrs.arch].systemd,
-            basename = basename,
-            definitions = definitions,
-            identifier = "disk",
-            image = top,
-            mkfs_options = ctx.attrs.mkfs_options,
-            seed = ctx.attrs.disk_seed,
-            split = True,
-            strip_paths = ctx.attrs.strip_paths,
-            strip_pkgdb = ctx.attrs.strip_pkgdb,
-            verity_key = resolve_signing_key(ctx.attrs.verity_key),
-            virtual_size = ctx.attrs.virtual_size,
-        )
-        manifests = composed.info.manifests
-        boot_sub_targets = {}
-        boot_artifacts = {}
-        boot_providers = []
 
     raw = composed.info.disk
     snapshot = declare_image_snapshot(ctx, tools = tools, identifier = "snapshot", image = top)
