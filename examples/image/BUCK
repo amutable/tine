@@ -201,7 +201,7 @@ box.sh_test(
 # `bin/tine` (see "Image versioning" in images.md); this demo has nothing to version.
 image.disk(
     name = "boot-demo",
-    definitions = image.DEFAULT_USR_VERITY_PARTITIONS,
+    definitions = image.usr_verity_partitions(signed = False),
     version = "unversioned",
     # The release names what a bootable system of its own family needs, so this stays symbolic.
     # The composition generates the databases those packages only describe, hwdb's among them.

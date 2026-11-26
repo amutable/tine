@@ -86,7 +86,7 @@ image.initrd(
 image.disk(
     name = "image",
     initrd = ":image.initrd",
-    definitions = image.DEFAULT_SIGNED_USR_VERITY_PARTITIONS,
+    definitions = image.usr_verity_partitions(signed = True),
     package_sets = ["bootable"],
     # The smoke checks run grep, which Arch's bootable package set does not install.
     packages = ["grep"],

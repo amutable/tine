@@ -30,13 +30,12 @@ load(
 load(
     ":ddi.bzl",
     "DEFAULT_ROOT_PARTITIONS",
-    "DEFAULT_SIGNED_USR_VERITY_PARTITIONS",
-    "DEFAULT_USR_VERITY_PARTITIONS",
     "DISK_FORMATS",
     "DdiInfo",
     "DiskConversionInfo",
     "RootHashInfo",
     "partition",
+    "usr_verity_partitions",
 )
 load(":extension.bzl", "ExtensionInfo")
 load(
@@ -95,8 +94,7 @@ image = struct(
     DEFAULT_INITRD_MODULES = _INITRD_MODULES["patterns"],
     # Conventional partition layouts.
     DEFAULT_ROOT_PARTITIONS = DEFAULT_ROOT_PARTITIONS,
-    DEFAULT_USR_VERITY_PARTITIONS = DEFAULT_USR_VERITY_PARTITIONS,
-    DEFAULT_SIGNED_USR_VERITY_PARTITIONS = DEFAULT_SIGNED_USR_VERITY_PARTITIONS,
+    usr_verity_partitions = usr_verity_partitions,
     COMPRESSIONS = COMPRESSIONS,
     DISK_FORMATS = DISK_FORMATS,
     # Providers.

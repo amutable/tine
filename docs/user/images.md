@@ -640,8 +640,8 @@ described above.
 Required attributes:
 
 - `ops` (operation list): Build the root filesystem layer; passed on to `image.layer`.
-- `definitions` (list of `image.partition()` descriptors): Partition layout; `image.DEFAULT_ROOT_PARTITIONS`,
-  `image.DEFAULT_USR_VERITY_PARTITIONS`, and `image.DEFAULT_SIGNED_USR_VERITY_PARTITIONS` are reusable
+- `definitions` (list of `image.partition()` descriptors): Partition layout; `image.DEFAULT_ROOT_PARTITIONS`
+  and `image.usr_verity_partitions(signed)`, with or without a verity signature partition, are reusable
   conventional layouts; a bootable disk needs system and ESP partitions. A partition label can't contain
   `%`, because repart would expand it as a specifier from the build box rather than from the image.
 
@@ -1147,7 +1147,7 @@ An image asks for that version with `version = "auto"`, or names its own base wi
 ```Starlark
 image.disk(
     name = "demo",
-    definitions = image.DEFAULT_SIGNED_USR_VERITY_PARTITIONS,
+    definitions = image.usr_verity_partitions(signed = True),
     version = "auto:1.4.2",
     ...
 )
