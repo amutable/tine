@@ -110,8 +110,8 @@ class TestCompressedErofs(unittest.TestCase):
         self.assertFalse(ddi._compressed_erofs([written(None), written("none")]))
 
 
-class TestCopyPartition(unittest.TestCase):
-    def _copy(self, *, contents: bytes, raw_size: int) -> dict[str, object]:
+class TestMovePartition(unittest.TestCase):
+    def _move(self, *, contents: bytes, raw_size: int) -> dict[str, object]:
         with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
             scratch = Path(scratch_dir)
             source = scratch / PUBLISHED
@@ -125,29 +125,29 @@ class TestCopyPartition(unittest.TestCase):
                 "type": "usr-x86-64",
                 "uuid": UUID,
             }
-            ddi._copy_partition(row, "usr", blocks, metadata)
+            ddi._move_partition(row, "usr", blocks, metadata)
             self.assertEqual(blocks.stat().st_size, raw_size)
             return cast(dict[str, object], json.loads(metadata.read_text()))
 
     def test_records_the_published_name(self) -> None:
-        metadata = self._copy(contents=b"x" * 512, raw_size=512)
+        metadata = self._move(contents=b"x" * 512, raw_size=512)
         self.assertEqual(metadata["published"], PUBLISHED)
         self.assertEqual(metadata["type"], "usr-x86-64")
         self.assertEqual(metadata["uuid"], UUID)
 
     def test_restores_stripped_padding(self) -> None:
         # A signature artifact leaves repart shorter than its partition; CopyBlocks needs it back.
-        self._copy(contents=b"signature", raw_size=512)
+        self._move(contents=b"signature", raw_size=512)
 
     def test_refuses_an_artifact_larger_than_its_partition(self) -> None:
         with self.assertRaises(SystemExit):
-            self._copy(contents=b"x" * 1024, raw_size=512)
+            self._move(contents=b"x" * 1024, raw_size=512)
 
     def test_refuses_a_partition_repart_did_not_split(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ddi_test.") as scratch_dir:
             scratch = Path(scratch_dir)
             with self.assertRaises(SystemExit):
-                ddi._copy_partition({"split_path": "-"}, "usr", scratch / "usr.raw", scratch / "usr.json")
+                ddi._move_partition({"split_path": "-"}, "usr", scratch / "usr.raw", scratch / "usr.json")
 
 
 class TestMkfsEnvironment(unittest.TestCase):
