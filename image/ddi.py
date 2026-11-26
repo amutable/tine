@@ -105,7 +105,7 @@ class ImportedPartitionSpec(TypedDict):
 class ExtensionSpec(TypedDict):
     # The number of leading lowers that form the parent image. Only the layers above them are packaged.
     parent: int
-    # The seed derives from this target label, unless the spec gives a seed.
+    # The seed derives from this target label, release and architecture, unless the spec gives a seed.
     identity: str
     name: str
     # The image paths of the extension-release files, one per class.

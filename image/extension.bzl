@@ -6,6 +6,7 @@
 load("//platform:architecture.bzl", "architecture")
 load(
     ":ddi.bzl",
+    "IDENTITY_ATTRS",
     "declare_ddi",
     "partition",
     "verity_partitions",
@@ -118,6 +119,7 @@ def _declare_preset(
     verity_key: SigningKeyInfo | None,
     compression: str | None,
     compression_level: str | None,
+    configuration: str,
     compress: bool,
     extension: dict[str, typing.Any] | None = None,
     operations: list[LayerOperation] = [],
@@ -152,6 +154,7 @@ def _declare_preset(
         definitions = verity_partitions(root, signed = verity_key != None),
         basename = filename,
         mkfs_options = _MKFS_OPTIONS,
+        configuration = configuration,
         compress = compress,
         seed = seed,
         # A merged extension must not replace the host's package database.
@@ -187,6 +190,7 @@ def declare_extension(
     scope: list[str],
     arch: str,
     version: str,
+    configuration: str,
     parent: ImageInfo | None = None,
     release: dict[str, str] = {},
     seed: str | None = None,
@@ -260,9 +264,10 @@ def declare_extension(
         verity_key = verity_key,
         compression = compression,
         compression_level = compression_level,
+        configuration = configuration,
         compress = compress,
         extension = {
-            "identity": str(ctx.label),
+            "identity": "{} {}".format(ctx.label.raw_target(), configuration),
             "name": name,
             "parent": layers,
             "releases": [release["path"] for release in releases],
@@ -290,6 +295,7 @@ def declare_portable(
     name: str,
     arch: str,
     version: str,
+    configuration: str,
     seed: str | None = None,
     verity_key: SigningKeyInfo | None = None,
     compression: str | None,
@@ -315,11 +321,12 @@ def declare_portable(
         verity_key = verity_key,
         compression = compression,
         compression_level = compression_level,
+        configuration = configuration,
         compress = compress,
         extra = [PortableInfo()],
     )
 
-_COMMON_ATTRS = {
+_COMMON_ATTRS = IDENTITY_ATTRS | {
     "arch": attrs.enum(
         architecture.ARCHITECTURES.keys() + ["_any"],
         default = architecture.configured(),

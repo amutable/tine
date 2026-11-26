@@ -5,6 +5,8 @@
 
 load("//:specs.bzl", "specs")
 load("//box:defs.bzl", "box")
+load("//distribution:defs.bzl", "distribution")
+load("//platform:architecture.bzl", "architecture")
 load(
     ":image.bzl",
     "GPT_LABEL_LIMIT",
@@ -296,6 +298,7 @@ def declare_ddi(
     strip_pkgdb: bool = False,
     strip_paths: list[str] = [],
     mkfs_options: dict[str, list[str]] = {},
+    configuration: str,
     compress: bool,
     basename: str = "image",
     identifier: str | None = None,
@@ -415,7 +418,7 @@ def declare_ddi(
         "extension": extension,
         # The default seed derives from the identity, so changing "repart" here changes the partition
         # UUIDs of every target that declares no identifier.
-        "identity": "{}[{}]".format(ctx.label, identifier or "repart"),
+        "identity": "{}[{}] {}".format(ctx.label.raw_target(), identifier or "repart", configuration),
         "manifest": None,
         "mkfs_options": mkfs_options,
         "out": None,
@@ -500,8 +503,20 @@ def declare_ddi(
     )
     return DdiOutput(info = info, outputs = outputs, sub_targets = sub_targets)
 
+# The partition UUIDs derive from the target label, the release and the architecture of a build. A
+# constraint that doesn't change the image, such as one that a project adds for its own targets,
+# then doesn't change the UUIDs either.
+IDENTITY_ATTRS = {
+    "_identity_arch": attrs.string(default = architecture.configured()),
+    "_identity_release": attrs.string(default = distribution.release_name()),
+}
+
+def configuration_identity(release: str, arch: str) -> str:
+    """Return the release and architecture part of the identity that the partition UUIDs derive from."""
+    return "{}/{}".format(release, arch)
+
 # image.disk passes these attributes on to declare_ddi().
-DDI_ATTRS = {
+DDI_ATTRS = IDENTITY_ATTRS | {
     "definitions": attrs.list(attrs.string(), doc = "serialized partition definitions"),
     "mkfs_options": attrs.dict(
         attrs.string(),
