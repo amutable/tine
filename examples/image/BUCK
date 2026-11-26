@@ -301,6 +301,34 @@ tests.vm_smoke(
     ],
 )
 
+# boot-demo with a direct kernel boot instead of the firmware booting its ESP
+image.vm(
+    name = "boot-demo-vm-direct",
+    autologin = "root",
+    cmdline_extra = ["tine.smoke=1"],
+    credentials = {
+        "firstboot.locale": "C.UTF-8",
+        "firstboot.timezone": "UTC",
+    },
+    image = ":boot-demo",
+    linux = ":boot-demo[boot][kernel]",
+    initrd = ":boot-demo[boot][initrd]",
+    cmdline_file = ":boot-demo[boot][cmdline]",
+)
+
+tests.vm_smoke(
+    name = "boot-demo-vm-direct-smoke",
+    vm = ":boot-demo-vm-direct",
+    checks = [
+        # systemd-stub did not run; it would leave StubInfo behind when it boots the UKI.
+        "! test -e /sys/firmware/efi/efivars/StubInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f",
+        # The initrd found the usr partition by the root hash on the command line, and the runner's
+        # cmdline_extra followed it.
+        "grep -q ' usrhash=' /proc/cmdline",
+        "grep -q tine.smoke=1 /proc/cmdline",
+    ],
+)
+
 # The qcow2 and vmdk describe a disk of the image's virtual_size with the raw's content, while the raw stays
 # as small as its partitions.
 box.sh_test(
