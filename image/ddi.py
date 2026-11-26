@@ -8,7 +8,6 @@
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -334,13 +333,13 @@ def _partition_row(rows: list[dict[str, Any]], filename: str) -> dict[str, Any]:
     return matches[0]
 
 
-def _copy_partition(row: dict[str, Any], name: str, blocks: Path, metadata: Path) -> None:
+def _move_partition(row: dict[str, Any], name: str, blocks: Path, metadata: Path) -> None:
     source_value = row.get("split_path")
     if not source_value or source_value == "-":
         util.fail(f"ddi: no split artifact was produced for {name}")
     source = Path(source_value)
     blocks.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, blocks)
+    source.replace(blocks)
 
     # systemd strips padding from signature split files. CopyBlocks requires a
     # sector-aligned artifact, so restore the partition's declared raw size.
@@ -499,9 +498,15 @@ def main(argv: list[str] | None = None) -> None:
         imported = [it.manifest for it in partitions if it.manifest is not None]
         uapi16.merge(imported + listings, Path(spec["manifest"]))
 
+    out = Path(spec["out"]) if spec["out"] else None
+    # The disk and the split partitions are renamed from the scratch directory to the outputs. The
+    # sandbox mounts the action's scratch space at TMPDIR. rename() fails with EXDEV between two
+    # mounts, so the scratch directory goes next to an output instead of into TMPDIR.
+    beside = out or splits[0][1]
+    beside.parent.mkdir(parents=True, exist_ok=True)
     with (
         storage.root(snapshot, readonly=True) as restored,
-        tempfile.TemporaryDirectory(prefix="repart.") as scratch_dir,
+        tempfile.TemporaryDirectory(prefix="repart.", dir=beside.parent) as scratch_dir,
     ):
         scratch = Path(scratch_dir)
         repart_definitions = scratch / "repart.d"
@@ -519,7 +524,6 @@ def main(argv: list[str] | None = None) -> None:
             seed = _extension_seed(extension["identity"], extension["name"], releases)
         else:
             seed = _derived_seed(spec["identity"], raw_definitions, partitions)
-        out = Path(spec["out"]) if spec["out"] else None
         # A split artifact is named after the image repart writes, so the scratch file carries the
         # published basename even when only the partitions leave this invocation.
         disk = scratch / f"{spec['basename']}.raw" if splits else out
@@ -537,11 +541,11 @@ def main(argv: list[str] | None = None) -> None:
         )
 
         for name, blocks, metadata in splits:
-            _copy_partition(_partition_row(rows, files[name]), name, blocks, metadata)
+            _move_partition(_partition_row(rows, files[name]), name, blocks, metadata)
         if spec["root_hash_out"]:
             write_root_hash(rows, Path(spec["root_hash_out"]))
         if out and splits:
-            shutil.copyfile(disk, out)
+            disk.replace(out)
 
     artifacts = []
     if out:
