@@ -263,3 +263,14 @@ box.sh_test(
     box = ":hello-child.box",
     script = "test -e /usr/share/tine-package/archive && jq --version",
 )
+
+# hello-child.box has to be a layer over hello.box. A box target's outputs are its layers, lowest first. The
+# test checks that the layers of hello-child.box are the layers of hello.box plus a layer of its own.
+box.sh_test(
+    name = "hello-child-layering-test",
+    distro = _DISTRO,
+    labels = ["image"],
+    box = "@tine//tools:dev.box",
+    script = 'read -r -a parent <<< "$1"; read -r -a child <<< "$2"; [ "${child[*]}" = "${parent[*]} ${child[-1]}" ]',
+    args = ["$(location :hello.box)", "$(location :hello-child.box)"],
+)
