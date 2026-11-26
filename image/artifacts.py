@@ -46,11 +46,4 @@ def pe_sections(path: Path) -> dict[str, Section]:
 def copy_section(source: Path, section: Section, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with source.open("rb") as src, out.open("wb") as dst:
-        src.seek(section.offset)
-        remaining = section.size
-        while remaining:
-            chunk = src.read(min(remaining, 1024 * 1024))
-            if not chunk:
-                util.fail(f"artifacts: truncated section in {source}")
-            dst.write(chunk)
-            remaining -= len(chunk)
+        util.copy_range(dst.fileno(), 0, src.fileno(), section.offset, section.size)
