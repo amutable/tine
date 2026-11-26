@@ -83,8 +83,9 @@ replaces it like the catalog, by declaring its own `settings` cell, and `bin/tin
 in the same way. A project can therefore change the tools box without replacing tine's catalog.
 
 Starlark has no optional `load()`, and Buck fails on a missing file, symbol or struct field. tine therefore
-loads only `SETTINGS` from the cell and reads every field with `getattr()` and a default. A project's
-`settings.bzl` therefore only sets the fields it changes. It keeps loading when tine reads a new field.
+loads only `SETTINGS` from the cell. tine's targets read the settings from `tine//:settings.bzl`, which adds
+a default for every field that the cell leaves out. A project's settings cell therefore only sets the fields
+that it changes, and it works with a version of tine that reads more fields.
 
 Catalog targets use `<family>.<release>[.<component>].<role>` names. A rolling channel occupies the release
 segment like any other release. Singular `.repository` targets own remotes, plural `.repositories` targets
