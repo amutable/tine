@@ -261,6 +261,8 @@ image.vm(
     image = ":boot-demo",
     extensions = [":demo-confext", ":demo-ext"],
     portables = [":demo-portable", ":demo-portable-ext"],
+    # Exercise this field, too (only read in the smoke test)
+    vmspawn_args = ["--smbios11=tine.vmspawn-args=1"],
 )
 
 # Boot smoke test: drives :boot-demo-vm's console over a pty (via the shared tine driver),
@@ -282,6 +284,8 @@ tests.vm_smoke(
         "test -s /usr/lib/udev/hwdb.bin",
         # The runner's cmdline_extra reached the kernel the UKI booted.
         "grep -q tine.smoke=1 /proc/cmdline",
+        # The runner's vmspawn_args reached vmspawn.
+        "grep -qaF tine.vmspawn-args=1 /sys/firmware/dmi/entries/11-*/raw",
         # The initrd carries networkd for IMDS, which is inert on a non-cloud VM.
         '[ -z "$(journalctl -b -q _RUNTIME_SCOPE=initrd _SYSTEMD_UNIT=systemd-networkd.service)" ]',
         # systemd-sysext and systemd-confext merged the extensions the runner binds in at boot.
