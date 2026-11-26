@@ -1450,7 +1450,8 @@ its `compression_enabled` attribute, so turning it on changes attributes and not
 layers of the images stay cached.
 With compression off, the `compression` attributes of erofs partitions, extensions, initrds and archives have
 no effect, so a development build spends no time compressing and its uncompressed outputs share data blocks
-with the snapshot blobs.
+with the snapshot blobs. Each partition's seed derives from its raw definition and from the target label,
+release and architecture, so the switch doesn't change partition UUIDs.
 
 `declare_ddi()` in `ddi.bzl` deliberately distinguishes `definitions` from `partitions`. Definitions describe
 new partitions to populate directly from `image.ImageInfo`: repart reads a temporary root reconstructed
@@ -1710,7 +1711,7 @@ Reproducibility is both a release property and a caching requirement. Current me
 - a fixed build host and frozen release-numbering macros;
 - parked package databases and scrubbed package-manager caches;
 - sorted transaction JSON, archive entries, source staging, and output collection;
-- target/configuration-derived partition UUID seeding and normalized archive metadata;
+- partition UUID seeding from the target label, release and architecture, and normalized archive metadata;
 - content-based paths for repository-owned package artifacts.
 
 These measures make action-cache reuse meaningful and prepare the graph for remote execution. The repository

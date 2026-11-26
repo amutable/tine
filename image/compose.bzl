@@ -36,6 +36,7 @@ load(
     "Partition",  # @unused Used as a type.
     "SIZE_PATTERN",
     "VIRTUAL_SIZE_FORMATS",
+    "configuration_identity",
     "declare_ddi",
     "declare_disk_conversion",
     "format_partition_labels",
@@ -295,6 +296,7 @@ def _extension_impl(ctx: AnalysisContext) -> list[Provider]:
         verity_key = resolve_signing_key(ctx.attrs.verity_key),
         compression = ctx.attrs.compression,
         compression_level = ctx.attrs.compression_level,
+        configuration = configuration_identity(ctx.attrs._identity_release, ctx.attrs._identity_arch),
         compress = ctx.attrs.compression_enabled,
         version = ctx.attrs.version,
     )
@@ -330,6 +332,7 @@ def _portable_impl(ctx: AnalysisContext) -> list[Provider]:
         verity_key = resolve_signing_key(ctx.attrs.verity_key),
         compression = ctx.attrs.compression,
         compression_level = ctx.attrs.compression_level,
+        configuration = configuration_identity(ctx.attrs._identity_release, ctx.attrs._identity_arch),
         compress = ctx.attrs.compression_enabled,
         version = ctx.attrs.version,
     )
@@ -434,6 +437,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             identifier = "system",
             image = identity,
             mkfs_options = ctx.attrs.mkfs_options,
+            configuration = configuration_identity(ctx.attrs._identity_release, ctx.attrs._identity_arch),
             compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             split = True,
@@ -478,6 +482,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             image = top,
             imported = [system.info],
             mkfs_options = ctx.attrs.mkfs_options,
+            configuration = configuration_identity(ctx.attrs._identity_release, ctx.attrs._identity_arch),
             compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             virtual_size = ctx.attrs.virtual_size,
@@ -497,6 +502,7 @@ def _disk_impl(ctx: AnalysisContext) -> list[Provider]:
             identifier = "disk",
             image = top,
             mkfs_options = ctx.attrs.mkfs_options,
+            configuration = configuration_identity(ctx.attrs._identity_release, ctx.attrs._identity_arch),
             compress = ctx.attrs.compression_enabled,
             seed = ctx.attrs.disk_seed,
             split = True,

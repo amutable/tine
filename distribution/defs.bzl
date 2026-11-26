@@ -329,6 +329,13 @@ def release_target(role: str) -> Select:
         {release: _release(release, role) for release in _CATALOG_RELEASES.values()} | {"DEFAULT": "catalog//:default." + role},
     )
 
+def release_name() -> Select:
+    """Return a `select()` of the name of the release that a build chooses.
+
+    A build that chooses no release, or a release that `catalog//:releases.bzl` doesn't list, gets "".
+    """
+    return by_distribution({release: release for release in _CATALOG_RELEASES.values()} | {"DEFAULT": ""})
+
 _UNCHOSEN = "tine//distribution:no-distribution-chosen"
 
 def compatibility():
@@ -504,6 +511,7 @@ distribution = struct(
     for_package = for_package,
     new = new,
     package_manager = package_manager,
+    release_name = release_name,
     release_target = release_target,
     set_for_package = set_for_package,
 )
