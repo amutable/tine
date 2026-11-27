@@ -1,38 +1,38 @@
 {
   "buck2": {
     "repository": "daandemeyer/buck2",
-    "release": "2026-11-19-18.57.21",
+    "release": "2026-11-27-16.03.27",
     "platforms": {
       "Linux-aarch64": {
         "artifact": "buck2-aarch64-unknown-linux-musl.zst",
-        "sha256": "63d8bdfabfa17ae72cb58accab1c3a0bd01f18ba9be5b284896f845fd76d86fb",
-        "size": 40442752
+        "sha256": "4a478839a92a37eaa621dd058016cdacc5bf939e19efd7f7c27956d18b9c3f4a",
+        "size": 41611105
       },
       "Linux-riscv64": {
         "artifact": "buck2-riscv64gc-unknown-linux-gnu.zst",
-        "sha256": "f491317122153b39ea578a2c79957e615d6f7c03e88480684accf44c8abc7329",
-        "size": 52111618
+        "sha256": "a69190263f0b139915ee79b1b75bcd7c61bd2820b9629f4ab5d6597eb8fd237a",
+        "size": 53714112
       },
       "Linux-x86_64": {
         "artifact": "buck2-x86_64-unknown-linux-musl.zst",
-        "sha256": "6ce8b315b6bdb746eabc944200cfef9d3f952ebaa56da516beded130a24c8cce",
-        "size": 42330200
+        "sha256": "a3e70208e62ed8bc35038f77e9a913163f66a9dded985d437a17565b416df667",
+        "size": 43452592
       }
     }
   },
   "starlark-fmt": {
     "repository": "daandemeyer/buck2",
-    "release": "2026-11-19-18.57.21",
+    "release": "2026-11-27-16.03.27",
     "platforms": {
       "arm64": {
         "artifact": "starlark_fmt-aarch64-unknown-linux-musl.zst",
-        "sha256": "2e217e3421c3f954d46886592d48d022ad1f466f77c7a9c98cdcb67b6356be83",
-        "size": 2631237
+        "sha256": "e819feb1fae621119a4c3cd2fbd60a5634f3136213475df72889160103ed416b",
+        "size": 2653567
       },
       "x86_64": {
         "artifact": "starlark_fmt-x86_64-unknown-linux-musl.zst",
-        "sha256": "00aacf24a98f1bb8cee2d048ac65c16003318a274a63d9ff73ab73e2402a69ee",
-        "size": 2743423
+        "sha256": "0eea34787f6ea2fe887b5bb66fb56ab8136847d63a0cdfa71b7a5f9c718e49cf",
+        "size": 2771047
       }
     }
   },
