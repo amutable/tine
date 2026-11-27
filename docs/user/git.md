@@ -31,6 +31,9 @@ cargo.package(
 )
 ```
 
+To build an RPM package from a fetched dist-git repository, see
+[Building RPM packages](rpm.md#building-a-package-from-a-dist-git-repository).
+
 ## Building from a local checkout instead
 
 The target above looks for a checkout at `packages/hello/hello/`: the package path followed by the target

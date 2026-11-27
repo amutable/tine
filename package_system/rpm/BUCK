@@ -11,6 +11,8 @@ _BOX = "tine//tools:dev.box"
 
 python.library(name = "rpmfile", srcs = ["rpmfile.py"], deps = ["//:util"])
 
+python.test(name = "rpmfile-test", srcs = ["rpmfile_test.py"], deps = [":rpmfile"])
+
 python.binary(
     name = "extract",
     main = "extract.py",
@@ -104,6 +106,28 @@ python.test(
     box = _BOX,
     srcs = ["keyring.py", "rpmkeys.py", "verify.py", "verify_test.py"],
     deps = ["//:specs", "//:util"],
+)
+
+python.binary(name = "lookaside", main = "lookaside.py", deps = ["//:specs", "//:util"], visibility = ["PUBLIC"])
+
+python.test(
+    name = "lookaside-test",
+    srcs = ["lookaside.py", "lookaside_test.py"],
+    deps = ["//:specs", "//:util"],
+)
+
+# The driver unpacks a source rpm, which comes from outside the project.
+python.binary(
+    name = "srpm",
+    main = "srpm.py",
+    deps = [":rpmfile", "//:specs", "//:util", "//archive:cpio"],
+    visibility = ["PUBLIC"],
+)
+
+python.test(
+    name = "srpm-test",
+    srcs = ["srpm.py", "srpm_test.py"],
+    deps = [":rpmfile", "//:specs", "//:util", "//archive:cpio"],
 )
 
 package_system(

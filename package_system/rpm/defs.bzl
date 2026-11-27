@@ -6,12 +6,16 @@
 load("//package_system/rpm:generated.bzl", "rpm_branch")
 load(
     "//package_system/rpm:rules.bzl",
+    "rpm_lookaside",
     "rpm_package",
     "rpm_remote_repository",
+    "rpm_srpm",
 )
 
 rpm = struct(
     branch = rpm_branch,
+    lookaside = rpm_lookaside,
     package = rpm_package,
     remote_repository = rpm_remote_repository,
+    srpm = rpm_srpm,
 )

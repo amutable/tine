@@ -8,9 +8,10 @@ SPDX-License-Identifier: MPL-2.0
 The importer maintains a (partial) downstream derivative distribution in a monorepo: it mirrors upstream
 distribution dist-gits (currently Fedora or CentOS) and maintains local package deltas. Package sources live
 in the OS.git monorepo that vendors this `tine` cell, under `packages/`_distro_`/`_branch_`/`_srcpkg_ (for
-example `packages/fedora/f44/glibc`), with pristine imports on the separate `upstream-rpm` branch. The branch
-and metadata layout, the design principles, and the rebuild strategy behind all of this are documented in
-[packages.md](../design/packages.md).
+example `packages/fedora/f44/glibc`), with pristine imports on the separate `upstream-rpm` branch. The build
+of a package downloads the archives that its dist-git `sources` file lists from the distribution's lookaside
+cache. The branch and metadata layout, the design principles, and the rebuild strategy behind all of this are
+documented in [packages.md](../design/packages.md).
 
 Run the tool as `tine buck run tine//tools:importer -- <verb> …`: that executes it in the
 `tine//tools:dev.box` environment (host identity, network, and cwd; the box's pinned rpm/git
@@ -140,7 +141,23 @@ introduce a proper tool verb for that cleanup, but that can wait until the need 
 
 A `packages/`_distro_`/`_branch_`/` directory may carry a `_properties.json` alongside the per-package
 `srcpkg.json` files. It holds hand-authored, branch-level build curation. The generated branch `BUCK`
-loads it and passes its properties to `rpm.branch()`. Never edit the `@generated` `BUCK` by hand.
+loads it and passes every property to `rpm.branch()`, so loading the branch fails on a property that
+`rpm.branch()` doesn't know. Never edit the `@generated` `BUCK` by hand.
+
+### The lookaside cache
+
+The build of an imported package downloads the archives that its `sources` file lists from the lookaside
+cache of the distribution. Set `lookaside` to download them from another cache with the same layout, such as
+a mirror. The `srpm` operation downloads them from the same cache. A branch of a distribution other than
+Fedora or CentOS needs `lookaside` for every package with a `sources` file:
+
+```json
+{ "lookaside": "https://lookaside.example.com/repo/pkgs/rpms" }
+```
+
+The build fails on a `sources` file that lists an MD5 digest, as the `sources` files of old packages do. A
+packager of the package can upload the archive again with `fedpkg new-sources`, which lists its SHA-512
+digest.
 
 ### Buildroot-only packages
 
@@ -278,6 +295,6 @@ The buildroot still contains the imported BuildRequires. If the pinned spec requ
 imported spec does not, rpmbuild fails with `Failed build dependencies:` until the package is imported again
 at a commit with that BuildRequires.
 
-The branch's generated `BUCK` passes `in_place_packaging` to the build only if its `rpm.branch()` call has
-an `in_place_packaging` line and a `distro` line. `import`, and an `update` that takes new commits,
-regenerate the `BUCK` with both lines.
+The branch's generated `BUCK` must pass the branch's `distro` and the properties from `_properties.json`
+to `rpm.branch()`. If your `BUCK` doesn't forward `in_place_packaging` or `lookaside`, run `import`, or an
+`update` that takes new commits, to regenerate it.
