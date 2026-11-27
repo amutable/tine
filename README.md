@@ -113,6 +113,12 @@ would leave a fresh clone unable to run `tine buck` without recreating that file
 Use `tine.local.toml` or `.buckconfig.local` for machine-local overrides, and keep both untracked. tine
 updates only its generated block in `.buckconfig.local`, preserving text outside that block.
 
+To keep the project root clean, move `tine.toml` to a `tine/` directory in the project root. tine then
+reads `tine.local.toml` from `tine/` as well. Paths in `tine.toml` stay relative to the project root. tine
+fails if the project has a `tine.toml` in its root and another one in `tine/`. Put the tine checkout in a
+subdirectory such as `tine/tine` in this layout. When `tine/` is the tine checkout itself, tine ignores
+the `tine.toml` in it.
+
 Image versions can be derived from the project's Git history; see
 [images.md](docs/user/images.md#image-versioning).
 

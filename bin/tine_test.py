@@ -504,6 +504,42 @@ class TestLocalSettings(unittest.TestCase):
         )
         self.assertEqual(sorted(settings), ["buck2", "commands"])
 
+    def test_settings_in_config_dir(self) -> None:
+        # A project can keep tine.toml in tine/ instead of its root. tine.local.toml then has to be in tine/
+        # too. Write both files there, and a tine.local.toml in the root, and check that the settings come
+        # from tine/ only.
+        root = scratch(self)
+        (root / tine.CONFIG_DIR).mkdir()
+        (root / tine.CONFIG_DIR / tine.CONFIG).write_text(
+            '[buck2]\nrepository = "committed/buck2"\nrelease = "committed"\n'
+        )
+        (root / tine.CONFIG_DIR / tine.LOCAL_SETTINGS).write_text('[buck2]\nrelease = "local"\n')
+        (root / tine.LOCAL_SETTINGS).write_text('[buck2]\nrelease = "root"\n')
+        self.assertEqual(tine.config_path(root), root / tine.CONFIG_DIR / tine.CONFIG)
+        settings = tine.project_settings(root)
+        self.assertEqual(settings["buck2"], {"repository": "committed/buck2", "release": "local"})
+
+    def test_settings_in_root_and_config_dir(self) -> None:
+        # A project with a tine.toml in its root and another one in tine/ has no single configuration, so
+        # tine refuses to read either file.
+        root = scratch(self)
+        (root / tine.CONFIG_DIR).mkdir()
+        (root / tine.CONFIG).write_text("")
+        (root / tine.CONFIG_DIR / tine.CONFIG).write_text("")
+        with self.assertRaisesRegex(SystemExit, "remove one of them"):
+            tine.project_settings(root)
+
+    def test_settings_in_a_checkout_in_config_dir(self) -> None:
+        # A project can have its tine checkout in tine/. A tine.toml in there is a file of the checkout, not
+        # the project's configuration. Make tine/ a git checkout with a tine.toml and check that tine reads
+        # the tine.toml in the project root.
+        root = scratch(self)
+        (root / tine.CONFIG_DIR / ".git").mkdir(parents=True)
+        (root / tine.CONFIG_DIR / tine.CONFIG).write_text('[buck2]\nrelease = "checkout"\n')
+        (root / tine.CONFIG).write_text('[buck2]\nrelease = "project"\n')
+        self.assertEqual(tine.config_path(root), root / tine.CONFIG)
+        self.assertEqual(tine.project_settings(root)["buck2"], {"release": "project"})
+
     def test_unknown_section(self) -> None:
         root = scratch(self)
         (root / tine.LOCAL_SETTINGS).write_text("[invalid]\nkey = 1\n")
@@ -2679,6 +2715,21 @@ class TestInit(unittest.TestCase):
         self.assertEqual(self.init("tine")["buck2"]["materializations"], "all")
         self.assertTrue(settings.read_text().startswith(original))
         self.assertEqual(tine.project_settings(self.into)["buck2"], {"release": "pin"})
+
+    def test_init_keeps_a_config_in_config_dir(self) -> None:
+        # tine init reads a tine.toml in tine/ and doesn't write another one in the project root. Move the
+        # checkout to tine/tine, put the cell override in tine/tine.toml and check that the generated
+        # .buckconfig contains it.
+        checkout = self.into / tine.CONFIG_DIR / "tine"
+        self.checkout.rename(self.into / "checkout")
+        (self.into / tine.CONFIG_DIR).mkdir()
+        (self.into / "checkout").rename(checkout)
+        settings = self.into / tine.CONFIG_DIR / tine.CONFIG
+        original = '[buckconfig.cells]\nroot = "."\ntine = "tine/tine"\napp = "app"\n'
+        settings.write_text(original)
+        self.assertEqual(self.init("tine/tine")["cells"]["app"], "app")
+        self.assertEqual(settings.read_text(), original)
+        self.assertFalse((self.into / tine.CONFIG).exists())
 
     def test_init_keeps_existing_cell_overrides(self) -> None:
         settings = configure_cells(self.into, "tine")
